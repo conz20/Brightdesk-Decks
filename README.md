@@ -56,3 +56,7 @@ Use win on Windows or linux on Linux instead of mac.
 ## Identity and licence
 
 Brightdesk is independent and is not affiliated with Microsoft. It uses original product names, code, interface design and artwork. See LICENSE, TERMS_AND_CONDITIONS.txt and THIRD_PARTY_NOTICES.md.
+
+## Rust native engine
+
+This standalone product includes its own Rust engine source, Node.js JSON Lines bridge and cross-platform Rust checks. Run `npm run rust:check`. JavaScript remains available when the native binary is not built. Current lexical vectors are not semantic embeddings; no external model service is enabled. See [Rust engine integration](docs/RUST_ENGINE_INTEGRATION.md).
