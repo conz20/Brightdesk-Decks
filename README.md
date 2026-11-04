@@ -63,3 +63,26 @@ Use win on Windows or linux on Linux instead of mac.
 ## Identity and licence
 
 Brightdesk is independent and is not affiliated with Microsoft. It uses original product names, code, interface design and artwork. See LICENSE, TERMS_AND_CONDITIONS.txt and THIRD_PARTY_NOTICES.md.
+
+## Professional workspace examples and acceptance
+
+Decks must communicate a presentation-first workflow: a clear slide canvas, a useful slide navigator, concise editing controls and a predictable presentation mode. The example should look like a real presentation in progress, not a blank canvas surrounded by decorative buttons.
+
+### Example workflow
+
+1. Create a short presentation with a title slide and three content slides.
+2. Add a heading, supporting text and a visual element to each content slide.
+3. Reorder slides and confirm the navigator reflects the new order.
+4. Preview the presentation and move between slides.
+5. Save and reopen the deck to confirm its structure is retained.
+
+Use strong typographic hierarchy, consistent alignment, deliberate whitespace and a restrained application frame. Make selection, editing, reordering and presentation states obvious. Do not imply export formats or animation features are available until they are implemented and tested.
+
+Follow the shared [Brightdesk visual and interaction standard](https://github.com/connormolloy12/Brightdesk-suite/blob/main/docs/BRIGHTDESK_VISUAL_STANDARD.md).
+
+### Acceptance checks
+
+- Slide selection and reordering stay synchronised between navigator and canvas.
+- Editing controls provide visible, accessible feedback.
+- Presentation preview is usable with keyboard controls.
+- Examples show realistic slide content and accurately identify concept versus running-build imagery.
