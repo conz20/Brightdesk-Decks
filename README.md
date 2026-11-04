@@ -54,7 +54,8 @@ Use win on Windows or linux on Linux instead of mac.
 ## Project structure
 
 - src/ — Brightdesk desktop renderer and product modules.
-- assets/brightdesk-product.svg — original Decks artwork.
+- `src/branding/icons/decks.svg` — original Brightdesk Decks application icon.
+- `src/branding/previews/slides.svg` — workspace concept preview.
 - scripts/ — build and release verification tools.
 - tests/ — automated product and shared-engine tests.
 
