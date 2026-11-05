@@ -9,7 +9,7 @@
 
 <p align="center"><sub>Select the preview to open the full-size artwork.</sub></p>
 
-> **Visual example:** This is an original Brightdesk design preview showing the intended desktop workspace. It is an illustrative concept, not a screenshot of a completed release build.
+> **Concept artwork — not a screenshot.** The preview above is original Brightdesk design artwork, not a capture from the running desktop build. A genuine screenshot will be added only after the current product window has been launched and its primary workflow checked.
 
 Brightdesk Decks is a dedicated desktop application within the independent Brightdesk Office Suite. It uses the shared Brightdesk design language and opens directly into Decks.
 
@@ -17,10 +17,15 @@ Brightdesk Decks is a dedicated desktop application within the independent Brigh
 
 This product follows the [Brightdesk visual and interaction standard](https://github.com/connormolloy12/Brightdesk-suite/blob/main/docs/BRIGHTDESK_VISUAL_STANDARD.md) for branding, icon usage, layout, responsive behaviour and accessibility.
 
-## What this product does
+## Current first-use workflows
 
-Create slide presentations with familiar presentation and layout tools.
+- Create a presentation and edit slide titles and body text.
+- Add, duplicate and delete slides.
+- Choose from the included basic slide themes.
+- Start presentation mode from the current deck.
+- Import and export supported PowerPoint files; unsupported advanced objects and formatting may not be preserved.
 
+**Known boundaries:** Decks is an early slide-editor foundation. Advanced layouts, transitions, embedded media, animation and full PowerPoint round-trip fidelity are not promised.
 ## Desktop installers
 
 | Platform | Installer |
