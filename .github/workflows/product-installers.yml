@@ -2,10 +2,16 @@ name: Build Brightdesk Decks desktop installers
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
   schedule:
-    - cron: '17 4 * * *'
+    - cron: '29 4 * * 2'
   workflow_dispatch:
     inputs:
       build_installers:
