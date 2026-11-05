@@ -21,3 +21,18 @@ test('Decks uses the approved Brightdesk shell and its own product accent',()=>{
  assert.ok(brief.includes('BRIGHTDESK_VISUAL_STANDARD.md'));
  assert.ok(brief.includes('#C47A2D'));
 });
+
+test('final stylesheet tokens match the exact approved Decks palette', () => {
+  const css = fs.readFileSync(path.join(root, 'src', 'design-system.css'), 'utf8');
+  const lastHex = (token) => {
+    const values = [...css.matchAll(new RegExp(token + String.raw`\s*:\s*(#[0-9a-f]{6})`, 'gi'))];
+    return values.at(-1)?.[1].toUpperCase();
+  };
+
+  assert.equal(lastHex('--bd-accent'), '#C47A2D');
+  assert.equal(lastHex('--bd-accent-strong'), '#9A5E20');
+  assert.equal(lastHex('--bd-accent-soft'), '#FCF3E9');
+  assert.equal(lastHex('--bd-product-tint'), '#FCF3E9');
+  assert.equal(lastHex('--bd-canvas'), '#F3F6FA');
+  assert.equal(lastHex('--bd-ink'), '#202B3C');
+});
