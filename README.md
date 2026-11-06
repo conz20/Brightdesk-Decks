@@ -76,7 +76,7 @@ Use win on Windows or linux on Linux instead of mac.
 
 - src/ — Brightdesk desktop renderer and product modules.
 - `src/branding/icons/decks.svg` — original Brightdesk Decks application icon.
-- `src/branding/previews/slides.svg` — workspace concept preview.
+- `src/branding/previews/slides.svg` — workspace interface design.
 - scripts/ — build and release verification tools.
 - tests/ — automated product and shared-engine tests.
 
