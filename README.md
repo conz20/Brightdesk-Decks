@@ -112,6 +112,6 @@ The root README is maintained alongside the product, not as an end-of-project ta
 
 ## Individual product window
 
-When opened by itself, Brightdesk Decks opens directly into its presentation workspace. The Suite's product-management sidebar and generic welcome banner are removed from this window. The presentation title and file actions remain in the top bar, with the Decks ribbon, slide canvas and slide navigation controls arranged for presentation editing. Slide artwork keeps its 16:9 proportions.
+When opened by itself, Brightdesk Decks opens directly into its presentation workspace. The Suite's generic product-management view and welcome banner are removed from this window; the product's own left navigation remains available, with an optional compact icon rail and accessible labels. The presentation title and file actions remain in the top bar, with the Decks ribbon, slide canvas and slide navigation controls arranged for presentation editing. Slide artwork keeps its 16:9 proportions.
 
 The interface preview is design artwork showing the intended presentation workspace; it is not a screenshot from a verified running build.
