@@ -181,6 +181,8 @@ test('loads narration support before the editor and permits only local audio med
 test('provides user-triggered recording, stop and presentation playback controls', () => {
   const appSource = fs.readFileSync(path.join(__dirname, '../src/app.js'), 'utf8');
   assert.match(appSource, /navigator\.mediaDevices\.getUserMedia/);
+  assert.match(appSource, /narrationApi\.shouldStopNarrationWhenWorkspaceHidden/);
+  assert.match(appSource, /state\.view !== 'workspace'/);
   assert.ok(appSource.includes("'Record narration'"));
   assert.ok(appSource.includes("'Stop recording'"));
   assert.match(appSource, /className = 'presentation-narration'/);
@@ -217,6 +219,12 @@ test('stops narration when the recording workspace becomes hidden', () => {
   }), true);
   assert.equal(shouldStopNarrationWhenWorkspaceHidden({
     app: 'slides', view: 'workspace', isRecording: true
+  }), false);
+  assert.equal(shouldStopNarrationWhenWorkspaceHidden({
+    app: 'slides', view: 'manager', isRecording: false, isStarting: true
+  }), true);
+  assert.equal(shouldStopNarrationWhenWorkspaceHidden({
+    app: 'slides', view: 'languages', isRecording: false, isStarting: false
   }), false);
   assert.equal(shouldStopNarrationWhenWorkspaceHidden({
     app: 'pages', view: 'manager', isRecording: true
