@@ -183,3 +183,16 @@ test('provides user-triggered recording, stop and presentation playback controls
   assert.match(appSource, /textContent = 'Stop recording'/);
   assert.match(appSource, /className = 'presentation-narration'/);
 });
+
+test('rejects narration without a valid slide collection', () => {
+  const project = {
+    title: 'Presentation',
+    docs: {
+      slides: {
+        title: 'Presentation',
+        narration: validClip()
+      }
+    }
+  };
+  assert.throws(() => validateProject(project), /without a slide collection/i);
+});
