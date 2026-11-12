@@ -97,7 +97,7 @@ async function startNarrationRecording() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       video: false
     });
-    if (state.app !== 'slides') {
+    if (state.app !== 'slides' || state.view !== 'workspace') {
       stopNarrationTracks(stream);
       narrationStatus = '';
       narrationStarting = false;
@@ -1078,6 +1078,19 @@ async function changeProofingLanguage(code) {
 }
 
 function render() {
+  if (narrationApi.shouldStopNarrationWhenWorkspaceHidden({
+    app: state.app,
+    view: state.view,
+    isRecording: Boolean(narrationRecorder),
+    isStarting: narrationStarting
+  })) {
+    if (narrationRecorder) {
+      stopNarrationRecording();
+    } else {
+      narrationStarting = false;
+      narrationStatus = 'Microphone access cancelled because the narration workspace was closed.';
+    }
+  }
   window.BrightdeskI18n.localizeStaticElements();
   document.querySelectorAll('.nav[data-app]').forEach(btn => {
     const appId = btn.dataset.app;
