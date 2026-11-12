@@ -57,7 +57,9 @@ These are configured build targets, not confirmation that a package has passed i
 
 **Narration and PowerPoint files:** Narration is saved in a Brightdesk project file. It is not included in PowerPoint (.pptx) exports yet; Decks warns before exporting a presentation that has narration attached.
 
-**Microphone and privacy:** Recording begins only after the user selects Record narration and the operating system grants microphone access. Recording stops when the user selects Stop, after three minutes, or at the one-megabyte clip limit. The recording remains on this device and is not uploaded to an external service.
+**Microphone and privacy:** Recording begins only after the user selects Record narration and the operating system grants microphone access. Recording stops when the user selects Stop, leaves the Decks workspace, switches products, after three minutes, or at the one-megabyte clip limit. Only the local Brightdesk window may request audio; camera, screen capture, remote origins and file shares are denied. The recording remains on this device and is not uploaded to an external service.
+
+**Device verification required before release:** Test microphone permission, recording, Stop, playback, local project save/reopen and presentation-mode playback on Windows, macOS and Linux. Also confirm that leaving Decks or opening Get products/Languages immediately stops capture. These physical-device checks are not replaced by automated CI tests.
 
 **Known boundaries:** Decks is an early slide-editor foundation. Advanced layouts, transitions, imported audio/video media, animation, voice conversion and full PowerPoint round-trip fidelity are not promised.
 ## Desktop installers
