@@ -94,6 +94,9 @@ function validateProject(project) {
         }
       }
     }
+    if (appId === 'slides' && doc.narration !== undefined && doc.slides === undefined) {
+      throw new Error('The Brightdesk Decks narration cannot be saved without a slide collection.');
+    }
     if (appId === 'slides' && doc.slides !== undefined) {
       if (!Array.isArray(doc.slides) || doc.slides.length > MAX_SLIDES) throw new Error('The Brightdesk Decks presentation has an invalid slide collection.');
       for (const slide of doc.slides) {
