@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { TextDecoder } = require('node:util');
 const appCatalog = require('./app-catalog');
+const { validateNarrationClip } = require('./slides-audio');
 
 const MAX_PROJECT_BYTES = 50 * 1024 * 1024;
 const MAX_DOCUMENT_TEXT_BYTES = 10 * 1024 * 1024;
@@ -102,6 +103,13 @@ function validateProject(project) {
       }
       if (doc.current !== undefined && (!Number.isInteger(doc.current) || doc.current < 0 || (doc.slides.length && doc.current >= doc.slides.length))) {
         throw new Error('The Brightdesk Decks presentation has an invalid selected slide.');
+      }
+      if (doc.narration !== undefined) {
+        try {
+          validateNarrationClip(doc.narration);
+        } catch (error) {
+          throw new Error(`The Brightdesk Decks presentation narration is invalid: ${error.message}`);
+        }
       }
     }
   }
