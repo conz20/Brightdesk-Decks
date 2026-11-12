@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   MAX_RECORDING_MS,
   MAX_AUDIO_BYTES,
@@ -163,4 +165,21 @@ test('permission checks allow audio only from the main local product window', ()
     isMainFrame: true,
     requestingOrigin: 'https://example.invalid'
   }), false);
+});
+
+test('loads narration support before the editor and permits only local audio media', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/index.html'), 'utf8');
+  const audioScriptPosition = html.indexOf('<script src="slides-audio.js"></script>');
+  const appScriptPosition = html.indexOf('<script src="app.js"></script>');
+  assert.ok(audioScriptPosition >= 0 && audioScriptPosition < appScriptPosition);
+  assert.match(html, /media-src 'self' data: blob:/);
+  assert.match(html, /connect-src 'none'/);
+});
+
+test('provides user-triggered recording, stop and presentation playback controls', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../src/app.js'), 'utf8');
+  assert.match(appSource, /navigator\.mediaDevices\.getUserMedia/);
+  assert.match(appSource, /textContent = 'Record narration'/);
+  assert.match(appSource, /textContent = 'Stop recording'/);
+  assert.match(appSource, /className = 'presentation-narration'/);
 });
