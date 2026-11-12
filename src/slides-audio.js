@@ -15,7 +15,7 @@ function normalizeMimeType(value) {
 
 function mimeTypeFromDataUrl(value) {
   if (typeof value !== 'string') return null;
-  const match = value.match(/^data:(audio\/(?:webm|ogg)(?:;codecs=opus)?);base64,([a-z0-9+/]*={0,2})$/i);
+  const match = value.match(/^data:(audio\/[a-z0-9.+-]+(?:;codecs=[a-z0-9.+-]+)?);base64,([a-z0-9+/]*={0,2})$/i);
   if (!match || !match[2] || match[2].length % 4 !== 0) return null;
   return {
     mimeType: normalizeMimeType(match[1]),
