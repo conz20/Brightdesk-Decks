@@ -102,3 +102,65 @@ test('rejects malformed narration while validating Brightdesk projects', () => {
   assert.throws(() => validateProject(project), /narration/i);
 });
 
+
+const {
+  mayRequestMicrophoneAccess,
+  mayCheckMicrophoneAccess
+} = require('../src/media-permissions');
+
+test('allows an explicit microphone request from the main local product window', () => {
+  assert.equal(mayRequestMicrophoneAccess({
+    isMainWindow: true,
+    permission: 'media',
+    mediaTypes: ['audio'],
+    isMainFrame: true,
+    requestingUrl: 'file:///Applications/Brightdesk%20Decks.app/Contents/Resources/app/src/index.html'
+  }), true);
+});
+
+test('denies camera, screen capture, subframes and non-local origins', () => {
+  const base = {
+    isMainWindow: true,
+    permission: 'media',
+    mediaTypes: ['audio'],
+    isMainFrame: true,
+    requestingUrl: 'file:///Brightdesk/index.html'
+  };
+  assert.equal(mayRequestMicrophoneAccess({ ...base, mediaTypes: ['video'] }), false);
+  assert.equal(mayRequestMicrophoneAccess({ ...base, mediaTypes: ['audio', 'video'] }), false);
+  assert.equal(mayRequestMicrophoneAccess({ ...base, permission: 'display-capture' }), false);
+  assert.equal(mayRequestMicrophoneAccess({ ...base, isMainFrame: false }), false);
+  assert.equal(mayRequestMicrophoneAccess({ ...base, isMainWindow: false }), false);
+  assert.equal(mayRequestMicrophoneAccess({ ...base, requestingUrl: 'https://example.invalid/' }), false);
+});
+
+test('permission checks allow audio only from the main local product window', () => {
+  assert.equal(mayCheckMicrophoneAccess({
+    isMainWindow: true,
+    permission: 'media',
+    mediaType: 'audio',
+    isMainFrame: true,
+    requestingOrigin: 'file://'
+  }), true);
+  assert.equal(mayCheckMicrophoneAccess({
+    isMainWindow: true,
+    permission: 'media',
+    mediaType: 'video',
+    isMainFrame: true,
+    requestingOrigin: 'file://'
+  }), false);
+  assert.equal(mayCheckMicrophoneAccess({
+    isMainWindow: true,
+    permission: 'media',
+    mediaType: 'audio',
+    isMainFrame: false,
+    requestingOrigin: 'file://'
+  }), false);
+  assert.equal(mayCheckMicrophoneAccess({
+    isMainWindow: true,
+    permission: 'media',
+    mediaType: 'audio',
+    isMainFrame: true,
+    requestingOrigin: 'https://example.invalid'
+  }), false);
+});
