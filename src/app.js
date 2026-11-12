@@ -175,8 +175,10 @@ async function startNarrationRecording() {
           mimeType: recordedMimeType,
           durationMs
         });
-        persist();
-        narrationStatus = 'Narration saved in this Brightdesk project.';
+        const savedLocally = persist();
+        narrationStatus = savedLocally
+          ? 'Narration saved on this device.'
+          : 'The recording is ready, but local saving failed. Use Save project to keep it.';
       } catch (error) {
         narrationStatus = error.message || 'The narration could not be saved.';
       } finally {
@@ -252,8 +254,10 @@ function renderSlideNarrationPanel(doc) {
     remove.addEventListener('click', () => {
       if (!confirm('Remove the narration from this presentation?')) return;
       delete doc.narration;
-      narrationStatus = 'Narration removed.';
-      persist();
+      const savedLocally = persist();
+      narrationStatus = savedLocally
+        ? 'Narration removed.'
+        : 'Narration was removed from this session, but local saving failed.';
       renderSlides();
     });
     controls.append(playback, duration, remove);
@@ -280,8 +284,15 @@ function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function activeDoc() { return state.docs[state.app]; }
 function setStatus(message) { $('save-status').textContent = message; }
 function persist() {
-  try { localStorage.setItem('brightdesk-docs-v3', JSON.stringify(state.docs)); setStatus('Saved on this device'); }
-  catch (error) { setStatus('Could not save locally'); console.error(error); }
+  try {
+    localStorage.setItem('brightdesk-docs-v3', JSON.stringify(state.docs));
+    setStatus('Saved on this device');
+    return true;
+  } catch (error) {
+    setStatus('Could not save locally');
+    console.error(error);
+    return false;
+  }
 }
 function loadLocal() {
   try {
