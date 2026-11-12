@@ -59,12 +59,24 @@ function stopNarrationTracks(stream) {
 }
 function stopNarrationRecording() {
   if (!narrationRecorder || narrationRecorder.state === 'inactive') return false;
+  const recorder = narrationRecorder;
+  const stream = narrationStream;
   narrationStatus = 'Finishing the recording…';
   if (state.app === 'slides') renderSlides();
-  try { narrationRecorder.stop(); }
-  catch (error) {
+  try {
+    recorder.stop();
+  } catch (error) {
     narrationFailure = error.message || 'The recording could not be stopped.';
-    stopNarrationTracks(narrationStream);
+    narrationRecorder = null;
+    narrationStream = null;
+    narrationChunks = [];
+    narrationBytes = 0;
+    narrationStarting = false;
+    narrationStatus = narrationFailure;
+    setStatus(narrationStatus);
+    if (state.app === 'slides') renderSlides();
+  } finally {
+    stopNarrationTracks(stream);
   }
   return true;
 }
