@@ -57,6 +57,9 @@ module.exports = {
   mac: {
     target: ['dmg', 'pkg', 'zip'],
     category: 'public.app-category.productivity',
+    extendInfo: {
+      NSMicrophoneUsageDescription: 'Brightdesk Decks uses your microphone only when you choose to record presentation narration. Audio is saved on this device.'
+    },
     artifactName: 'Brightdesk-' + appSlug + '-${version}-${arch}.${ext}'
   },
   pkg: {

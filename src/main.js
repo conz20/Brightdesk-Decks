@@ -6,6 +6,7 @@ const fs = require('node:fs/promises');
 const { openOfficeFile, exportOfficeFile, cleanFileName, ensureExtension } = require('./file-service');
 const { BUILTIN_LANGUAGES, validateLanguagePack, getBuiltinLanguage } = require('./language-service');
 const { DictionaryService } = require('./dictionary-service');
+const { mayRequestMicrophoneAccess, mayCheckMicrophoneAccess } = require('./media-permissions');
 let mainWindow;
 let agreementWindow;
 let termsAccepted = false;
@@ -31,6 +32,26 @@ function createWindow() {
     width: 1440, height: 920, minWidth: 980, minHeight: 680,
     title: standaloneAppId ? `Brightdesk ${standaloneAppNames[standaloneAppId]}` : 'Brightdesk', backgroundColor: '#f5f6fa',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, additionalArguments: standaloneAppId ? [`--brightdesk-app=${standaloneAppId}`] : [] }
+  });
+  const audioSession = mainWindow.webContents.session;
+  audioSession.setPermissionRequestHandler((webContents, permission, callback, details = {}) => {
+    const allowed = mayRequestMicrophoneAccess({
+      isMainWindow: webContents === mainWindow.webContents,
+      permission,
+      mediaTypes: details.mediaTypes,
+      isMainFrame: details.isMainFrame,
+      requestingUrl: details.requestingUrl
+    });
+    callback(allowed);
+  });
+  audioSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details = {}) => {
+    return mayCheckMicrophoneAccess({
+      isMainWindow: webContents === mainWindow.webContents,
+      permission,
+      mediaType: details.mediaType,
+      isMainFrame: details.isMainFrame,
+      requestingOrigin
+    });
   });
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

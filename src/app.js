@@ -41,18 +41,271 @@ const state = {
 };
 const editor = $('editor'), sheetWrap = $('sheet-wrap'), slideWrap = $('slide-wrap'), notesWrap = $('notes-wrap');
 const pageLayout = window.BrightdeskPageLayout;
+const narrationApi = window.BrightdeskSlidesAudio;
+let narrationRecorder = null;
+let narrationStream = null;
+let narrationChunks = [];
+let narrationBytes = 0;
+let narrationStartedAt = 0;
+let narrationTimeout = null;
+let narrationStarting = false;
+let narrationFailure = '';
+let narrationStatus = '';
+
+function stopNarrationTracks(stream) {
+  for (const track of stream?.getTracks?.() || []) {
+    try { track.stop(); } catch { /* A closed audio track needs no further action. */ }
+  }
+}
+function stopNarrationRecording() {
+  if (!narrationRecorder || narrationRecorder.state === 'inactive') return false;
+  const recorder = narrationRecorder;
+  const stream = narrationStream;
+  narrationStatus = 'Finishing the recording…';
+  if (state.app === 'slides') renderSlides();
+  try {
+    recorder.stop();
+  } catch (error) {
+    narrationFailure = error.message || 'The recording could not be stopped.';
+    narrationRecorder = null;
+    narrationStream = null;
+    narrationChunks = [];
+    narrationBytes = 0;
+    narrationStarting = false;
+    narrationStatus = narrationFailure;
+    setStatus(narrationStatus);
+    if (state.app === 'slides') renderSlides();
+  } finally {
+    stopNarrationTracks(stream);
+  }
+  return true;
+}
+async function startNarrationRecording() {
+  if (state.app !== 'slides' || narrationStarting || narrationRecorder) return;
+  narrationStarting = true;
+  narrationFailure = '';
+  narrationStatus = 'Waiting for microphone access…';
+  const recordingDocument = activeDoc();
+  renderSlides();
+
+  let stream;
+  try {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      throw new Error('Audio recording is not supported by this version of Brightdesk Decks.');
+    }
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false
+    });
+    if (state.app !== 'slides' || state.view !== 'workspace') {
+      stopNarrationTracks(stream);
+      narrationStatus = '';
+      narrationStarting = false;
+      return;
+    }
+
+    const preferredMimeType = narrationApi.selectSupportedMimeType(MediaRecorder);
+    const options = { audioBitsPerSecond: 24_000 };
+    if (preferredMimeType) options.mimeType = preferredMimeType;
+    const recorder = new MediaRecorder(stream, options);
+    narrationRecorder = recorder;
+    narrationStream = stream;
+    narrationChunks = [];
+    narrationBytes = 0;
+    narrationStartedAt = performance.now();
+    narrationStatus = 'Recording. Select Stop recording when you are finished.';
+
+    recorder.addEventListener('dataavailable', event => {
+      if (recorder !== narrationRecorder || !event.data || event.data.size < 1) return;
+      if (narrationBytes + event.data.size > narrationApi.MAX_AUDIO_BYTES) {
+        narrationFailure = 'This recording reached the 1 MB size limit. Record a shorter narration.';
+        stopNarrationRecording();
+        return;
+      }
+      narrationChunks.push(event.data);
+      narrationBytes += event.data.size;
+    });
+
+    recorder.addEventListener('error', event => {
+      narrationFailure = event.error?.message || 'The audio recorder reported an error.';
+      if (recorder.state !== 'inactive') {
+        try { recorder.stop(); } catch { stopNarrationTracks(stream); }
+      }
+    });
+
+    recorder.addEventListener('stop', async () => {
+      const chunks = narrationChunks;
+      const byteCount = narrationBytes;
+      const durationMs = Math.min(
+        narrationApi.MAX_RECORDING_MS,
+        Math.max(1, Math.round(performance.now() - narrationStartedAt))
+      );
+      const failure = narrationFailure;
+      window.clearTimeout(narrationTimeout);
+      narrationTimeout = null;
+      narrationRecorder = null;
+      narrationStream = null;
+      narrationChunks = [];
+      narrationBytes = 0;
+      narrationStarting = true;
+      stopNarrationTracks(stream);
+
+      if (failure) {
+        narrationStatus = failure;
+        narrationStarting = false;
+        if (state.app === 'slides') renderSlides();
+        setStatus(failure);
+        return;
+      }
+      if (!chunks.length || byteCount < 1) {
+        narrationStatus = 'No audio was captured. Check the microphone and try again.';
+        narrationStarting = false;
+        if (state.app === 'slides') renderSlides();
+        setStatus(narrationStatus);
+        return;
+      }
+
+      try {
+        const recordedMimeType = recorder.mimeType || preferredMimeType;
+        if (!recordedMimeType) throw new Error('This device did not provide a supported audio format.');
+        const blob = new Blob(chunks, { type: recordedMimeType });
+        const dataUrl = await narrationApi.blobToDataUrl(blob);
+        recordingDocument.narration = narrationApi.validateNarrationClip({
+          dataUrl,
+          mimeType: recordedMimeType,
+          durationMs
+        });
+        const savedLocally = persist();
+        narrationStatus = savedLocally
+          ? 'Narration saved on this device.'
+          : 'The recording is ready, but local saving failed. Use Save project to keep it.';
+      } catch (error) {
+        narrationStatus = error.message || 'The narration could not be saved.';
+      } finally {
+        narrationStarting = false;
+        if (state.app === 'slides') renderSlides();
+        setStatus(narrationStatus);
+      }
+    });
+
+    recorder.start(250);
+    narrationTimeout = window.setTimeout(stopNarrationRecording, narrationApi.MAX_RECORDING_MS);
+    narrationStarting = false;
+    renderSlides();
+  } catch (error) {
+    stopNarrationTracks(stream);
+    narrationRecorder = null;
+    narrationStream = null;
+    narrationChunks = [];
+    narrationBytes = 0;
+    narrationStarting = false;
+    narrationStatus = error.name === 'NotAllowedError'
+      ? 'Microphone access was denied. Allow microphone access in your system settings, then try again.'
+      : (error.message || 'The microphone could not be started.');
+    renderSlides();
+    setStatus(narrationStatus);
+  }
+}
+
+function renderSlideNarrationPanel(doc) {
+  const panel = document.createElement('section');
+  panel.className = 'slide-narration';
+  panel.setAttribute('aria-label', 'Presentation narration');
+
+  const heading = document.createElement('h3');
+  heading.textContent = 'Presentation narration';
+  const description = document.createElement('p');
+  description.textContent = 'Record a voice track for this presentation. Your microphone is used only while recording, and the audio stays on this device.';
+  panel.append(heading, description);
+
+  const controls = document.createElement('div');
+  controls.className = 'slide-narration-actions';
+  if (narrationRecorder) {
+    const stop = document.createElement('button');
+    stop.type = 'button';
+    stop.className = 'secondary';
+    stop.textContent = 'Stop recording';
+    stop.addEventListener('click', stopNarrationRecording);
+    controls.append(stop);
+  } else {
+    const record = document.createElement('button');
+    record.type = 'button';
+    record.className = 'primary';
+    record.textContent = narrationStarting ? 'Preparing recording…' : (doc.narration ? 'Record again' : 'Record narration');
+    record.disabled = narrationStarting;
+    record.addEventListener('click', startNarrationRecording);
+    controls.append(record);
+  }
+
+  if (doc.narration && !narrationRecorder) {
+    const playback = document.createElement('audio');
+    playback.className = 'slide-narration-player';
+    playback.controls = true;
+    playback.preload = 'none';
+    playback.src = doc.narration.dataUrl;
+    playback.setAttribute('aria-label', 'Play presentation narration');
+    const duration = document.createElement('span');
+    duration.className = 'slide-narration-duration';
+    duration.textContent = `Saved narration · ${Math.ceil(doc.narration.durationMs / 1000)} seconds`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'secondary';
+    remove.textContent = 'Remove narration';
+    remove.addEventListener('click', () => {
+      if (!confirm('Remove the narration from this presentation?')) return;
+      delete doc.narration;
+      const savedLocally = persist();
+      narrationStatus = savedLocally
+        ? 'Narration removed.'
+        : 'Narration was removed from this session, but local saving failed.';
+      renderSlides();
+    });
+    controls.append(playback, duration, remove);
+  }
+
+  const status = document.createElement('p');
+  status.className = 'slide-narration-status';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  status.textContent = narrationStatus || 'Maximum recording length: 3 minutes.';
+  panel.append(controls, status);
+  return panel;
+}
+
+window.addEventListener('beforeunload', () => {
+  window.clearTimeout(narrationTimeout);
+  if (narrationRecorder && narrationRecorder.state !== 'inactive') {
+    try { narrationRecorder.stop(); } catch { /* The window is already closing. */ }
+  }
+  stopNarrationTracks(narrationStream);
+});
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function activeDoc() { return state.docs[state.app]; }
 function setStatus(message) { $('save-status').textContent = message; }
 function persist() {
-  try { localStorage.setItem('brightdesk-docs-v3', JSON.stringify(state.docs)); setStatus('Saved on this device'); }
-  catch (error) { setStatus('Could not save locally'); console.error(error); }
+  try {
+    localStorage.setItem('brightdesk-docs-v3', JSON.stringify(state.docs));
+    setStatus('Saved on this device');
+    return true;
+  } catch (error) {
+    setStatus('Could not save locally');
+    console.error(error);
+    return false;
+  }
 }
 function loadLocal() {
   try {
     const stored = JSON.parse(localStorage.getItem('brightdesk-docs-v3') || localStorage.getItem('brightdesk-docs-v2') || 'null');
     if (stored && typeof stored === 'object') state.docs = { ...clone(defaults), ...stored };
+    if (state.docs.slides?.narration) {
+      try {
+        state.docs.slides.narration = narrationApi.validateNarrationClip(state.docs.slides.narration);
+      } catch {
+        delete state.docs.slides.narration;
+        console.warn('Invalid saved presentation narration was discarded.');
+      }
+    }
     const appSetup = JSON.parse(localStorage.getItem('brightdesk-app-setup-v1') || 'null');
     if (appSetup && Array.isArray(appSetup.installedApps)) {
       state.installedApps = launchAppId ? [launchAppId] : appSetup.installedApps.filter(id => installableCatalog.some(item => item.id === id));
@@ -299,7 +552,7 @@ function renderSlides() {
   const prev=document.createElement('button');prev.textContent='← Previous';prev.disabled=doc.current===0;prev.onclick=()=>{doc.current--;renderSlides();renderToolbar();};
   const count=document.createElement('span');count.textContent=`Slide ${doc.current+1} of ${doc.slides.length}`;
   const next=document.createElement('button');next.textContent='Next →';next.disabled=doc.current===doc.slides.length-1;next.onclick=()=>{doc.current++;renderSlides();renderToolbar();};
-  controls.append(prev,count,next);slideWrap.append(stage,controls);
+  controls.append(prev,count,next);slideWrap.append(stage,controls,renderSlideNarrationPanel(doc));
 }
 function addSlide(){activeDoc().slides.push({title:`Slide ${activeDoc().slides.length+1}`,body:''});activeDoc().current=activeDoc().slides.length-1;renderSlides();renderToolbar();persist();}
 function duplicateSlide(){const d=activeDoc(),copy=clone(d.slides[d.current]);d.slides.splice(d.current+1,0,copy);d.current++;renderSlides();renderToolbar();persist();}
@@ -318,7 +571,21 @@ function presentSlides() {
   const footer = document.createElement('div');
   footer.className = 'presentation-footer';
   footer.textContent = 'Click or press an arrow key to move · Esc to exit';
-  slide.append(title, body, footer);
+  if (d.narration) {
+    const narration = document.createElement('audio');
+    narration.className = 'presentation-narration';
+    narration.controls = true;
+    narration.preload = 'none';
+    narration.src = d.narration.dataUrl;
+    narration.setAttribute('aria-label', 'Play presentation narration');
+    narration.addEventListener('click', event => event.stopPropagation());
+    narration.addEventListener('keydown', event => {
+      if (['ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.stopPropagation();
+    });
+    slide.append(title, body, narration, footer);
+  } else {
+    slide.append(title, body, footer);
+  }
   overlay.append(slide);
   document.body.append(overlay);
 
@@ -354,6 +621,8 @@ function presentSlides() {
   const key = event => {
     if (event.key === 'Escape') {
       close();
+    } else if (event.target?.tagName === 'AUDIO') {
+      return;
     } else if (event.key === 'ArrowRight') {
       i = Math.min(d.slides.length - 1, i + 1);
       draw();
@@ -809,6 +1078,19 @@ async function changeProofingLanguage(code) {
 }
 
 function render() {
+  if (narrationApi.shouldStopNarrationWhenWorkspaceHidden({
+    app: state.app,
+    view: state.view,
+    isRecording: Boolean(narrationRecorder),
+    isStarting: narrationStarting
+  })) {
+    if (narrationRecorder) {
+      stopNarrationRecording();
+    } else {
+      narrationStarting = false;
+      narrationStatus = 'Microphone access cancelled because the narration workspace was closed.';
+    }
+  }
   window.BrightdeskI18n.localizeStaticElements();
   document.querySelectorAll('.nav[data-app]').forEach(btn => {
     const appId = btn.dataset.app;
@@ -883,7 +1165,18 @@ function exportPayload(){
   if(state.app==='slides')return {kind:'slides',title,slides:doc.slides||[]};
   return {kind:'notes',title,text:$('notes-editor').value||''};
 }
-async function exportCurrent(){try{const result=await window.brightdesk.exportFile(exportPayload());if(result?.canceled)return;setStatus('Exported successfully');}catch(error){alert(`Export failed: ${error.message}`);}}
+async function exportCurrent(){
+  if (state.app === 'slides' && (narrationRecorder || narrationStarting)) { alert('Stop or finish the narration before exporting this presentation.'); return; }
+  if (state.app === 'slides' && activeDoc().narration &&
+      !confirm('PowerPoint export does not include presentation narration yet. Save a Brightdesk project to keep the recording. Continue with PowerPoint export?')) return;
+  try {
+    const result = await window.brightdesk.exportFile(exportPayload());
+    if (result?.canceled) return;
+    setStatus('Exported successfully');
+  } catch (error) {
+    alert(`Export failed: ${error.message}`);
+  }
+}
 async function exportPdf(){try{const result=await window.brightdesk.exportPdf({title:$('doc-title').value});if(!result?.canceled)setStatus('PDF exported');}catch(error){alert(`PDF export failed: ${error.message}`);}}
 function importProject(data){
   if (launchAppId && data?.kind && data.kind !== launchAppId) throw new Error(`This Brightdesk ${appLabel(launchAppId)} installation opens ${appLabel(launchAppId)} files only.`);
@@ -905,9 +1198,9 @@ function importProject(data){
   state.app=kind; state.ribbonTab='home';
 }
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
-async function openFile(){try{const data=await window.brightdesk.openFile();if(!data)return;importProject(data);persist();render();setStatus('File opened');}catch(error){alert(`Could not open file: ${error.message}`);}}
-async function saveProject(){try{const result=await window.brightdesk.saveProject({title:$('doc-title').value,docs:state.docs});if(!result?.canceled)setStatus('Project saved');}catch(error){alert(`Could not save project: ${error.message}`);}}
-function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
+async function openFile(){if(state.app==='slides'&&(narrationRecorder||narrationStarting)){alert('Stop or finish the narration before opening another file.');return;}try{const data=await window.brightdesk.openFile();if(!data)return;importProject(data);persist();render();setStatus('File opened');}catch(error){alert(`Could not open file: ${error.message}`);}}
+async function saveProject(){if(state.app==='slides'&&(narrationRecorder||narrationStarting)){alert('Stop or finish the narration before saving the Brightdesk project.');return;}try{const result=await window.brightdesk.saveProject({title:$('doc-title').value,docs:state.docs});if(!result?.canceled)setStatus('Project saved');}catch(error){alert(`Could not save project: ${error.message}`);}}
+function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;if(state.app==='slides' && app!=='slides' && narrationRecorder)stopNarrationRecording();state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
 document.querySelectorAll('.nav[data-app]').forEach(btn=>btn.addEventListener('click',()=>setApp(btn.dataset.app)));
 $('manage-apps').addEventListener('click',()=>{if (launchAppId) return; state.view='manager';render();});
