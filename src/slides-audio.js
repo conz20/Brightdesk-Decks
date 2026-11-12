@@ -63,6 +63,12 @@ function validateNarrationClip(clip) {
   };
 }
 
+function shouldStopNarrationWhenWorkspaceHidden({ app, view, isRecording, isStarting } = {}) {
+  return app === 'slides' &&
+    view !== 'workspace' &&
+    (isRecording === true || isStarting === true);
+}
+
 function selectSupportedMimeType(MediaRecorderConstructor) {
   if (!MediaRecorderConstructor || typeof MediaRecorderConstructor.isTypeSupported !== 'function') return '';
   return SUPPORTED_MIME_TYPES.find(type => {
@@ -94,6 +100,7 @@ const api = {
   MAX_AUDIO_BYTES,
   SUPPORTED_MIME_TYPES: [...SUPPORTED_MIME_TYPES],
   validateNarrationClip,
+  shouldStopNarrationWhenWorkspaceHidden,
   selectSupportedMimeType,
   blobToDataUrl
 };
