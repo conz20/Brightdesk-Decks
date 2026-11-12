@@ -50,10 +50,16 @@ These are configured build targets, not confirmation that a package has passed i
 - Create a presentation and edit slide titles and body text.
 - Add, duplicate and delete slides.
 - Choose from the included basic slide themes.
+- Record a presentation narration track for up to three minutes, with playback in the editor and presentation mode.
+- Save narration inside the local Brightdesk project file (.bdesk).
 - Start presentation mode from the current deck.
 - Import and export supported PowerPoint files; unsupported advanced objects and formatting may not be preserved.
 
-**Known boundaries:** Decks is an early slide-editor foundation. Advanced layouts, transitions, embedded media, animation and full PowerPoint round-trip fidelity are not promised.
+**Narration and PowerPoint files:** Narration is saved in a Brightdesk project file. It is not included in PowerPoint (.pptx) exports yet; Decks warns before exporting a presentation that has narration attached.
+
+**Microphone and privacy:** Recording begins only after the user selects Record narration and the operating system grants microphone access. Recording stops when the user selects Stop, after three minutes, or at the one-megabyte clip limit. The recording remains on this device and is not uploaded to an external service.
+
+**Known boundaries:** Decks is an early slide-editor foundation. Advanced layouts, transitions, imported audio/video media, animation, voice conversion and full PowerPoint round-trip fidelity are not promised.
 ## Desktop installers
 
 | Platform | Installer |
