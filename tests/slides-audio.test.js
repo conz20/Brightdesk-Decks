@@ -107,8 +107,10 @@ test('rejects malformed narration while validating Brightdesk projects', () => {
 
 const {
   mayRequestMicrophoneAccess,
-  mayCheckMicrophoneAccess
+  mayCheckMicrophoneAccess,
+  isLocalFileUrl
 } = require('../src/media-permissions');
+const { shouldStopNarrationWhenWorkspaceHidden } = require('../src/slides-audio');
 
 test('allows an explicit microphone request from the main local product window', () => {
   assert.equal(mayRequestMicrophoneAccess({
@@ -195,4 +197,31 @@ test('rejects narration without a valid slide collection', () => {
     }
   };
   assert.throws(() => validateProject(project), /without a slide collection/i);
+});
+
+test('only treats local file URLs as eligible microphone origins', () => {
+  assert.equal(isLocalFileUrl('file://'), true);
+  assert.equal(isLocalFileUrl('file:///Applications/Brightdesk Decks.app/index.html'), true);
+  assert.equal(isLocalFileUrl('file:///C:/Program Files/Brightdesk Decks/index.html'), true);
+  assert.equal(isLocalFileUrl('file://fileserver/share/index.html'), false);
+  assert.equal(isLocalFileUrl('https://example.invalid/'), false);
+  assert.equal(isLocalFileUrl('file:relative/path'), false);
+});
+
+test('stops narration when the recording workspace becomes hidden', () => {
+  assert.equal(shouldStopNarrationWhenWorkspaceHidden({
+    app: 'slides', view: 'manager', isRecording: true
+  }), true);
+  assert.equal(shouldStopNarrationWhenWorkspaceHidden({
+    app: 'slides', view: 'languages', isRecording: true
+  }), true);
+  assert.equal(shouldStopNarrationWhenWorkspaceHidden({
+    app: 'slides', view: 'workspace', isRecording: true
+  }), false);
+  assert.equal(shouldStopNarrationWhenWorkspaceHidden({
+    app: 'pages', view: 'manager', isRecording: true
+  }), false);
+  assert.equal(shouldStopNarrationWhenWorkspaceHidden({
+    app: 'slides', view: 'manager', isRecording: false
+  }), false);
 });
