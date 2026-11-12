@@ -1,0 +1,104 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  MAX_RECORDING_MS,
+  MAX_AUDIO_BYTES,
+  validateNarrationClip
+} = require('../src/slides-audio');
+const { validateProject } = require('../src/file-service');
+
+const validClip = () => ({
+  dataUrl: 'data:audio/webm;codecs=opus;base64,AAAA',
+  mimeType: 'audio/webm;codecs=opus',
+  durationMs: 1500
+});
+
+test('validates and normalizes a locally recorded narration clip', () => {
+  const clip = validateNarrationClip(validClip());
+  assert.equal(clip.mimeType, 'audio/webm;codecs=opus');
+  assert.equal(clip.durationMs, 1500);
+  assert.equal(clip.sizeBytes, 3);
+  assert.equal(clip.dataUrl, validClip().dataUrl);
+});
+
+test('accepts Ogg Opus recordings', () => {
+  const clip = validateNarrationClip({
+    dataUrl: 'data:audio/ogg;codecs=opus;base64,AAAA',
+    mimeType: 'audio/ogg;codecs=opus',
+    durationMs: 1000
+  });
+  assert.equal(clip.mimeType, 'audio/ogg;codecs=opus');
+});
+
+test('rejects unsupported audio formats and MIME mismatches', () => {
+  assert.throws(() => validateNarrationClip({
+    ...validClip(),
+    dataUrl: 'data:audio/mpeg;base64,AAAA',
+    mimeType: 'audio/mpeg'
+  }), /supported audio format/i);
+  assert.throws(() => validateNarrationClip({
+    ...validClip(),
+    mimeType: 'audio/ogg;codecs=opus'
+  }), /does not match/i);
+});
+
+test('rejects malformed data URLs and invalid base64', () => {
+  for (const dataUrl of [
+    'https://example.invalid/audio.webm',
+    'data:audio/webm;base64,not base64!',
+    'data:audio/webm;base64,AAA',
+    'data:audio/webm;base64,'
+  ]) {
+    assert.throws(() => validateNarrationClip({ ...validClip(), dataUrl }));
+  }
+});
+
+test('rejects empty, excessive or invalid recording durations', () => {
+  assert.throws(() => validateNarrationClip({ ...validClip(), durationMs: 0 }), /duration/i);
+  assert.throws(() => validateNarrationClip({ ...validClip(), durationMs: -1 }), /duration/i);
+  assert.throws(() => validateNarrationClip({ ...validClip(), durationMs: MAX_RECORDING_MS + 1 }), /duration/i);
+  assert.throws(() => validateNarrationClip({ ...validClip(), durationMs: 1.5 }), /duration/i);
+});
+
+test('rejects audio data larger than the project narration limit', () => {
+  const payload = 'A'.repeat(Math.ceil((MAX_AUDIO_BYTES + 1) / 3) * 4);
+  const dataUrl = 'data:audio/webm;base64,' + payload;
+  assert.throws(() => validateNarrationClip({
+    dataUrl,
+    mimeType: 'audio/webm',
+    durationMs: MAX_RECORDING_MS
+  }), /exceeds.*limit/i);
+});
+
+test('keeps valid narration when a Brightdesk project is saved', () => {
+  const project = {
+    title: 'Presentation',
+    docs: {
+      slides: {
+        title: 'Presentation',
+        slides: [{ title: 'Welcome', body: 'Hello' }],
+        current: 0,
+        narration: validClip()
+      }
+    }
+  };
+  assert.equal(validateProject(project), project);
+});
+
+test('rejects malformed narration while validating Brightdesk projects', () => {
+  const project = {
+    title: 'Presentation',
+    docs: {
+      slides: {
+        title: 'Presentation',
+        slides: [{ title: 'Welcome', body: 'Hello' }],
+        current: 0,
+        narration: { ...validClip(), dataUrl: 'https://example.invalid/voice.webm' }
+      }
+    }
+  };
+  assert.throws(() => validateProject(project), /narration/i);
+});
+
