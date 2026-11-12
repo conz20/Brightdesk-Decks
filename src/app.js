@@ -1130,6 +1130,7 @@ function exportPayload(){
   return {kind:'notes',title,text:$('notes-editor').value||''};
 }
 async function exportCurrent(){
+  if (state.app === 'slides' && (narrationRecorder || narrationStarting)) { alert('Stop or finish the narration before exporting this presentation.'); return; }
   if (state.app === 'slides' && activeDoc().narration &&
       !confirm('PowerPoint export does not include presentation narration yet. Save a Brightdesk project to keep the recording. Continue with PowerPoint export?')) return;
   try {
@@ -1161,8 +1162,8 @@ function importProject(data){
   state.app=kind; state.ribbonTab='home';
 }
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
-async function openFile(){try{const data=await window.brightdesk.openFile();if(!data)return;importProject(data);persist();render();setStatus('File opened');}catch(error){alert(`Could not open file: ${error.message}`);}}
-async function saveProject(){try{const result=await window.brightdesk.saveProject({title:$('doc-title').value,docs:state.docs});if(!result?.canceled)setStatus('Project saved');}catch(error){alert(`Could not save project: ${error.message}`);}}
+async function openFile(){if(state.app==='slides'&&(narrationRecorder||narrationStarting)){alert('Stop or finish the narration before opening another file.');return;}try{const data=await window.brightdesk.openFile();if(!data)return;importProject(data);persist();render();setStatus('File opened');}catch(error){alert(`Could not open file: ${error.message}`);}}
+async function saveProject(){if(state.app==='slides'&&(narrationRecorder||narrationStarting)){alert('Stop or finish the narration before saving the Brightdesk project.');return;}try{const result=await window.brightdesk.saveProject({title:$('doc-title').value,docs:state.docs});if(!result?.canceled)setStatus('Project saved');}catch(error){alert(`Could not save project: ${error.message}`);}}
 function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;if(state.app==='slides' && app!=='slides' && narrationRecorder)stopNarrationRecording();state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
 document.querySelectorAll('.nav[data-app]').forEach(btn=>btn.addEventListener('click',()=>setApp(btn.dataset.app)));
