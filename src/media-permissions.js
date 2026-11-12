@@ -1,7 +1,14 @@
 'use strict';
 
 function isLocalFileUrl(value) {
-  return typeof value === 'string' && value.toLowerCase().startsWith('file:');
+  if (typeof value !== 'string') return false;
+  if (value.toLowerCase() === 'file://') return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'file:' && url.hostname === '';
+  } catch {
+    return false;
+  }
 }
 
 function mayRequestMicrophoneAccess({
@@ -35,6 +42,7 @@ function mayCheckMicrophoneAccess({
 }
 
 module.exports = {
+  isLocalFileUrl,
   mayRequestMicrophoneAccess,
   mayCheckMicrophoneAccess
 };
