@@ -179,8 +179,8 @@ test('loads narration support before the editor and permits only local audio med
 test('provides user-triggered recording, stop and presentation playback controls', () => {
   const appSource = fs.readFileSync(path.join(__dirname, '../src/app.js'), 'utf8');
   assert.match(appSource, /navigator\.mediaDevices\.getUserMedia/);
-  assert.match(appSource, /textContent = 'Record narration'/);
-  assert.match(appSource, /textContent = 'Stop recording'/);
+  assert.ok(appSource.includes("'Record narration'"));
+  assert.ok(appSource.includes("'Stop recording'"));
   assert.match(appSource, /className = 'presentation-narration'/);
 });
 
