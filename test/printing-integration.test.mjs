@@ -14,7 +14,7 @@ test("Printing snapshot is the dependency-free approved upstream version",()=>{
 test("the Decks workspace contains shared Print actions",()=>{
  const html=read("src/index.html"),app=read("src/app.js"),main=read("src/main.js"),preload=read("src/preload.js");
  assert.match(html,/id="print-button"/);assert.match(html,/id="printer-settings-button"/);
- assert.ok(app.includes("window.brightdesk.printing.print({ printBackground: true })"));
+ assert.ok(app.includes("window.brightdesk.printing.print(printRequest)"));
  assert.ok(app.includes("window.brightdesk.printing.openPrinterSettings()"));
  assert.match(main,/registerPrintingIpcHandlers/);
  assert.match(preload,/printing:list-printers/);
@@ -102,15 +102,17 @@ test("the current Forms view exposes its available printable question content", 
   assert.match(app, /createBrightdeskPrintDocument/);
 });
 
-
 test("prints every Decks slide as a themed 16:9 slide in landscape orientation", () => {
   const app = read("src/app.js");
   const css = read("src/styles.css");
-  assert.match(app, /brightdesk-print-slide slide-stage theme-\\$\\{state\\.slideTheme\\}/);
-  assert.match(app, /slideTitle\\.className = ["']slide-title["']/);
-  assert.match(app, /body\\.className = ["']slide-body["']/);
-  assert.match(app, /printRequest\\.orientation = ["']landscape["']/);
-  assert.match(css, /#brightdesk-print-root\\[data-app=["']slides["']\\] \\.brightdesk-print-slide\\s*\\{[^}]*aspect-ratio:\\s*16\\s*\\/\\s*9/s);
-  assert.match(css, /theme-midnight \\.slide-title/);
-  assert.match(css, /theme-midnight \\.slide-body/);
+  assert.ok(app.includes('if (appId !== "slides")'));
+  assert.ok(app.includes("brightdesk-print-slide slide-stage theme-${slideTheme}"));
+  assert.ok(app.includes('slideTitle.className = "slide-title"'));
+  assert.ok(app.includes('body.className = "slide-body"'));
+  assert.ok(app.includes('printRequest.orientation = "landscape"'));
+  assert.ok(app.includes("window.brightdesk.printing.print(printRequest)"));
+  assert.ok(css.includes('#brightdesk-print-root[data-app="slides"] .brightdesk-print-slide {'));
+  assert.ok(css.includes("aspect-ratio: 16 / 9 !important;"));
+  assert.ok(css.includes("#brightdesk-print-root .brightdesk-print-slide.theme-midnight .slide-title"));
+  assert.ok(css.includes("#brightdesk-print-root .brightdesk-print-slide.theme-midnight .slide-body"));
 });
