@@ -101,3 +101,16 @@ test("the current Forms view exposes its available printable question content", 
   assert.match(app, /forms:\s*"forms-wrap"/);
   assert.match(app, /createBrightdeskPrintDocument/);
 });
+
+
+test("prints every Decks slide as a themed 16:9 slide in landscape orientation", () => {
+  const app = read("src/app.js");
+  const css = read("src/styles.css");
+  assert.match(app, /brightdesk-print-slide slide-stage theme-\\$\\{state\\.slideTheme\\}/);
+  assert.match(app, /slideTitle\\.className = ["']slide-title["']/);
+  assert.match(app, /body\\.className = ["']slide-body["']/);
+  assert.match(app, /printRequest\\.orientation = ["']landscape["']/);
+  assert.match(css, /#brightdesk-print-root\\[data-app=["']slides["']\\] \\.brightdesk-print-slide\\s*\\{[^}]*aspect-ratio:\\s*16\\s*\\/\\s*9/s);
+  assert.match(css, /theme-midnight \\.slide-title/);
+  assert.match(css, /theme-midnight \\.slide-body/);
+});
