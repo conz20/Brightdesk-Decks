@@ -398,8 +398,3 @@
   }
 }
 
-@media print {
-  #brightdesk-print-root[data-app="slides"] .brightdesk-print-slide {
-    background: #fff !important;
-  }
-}
