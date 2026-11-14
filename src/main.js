@@ -50,6 +50,33 @@ function senderIsMain(event) { return mainWindow && event.sender === mainWindow.
 
 const supportedPresenterLayouts = new Set(['title', 'title-content', 'two-content', 'section-header']);
 const supportedPresenterThemes = new Set(['lavender', 'midnight', 'paper']);
+const supportedPresenterObjects = new Set(['text', 'rectangle', 'ellipse', 'line']);
+const presenterColourPattern = /^#[0-9A-F]{6}$/i;
+
+function normalizePresenterObjects(objects) {
+  if (!Array.isArray(objects)) return [];
+  const normalized = [];
+  for (const source of objects.slice(0, 500)) {
+    if (!source || typeof source !== 'object' || Array.isArray(source) || !supportedPresenterObjects.has(source.type)) continue;
+    const { x, y, width, height } = source;
+    if (![x, y, width, height].every(value => typeof value === 'number' && Number.isFinite(value))) continue;
+    if (x < 0 || y < 0 || width <= 0 || height <= 0 || width > 100 || height > 100 || x + width > 100 || y + height > 100) continue;
+    const fill = source.fill === null ? null : (typeof source.fill === 'string' && presenterColourPattern.test(source.fill) ? source.fill.toUpperCase() : null);
+    const stroke = typeof source.stroke === 'string' && presenterColourPattern.test(source.stroke) ? source.stroke.toUpperCase() : null;
+    const textColor = typeof source.textColor === 'string' && presenterColourPattern.test(source.textColor) ? source.textColor.toUpperCase() : '#26364D';
+    const strokeWidth = typeof source.strokeWidth === 'number' && Number.isFinite(source.strokeWidth) ? Math.max(0, Math.min(12, source.strokeWidth)) : 1;
+    const fontSize = typeof source.fontSize === 'number' && Number.isFinite(source.fontSize) ? Math.max(8, Math.min(96, source.fontSize)) : 20;
+    const rotation = typeof source.rotation === 'number' && Number.isFinite(source.rotation) ? Math.max(-360, Math.min(360, source.rotation)) : 0;
+    normalized.push({
+      type: source.type,
+      x, y, width, height,
+      fill, stroke, textColor, strokeWidth, fontSize, rotation,
+      text: typeof source.text === 'string' ? source.text.slice(0, 10000) : '',
+      bold: source.bold === true
+    });
+  }
+  return normalized;
+}
 
 function normalizePresenterState(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -68,7 +95,11 @@ function normalizePresenterState(payload) {
       title: typeof slide.title === 'string' ? slide.title.slice(0, 2000) : '',
       body: typeof slide.body === 'string' ? slide.body.slice(0, 30000) : '',
       bodySecondary: typeof slide.bodySecondary === 'string' ? slide.bodySecondary.slice(0, 30000) : '',
-      layout
+      layout,
+      ...(typeof slide.backgroundColor === 'string' && presenterColourPattern.test(slide.backgroundColor)
+        ? { backgroundColor: slide.backgroundColor.toUpperCase() }
+        : {}),
+      objects: normalizePresenterObjects(slide.objects)
     },
     themeId,
     slideSize,
