@@ -26,5 +26,11 @@ contextBridge.exposeInMainWorld('brightdesk', {
   checkSpelling: (payload) => ipcRenderer.invoke('dictionaries:check', payload),
   startPresenter: (payload) => ipcRenderer.invoke('presentation:start', payload),
   updatePresenter: (payload) => ipcRenderer.send('presentation:update', payload),
-  endPresenter: () => ipcRenderer.invoke('presentation:end')
+  endPresenter: () => ipcRenderer.invoke('presentation:end'),
+  onPresenterDisplayLost: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => callback();
+    ipcRenderer.on('presentation:display-lost', listener);
+    return () => ipcRenderer.removeListener('presentation:display-lost', listener);
+  }
 });
