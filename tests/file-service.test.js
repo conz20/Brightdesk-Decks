@@ -969,3 +969,38 @@ test('PPTX export keeps text boxes and basic vector shapes editable as native sl
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk PowerPoint object round-trip restores editable object types, geometry and formatting', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-object-roundtrip-'));
+  const filePath = path.join(directory, 'object-roundtrip.pptx');
+  const objects = [
+    { id: 'object-rectangle', type: 'rectangle', x: 10, y: 20, width: 25, height: 30, fill: '#F3EBDD', stroke: '#26364D', strokeWidth: 2, text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0 },
+    { id: 'object-ellipse', type: 'ellipse', x: 45, y: 20, width: 18, height: 18, fill: '#DCEBFA', stroke: '#26364D', strokeWidth: 1, text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0 },
+    { id: 'object-line', type: 'line', x: 12, y: 62, width: 42, height: 1, fill: null, stroke: '#9A5E20', strokeWidth: 2, text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0 },
+    { id: 'object-text', type: 'text', x: 20, y: 75, width: 55, height: 12, fill: null, stroke: null, strokeWidth: 0, text: 'Quarterly results', fontSize: 26, textColor: '#202B3B', bold: true, rotation: 0 }
+  ];
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      themeId: 'paper',
+      slides: [{ title: 'Native objects', body: 'Body copy', objects }]
+    }, filePath);
+
+    const reopened = await openOfficeFile(filePath);
+    const imported = reopened.slides[0].objects;
+    assert.deepEqual(imported.map(object => object.id), objects.map(object => object.id));
+    assert.deepEqual(imported.map(object => object.type), objects.map(object => object.type));
+    assert.equal(imported[0].fill, '#F3EBDD');
+    assert.equal(imported[1].fill, '#DCEBFA');
+    assert.equal(imported[2].stroke, '#9A5E20');
+    assert.equal(imported[3].text, 'Quarterly results');
+    assert.equal(imported[3].fontSize, 26);
+    assert.equal(imported[3].bold, true);
+    assert.ok(!reopened.slides[0].body.includes('Quarterly results'));
+    assert.ok(Math.abs(imported[0].x - objects[0].x) < 0.01);
+    assert.ok(Math.abs(imported[0].width - objects[0].width) < 0.01);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
