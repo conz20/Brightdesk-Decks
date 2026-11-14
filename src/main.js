@@ -1,10 +1,11 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, screen, nativeImage } = require('electron');
 const packageConfig = require('../package.json');
 const { APP_SLUGS } = require('./standalone-downloads');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const { openOfficeFile, exportOfficeFile, cleanFileName, ensureExtension } = require('./file-service');
+const { MAX_SLIDE_IMAGE_BYTES, createSlideImageDataUrl, inspectSlideImageDataUrl } = require('./slide-image-service');
 const { BUILTIN_LANGUAGES, validateLanguagePack, getBuiltinLanguage } = require('./language-service');
 const { DictionaryService } = require('./dictionary-service');
 let mainWindow;
@@ -51,17 +52,29 @@ function senderIsMain(event) { return mainWindow && event.sender === mainWindow.
 const supportedPresenterLayouts = new Set(['title', 'title-content', 'two-content', 'section-header']);
 const supportedPresenterThemes = new Set(['lavender', 'midnight', 'paper']);
 const supportedPresenterTransitions = new Set(['none', 'fade', 'push', 'wipe']);
-const supportedPresenterObjects = new Set(['text', 'rectangle', 'ellipse', 'line']);
+const supportedPresenterObjects = new Set(['text', 'rectangle', 'ellipse', 'line', 'image']);
+const MAX_PRESENTER_SLIDE_IMAGE_BYTES = 15 * 1024 * 1024;
 const presenterColourPattern = /^#[0-9A-F]{6}$/i;
 
 function normalizePresenterObjects(objects) {
   if (!Array.isArray(objects)) return [];
   const normalized = [];
+  let totalImageBytes = 0;
   for (const source of objects.slice(0, 500)) {
     if (!source || typeof source !== 'object' || Array.isArray(source) || !supportedPresenterObjects.has(source.type)) continue;
     const { x, y, width, height } = source;
     if (![x, y, width, height].every(value => typeof value === 'number' && Number.isFinite(value))) continue;
     if (x < 0 || y < 0 || width <= 0 || height <= 0 || width > 100 || height > 100 || x + width > 100 || y + height > 100) continue;
+    const imageInfo = source.type === 'image' ? inspectSlideImageDataUrl(source.imageData) : null;
+    if (source.type === 'image' && (
+      !imageInfo ||
+      typeof source.imageName !== 'string' || !source.imageName.trim() || source.imageName.length > 255 ||
+      !Number.isInteger(source.imageWidth) || source.imageWidth < 1 || source.imageWidth > 20000 ||
+      !Number.isInteger(source.imageHeight) || source.imageHeight < 1 || source.imageHeight > 20000 ||
+      source.imageWidth * source.imageHeight > 40000000 ||
+      totalImageBytes + imageInfo.byteLength > MAX_PRESENTER_SLIDE_IMAGE_BYTES
+    )) continue;
+    if (imageInfo) totalImageBytes += imageInfo.byteLength;
     const fill = source.fill === null ? null : (typeof source.fill === 'string' && presenterColourPattern.test(source.fill) ? source.fill.toUpperCase() : null);
     const stroke = typeof source.stroke === 'string' && presenterColourPattern.test(source.stroke) ? source.stroke.toUpperCase() : null;
     const textColor = typeof source.textColor === 'string' && presenterColourPattern.test(source.textColor) ? source.textColor.toUpperCase() : '#26364D';
@@ -73,7 +86,13 @@ function normalizePresenterObjects(objects) {
       x, y, width, height,
       fill, stroke, textColor, strokeWidth, fontSize, rotation,
       text: typeof source.text === 'string' ? source.text.slice(0, 10000) : '',
-      bold: source.bold === true
+      bold: source.bold === true,
+      ...(imageInfo ? {
+        imageData: source.imageData,
+        imageName: source.imageName,
+        imageWidth: source.imageWidth,
+        imageHeight: source.imageHeight
+      } : {})
     });
   }
   return normalized;
@@ -449,6 +468,37 @@ ipcMain.handle('file:open', async event => {
   });
   if (result.canceled || !result.filePaths[0]) return null;
   return openOfficeFile(result.filePaths[0]);
+});
+ipcMain.handle('slides:picture:open', async event => {
+  if (!senderIsMain(event)) throw new Error('Invalid sender.');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+
+  const filePath = result.filePaths[0];
+  const buffer = await fs.readFile(filePath);
+  if (buffer.length > MAX_SLIDE_IMAGE_BYTES) {
+    throw new Error('Choose a picture no larger than 5 MB.');
+  }
+  const imageData = createSlideImageDataUrl(buffer);
+  const image = nativeImage.createFromBuffer(buffer);
+  if (image.isEmpty()) throw new Error('Brightdesk could not read this picture file.');
+  const { width, height } = image.getSize();
+  if (
+    !Number.isInteger(width) || !Number.isInteger(height) ||
+    width < 1 || height < 1 || width > 20000 || height > 20000 ||
+    width * height > 40000000
+  ) {
+    throw new Error('This picture exceeds the supported image dimensions.');
+  }
+  return {
+    imageData,
+    imageName: path.basename(filePath).slice(0, 255),
+    imageWidth: width,
+    imageHeight: height
+  };
 });
 ipcMain.handle('slides:reuse', async event => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
