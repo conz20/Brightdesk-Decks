@@ -1,8 +1,9 @@
 const fs = require('node:fs/promises');
+const crypto = require('node:crypto');
 const path = require('node:path');
 const { TextDecoder } = require('node:util');
 const appCatalog = require('./app-catalog');
-const { inspectSlideImageDataUrl } = require('./slide-image-service');
+const { inspectSlideImageDataUrl, createSlideImageDataUrl } = require('./slide-image-service');
 
 const MAX_PROJECT_BYTES = 50 * 1024 * 1024;
 const MAX_DOCUMENT_TEXT_BYTES = 10 * 1024 * 1024;
@@ -26,6 +27,7 @@ const SLIDE_BACKGROUND_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
 const SUPPORTED_SLIDE_OBJECT_TYPES = new Set(['text', 'rectangle', 'ellipse', 'line', 'image']);
 const SLIDE_IMAGE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\.(?:png|jpg|webp)$/i;
 const MAX_SLIDE_IMAGE_BYTES_PER_SLIDE = 15 * 1024 * 1024;
+const MAX_PPTX_IMPORTED_IMAGE_BYTES = 50 * 1024 * 1024;
 const SLIDE_OBJECT_ID_PATTERN = /^object-[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 const MAX_SLIDE_OBJECTS_PER_SLIDE = 1_000;
 const MAX_SLIDE_OBJECT_TEXT_LENGTH = 10_000;
@@ -745,6 +747,127 @@ function readPptxRgbColour(value) {
   return /^[0-9A-F]{6}$/i.test(hex) ? '#' + hex.toUpperCase() : null;
 }
 
+async function readPptxSlidePictures(zip, slidePart, slideXml, slideWidthEmu, slideHeightEmu, budgets) {
+  const { XMLParser } = require('fast-xml-parser');
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  let parsed;
+  try {
+    parsed = parser.parse(slideXml);
+  } catch {
+    return [];
+  }
+
+  const relationshipPart = path.posix.join(
+    path.posix.dirname(slidePart),
+    '_rels',
+    path.posix.basename(slidePart) + '.rels'
+  );
+  const relationshipFile = zip.file(relationshipPart);
+  if (!relationshipFile) return [];
+
+  let relationshipDocument;
+  try {
+    relationshipDocument = parser.parse(await relationshipFile.async('string'));
+  } catch {
+    return [];
+  }
+  const relationships = new Map();
+  for (const relationship of asArray(relationshipDocument.Relationships?.Relationship)) {
+    if (!isPlainObject(relationship)) continue;
+    const id = relationship['@_Id'];
+    const type = String(relationship['@_Type'] || '');
+    const target = relationship['@_Target'];
+    const targetMode = String(relationship['@_TargetMode'] || '').toLowerCase();
+    if (typeof id !== 'string' || !type.endsWith('/image') || typeof target !== 'string' || targetMode === 'external') continue;
+    if (target.startsWith('/') || target.includes('\\') || target.includes('\0')) continue;
+    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(slidePart), target));
+    if (!resolved.startsWith('ppt/media/') || resolved.includes('/../')) continue;
+    relationships.set(id, resolved);
+  }
+
+  const pictures = asArray(parsed.sld?.cSld?.spTree?.pic);
+  const objects = [];
+  for (const picture of pictures) {
+    if (!isPlainObject(picture)) continue;
+    const relationshipId = picture.blipFill?.blip?.['@_embed'];
+    const mediaPart = relationships.get(relationshipId);
+    if (!mediaPart) continue;
+    const mediaFile = zip.file(mediaPart);
+    if (!mediaFile) continue;
+    const declaredBytes = mediaFile._data?.uncompressedSize;
+    if (Number.isFinite(declaredBytes) && declaredBytes > MAX_SLIDE_IMAGE_BYTES) continue;
+    if (objects.length >= 1000) break;
+    const transform = picture.spPr?.xfrm;
+    const offset = transform?.off;
+    const extent = transform?.ext;
+    const xEmu = Number(offset?.['@_x']);
+    const yEmu = Number(offset?.['@_y']);
+    const widthEmu = Number(extent?.['@_cx']);
+    const heightEmu = Number(extent?.['@_cy']);
+    if (
+      !Number.isFinite(xEmu) || !Number.isFinite(yEmu) ||
+      !Number.isFinite(widthEmu) || !Number.isFinite(heightEmu) ||
+      xEmu < 0 || yEmu < 0 || widthEmu <= 0 || heightEmu <= 0 ||
+      slideWidthEmu <= 0 || slideHeightEmu <= 0
+    ) continue;
+    const x = xEmu / slideWidthEmu * 100;
+    const y = yEmu / slideHeightEmu * 100;
+    const width = widthEmu / slideWidthEmu * 100;
+    const height = heightEmu / slideHeightEmu * 100;
+    if (x + width > 100.001 || y + height > 100.001 || width <= 0 || height <= 0) continue;
+
+    const crop = picture.blipFill?.srcRect;
+    const hasCrop = crop && ['l', 't', 'r', 'b'].some(key => {
+      const value = Number(crop['@_' + key]);
+      return Number.isFinite(value) && value !== 0;
+    });
+    if (hasCrop) continue;
+
+    let buffer;
+    try {
+      buffer = await mediaFile.async('nodebuffer');
+    } catch {
+      continue;
+    }
+    if (buffer.length === 0 || buffer.length > MAX_SLIDE_IMAGE_BYTES) continue;
+    const imageData = createSlideImageDataUrl(buffer);
+    const imageInfo = inspectSlideImageDataUrl(imageData);
+    if (
+      !imageInfo ||
+      imageInfo.width > 20000 || imageInfo.height > 20000 ||
+      imageInfo.width * imageInfo.height > 40000000 ||
+      budgets.totalBytes + imageInfo.byteLength > MAX_PPTX_IMPORTED_IMAGE_BYTES ||
+      budgets.slideBytes + imageInfo.byteLength > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE
+    ) continue;
+
+    budgets.totalBytes += imageInfo.byteLength;
+    budgets.slideBytes += imageInfo.byteLength;
+    const properties = picture.nvPicPr?.cNvPr;
+    const requestedName = typeof properties?.['@_descr'] === 'string' && properties['@_descr'].trim()
+      ? properties['@_descr']
+      : (typeof properties?.['@_name'] === 'string' ? properties['@_name'] : 'Picture');
+    const imageName = requestedName.replace(/[\\u0000-\\u001f\\u007f]/g, '').trim().slice(0, 255) || 'Picture';
+    const rotationValue = Number(transform?.['@_rot']);
+    const rotation = Number.isFinite(rotationValue) ? Math.max(-360, Math.min(360, rotationValue / 60000)) : 0;
+    objects.push({
+      id: 'object-' + crypto.randomUUID(),
+      type: 'image',
+      x, y, width, height,
+      fill: null, stroke: null, strokeWidth: 0,
+      text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation,
+      imageData,
+      imageName,
+      imageWidth: imageInfo.width,
+      imageHeight: imageInfo.height
+    });
+  }
+  return objects;
+}
+
 function readPptxSlideObjects(xml, slideWidthEmu, slideHeightEmu) {
   const { XMLParser } = require('fast-xml-parser');
   const objectParser = new XMLParser({
@@ -907,11 +1030,14 @@ async function openOfficeFile(filePath) {
     if (totalSlideBytes > 50 * 1024 * 1024) throw new Error('The presentation contains too much uncompressed slide XML to import safely.');
     const slides = [];
     let totalNotesBytes = 0;
+    const pictureBudget = { totalBytes: 0, slideBytes: 0 };
     for (const name of names) {
+      pictureBudget.slideBytes = 0;
       const xml = await zip.files[name].async('string');
       const backgroundColor = readPptxSlideSolidBackground(xml);
       const hidden = /<(?:[A-Za-z0-9_]+:)?sld\b[^>]*\bshow=["'](?:0|false)["']/i.test(xml);
       const importedObjects = readPptxSlideObjects(xml, slideWidthEmu, slideHeightEmu);
+      const importedPictures = await readPptxSlidePictures(zip, name, xml, slideWidthEmu, slideHeightEmu, pictureBudget);
       const nativeObjectText = new Set(importedObjects.text);
       const texts = collectXmlText(parser.parse(xml)).filter(value => Boolean(value) && !nativeObjectText.has(value));
       const notesPart = await findNotesSlidePart(zip, name, relationshipParser);
@@ -929,7 +1055,7 @@ async function openOfficeFile(filePath) {
       slides.push({
         ...(hidden ? { hidden: true } : {}),
         ...(backgroundColor ? { backgroundColor } : {}),
-        ...(importedObjects.objects.length ? { objects: importedObjects.objects } : {}),
+        ...((importedObjects.objects.length || importedPictures.length) ? { objects: [...importedObjects.objects, ...importedPictures].slice(0, MAX_SLIDE_OBJECTS_PER_SLIDE) } : {}),
         transition: readPptxSlideTransition(xml),
         title: texts[0] || `Slide ${slides.length + 1}`,
         body: texts.slice(1).join('\n'),
