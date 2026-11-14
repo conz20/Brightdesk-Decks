@@ -827,3 +827,51 @@ test('PPTX import follows presentation relationship order rather than slide file
   }
 });
 
+
+
+test('PPTX import follows presentation slide order, supports namespace aliases, and ignores orphan slide parts', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-slide-order-'));
+  const filePath = path.join(directory, 'slide-order.pptx');
+  const archive = new JSZip();
+
+  const slideXml = (textPrefix, title, body, hidden = false) => `<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:${textPrefix}="http://schemas.openxmlformats.org/drawingml/2006/main"${hidden ? ' show="0"' : ''}>
+  <p:cSld><p:spTree><p:sp><p:txBody>
+    <${textPrefix}:p><${textPrefix}:r><${textPrefix}:t>${title}</${textPrefix}:t></${textPrefix}:r></${textPrefix}:p>
+    <${textPrefix}:p><${textPrefix}:r><${textPrefix}:t>${body}</${textPrefix}:t></${textPrefix}:r></${textPrefix}:p>
+  </p:txBody></p:sp></p:spTree></p:cSld>
+</p:sld>`;
+
+  try {
+    archive.file('ppt/presentation.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:sldIdLst>
+    <p:sldId id="256" r:id="rId2"/>
+    <p:sldId id="257" r:id="rId1"/>
+  </p:sldIdLst>
+  <p:sldSz cx="9144000" cy="6858000"/>
+</p:presentation>`);
+    archive.file('ppt/_rels/presentation.xml.rels', `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide10.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>
+</Relationships>`);
+    archive.file('ppt/slides/slide1.xml', slideXml('a', 'Unreferenced slide', 'Must not be imported'));
+    archive.file('ppt/slides/slide2.xml', slideXml('a', 'Second slide', 'Second body'));
+    archive.file('ppt/slides/slide10.xml', slideXml('d', 'First slide', 'First body &amp; details', true));
+
+    await fs.writeFile(filePath, await archive.generateAsync({ type: 'nodebuffer' }));
+    const imported = await openOfficeFile(filePath);
+
+    assert.deepEqual(imported.slides.map(slide => slide.title), ['First slide', 'Second slide']);
+    assert.deepEqual(imported.slides.map(slide => slide.body), ['First body & details', 'Second body']);
+    assert.equal(imported.slides[0].hidden, true);
+    assert.equal(imported.slideSize, 'standard');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
