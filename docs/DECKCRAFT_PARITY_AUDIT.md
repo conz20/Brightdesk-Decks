@@ -77,7 +77,7 @@ Match the reference product's information architecture and visual density rather
 - Migrate existing `{ title, body }` slides without data loss; retain compatibility with existing local JSON documents and PPTX import/export.
 - Add thumbnail navigation, add/duplicate/delete/reorder, keyboard navigation and a real notes editor.
 - Add title, title-and-content, two-content, section-header, blank and comparison layouts.
-- [x] Add bounded undo/redo for slide text, speaker notes, layouts, slide creation/duplication/deletion and reordering, with consecutive typing grouped by field. Object-edit history remains future work when editable objects are introduced.
+- [x] Add bounded undo/redo for slide text, speaker notes, layouts, slide creation/duplication/deletion and reordering, with typing grouped by field and device-local history restored across restarts. Object-edit history remains future work when editable objects are introduced.
 - Add tests for migration, selection bounds, reorder, duplicate, delete, one-slide minimum, notes persistence and recovery.
 
 ### P1 — Visual authoring
