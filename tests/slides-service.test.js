@@ -1122,3 +1122,14 @@ test('Decks duplicates a slide while preserving its layout ID', () => {
   assert.equal(duplicate.layoutId, original.layoutId);
   assert.notEqual(duplicate.id, original.id);
 });
+
+
+test('Decks treats prototype-like unknown layout IDs as invalid data', () => {
+  for (const layoutId of ['toString', 'constructor', '__proto__']) {
+    const presentation = ensurePresentation({
+      slides: [{ title: 'Safe fallback', body: 'Content', layoutId }]
+    });
+    assert.equal(presentation.slides[0].layout, 'title-content');
+    assert.equal(presentation.slides[0].layoutId, 'layout-title-content');
+  }
+});
