@@ -415,6 +415,19 @@ ipcMain.handle('file:open', async event => {
   if (result.canceled || !result.filePaths[0]) return null;
   return openOfficeFile(result.filePaths[0]);
 });
+ipcMain.handle('slides:reuse', async event => {
+  if (!senderIsMain(event)) throw new Error('Invalid sender.');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'PowerPoint presentations', extensions: ['pptx'] }]
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  const imported = await openOfficeFile(result.filePaths[0]);
+  if (imported?.kind !== 'slides' || !Array.isArray(imported.slides)) {
+    throw new Error('Choose a valid PowerPoint presentation to reuse slides.');
+  }
+  return imported;
+});
 ipcMain.handle('file:export', async (event, payload) => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
   if (!payload || !['pages','sheets','slides','notes'].includes(payload.kind)) throw new Error('Unsupported export request.');
