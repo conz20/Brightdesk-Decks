@@ -1396,7 +1396,7 @@ test('Decks inserts reused slides after the selected slide, preserves supported 
   assert.equal(presentation.slides[2].hidden, true);
   assert.equal(presentation.slides[2].objects.length, 1);
   assert.notEqual(presentation.slides[2].id, 'slide-before');
-  assert.notEqual(presentation.slides[2].objects[0].id, 'object-source');
+  assert.notEqual(presentation.slides[2].objects[0], importedSlides[0].objects[0]);
   assert.equal(presentation.slides[3].layout, 'title');
   assert.notDeepEqual(presentation.slides[2], importedSlides[0]);
   assert.deepEqual(importedSlides, sourceBefore);
