@@ -151,7 +151,7 @@
 
   function isValidSlideImageData(imageData) {
     if (typeof imageData !== 'string' || imageData.length > 7 * 1024 * 1024) return false;
-    const match = imageData.match(/^data:image\\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+    const match = imageData.match(/^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
     if (!match || match[1].length % 4 !== 0) return false;
     const bytes = estimateSlideImageBytes(imageData);
     return bytes > 0 && bytes <= MAX_SLIDE_IMAGE_BYTES;
