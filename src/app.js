@@ -287,18 +287,216 @@ function renderSheet() {
   }); table.append(tbody); sheetWrap.innerHTML=''; sheetWrap.append(table);
 }
 function renderSlides() {
-  const doc=window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide')); const slide=doc.slides[doc.current];
-  slideWrap.innerHTML='';
-  const stage=document.createElement('div');stage.className=`slide-stage theme-${state.slideTheme}`;
-  const title=document.createElement('textarea');title.className='slide-title';title.value=slide.title||'';title.setAttribute('aria-label','Slide title');title.lang=state.proofingLanguage;
-  const body=document.createElement('textarea');body.className='slide-body';body.value=slide.body||'';body.setAttribute('aria-label','Slide text');body.lang=state.proofingLanguage;
-  title.addEventListener('input',()=>{window.BrightdeskSlidesService.updateSlide(doc,doc.current,{title:title.value});persist();});body.addEventListener('input',()=>{window.BrightdeskSlidesService.updateSlide(doc,doc.current,{body:body.value});persist();});
-  stage.append(title,body);
-  const controls=document.createElement('div');controls.className='slide-controls';
-  const prev=document.createElement('button');prev.textContent='← Previous';prev.disabled=doc.current===0;prev.onclick=()=>{window.BrightdeskSlidesService.setCurrentSlide(doc,doc.current-1);renderSlides();renderToolbar();};
-  const count=document.createElement('span');count.textContent=`Slide ${doc.current+1} of ${doc.slides.length}`;
-  const next=document.createElement('button');next.textContent='Next →';next.disabled=doc.current===doc.slides.length-1;next.onclick=()=>{window.BrightdeskSlidesService.setCurrentSlide(doc,doc.current+1);renderSlides();renderToolbar();};
-  controls.append(prev,count,next);slideWrap.append(stage,controls);
+  const slidesService = window.BrightdeskSlidesService;
+  const doc = slidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  const slide = doc.slides[doc.current];
+  slideWrap.innerHTML = '';
+
+  const shell = document.createElement('div');
+  shell.className = 'slide-editor-shell';
+
+  const navigator = document.createElement('nav');
+  navigator.className = 'slide-navigator';
+  navigator.setAttribute('aria-label', 'Slide thumbnails');
+
+  const navigatorHeader = document.createElement('div');
+  navigatorHeader.className = 'slide-navigator-header';
+  const navigatorTitle = document.createElement('div');
+  navigatorTitle.className = 'slide-navigator-title';
+  const navigatorHeading = document.createElement('b');
+  navigatorHeading.textContent = 'Slides';
+  const navigatorCount = document.createElement('small');
+  navigatorCount.textContent = String(doc.slides.length);
+  navigatorTitle.append(navigatorHeading, navigatorCount);
+
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'slide-add-button';
+  addButton.textContent = '+';
+  addButton.title = 'Add slide';
+  addButton.setAttribute('aria-label', 'Add slide');
+  addButton.addEventListener('click', addSlide);
+  navigatorHeader.append(navigatorTitle, addButton);
+
+  const thumbnailList = document.createElement('div');
+  thumbnailList.className = 'slide-thumbnail-list';
+  let draggedIndex = -1;
+
+  const updateThumbnailPreview = (index, nextTitle, nextBody) => {
+    const card = thumbnailList.querySelector(`[data-slide-index="${index}"]`);
+    if (!card) return;
+    const titleLabel = card.querySelector('.slide-thumbnail-title');
+    const bodyLabel = card.querySelector('.slide-thumbnail-summary');
+    if (titleLabel) titleLabel.textContent = nextTitle.trim() || `Slide ${index + 1}`;
+    if (bodyLabel) bodyLabel.textContent = nextBody.trim().slice(0, 88) || 'Add text to this slide';
+  };
+
+  doc.slides.forEach((item, index) => {
+    const card = document.createElement('article');
+    card.className = 'slide-thumbnail-card';
+    card.dataset.slideIndex = String(index);
+    card.draggable = true;
+    card.classList.toggle('active', index === doc.current);
+
+    const select = document.createElement('button');
+    select.type = 'button';
+    select.className = 'slide-thumbnail-select';
+    select.setAttribute('aria-label', `Select slide ${index + 1}: ${item.title || 'Untitled slide'}`);
+    select.setAttribute('aria-current', index === doc.current ? 'true' : 'false');
+    const number = document.createElement('span');
+    number.className = 'slide-thumbnail-number';
+    number.textContent = String(index + 1);
+    const preview = document.createElement('span');
+    preview.className = 'slide-thumbnail-preview';
+    const previewTitle = document.createElement('b');
+    previewTitle.className = 'slide-thumbnail-title';
+    previewTitle.textContent = item.title.trim() || `Slide ${index + 1}`;
+    const previewBody = document.createElement('span');
+    previewBody.className = 'slide-thumbnail-summary';
+    previewBody.textContent = item.body.trim().slice(0, 88) || 'Add text to this slide';
+    preview.append(previewTitle, previewBody);
+    select.append(number, preview);
+    select.addEventListener('click', () => {
+      slidesService.setCurrentSlide(doc, index);
+      renderSlides();
+      renderToolbar();
+    });
+
+    const order = document.createElement('div');
+    order.className = 'slide-thumbnail-order';
+    const moveEarlier = document.createElement('button');
+    moveEarlier.type = 'button';
+    moveEarlier.textContent = '↑';
+    moveEarlier.title = 'Move slide earlier';
+    moveEarlier.setAttribute('aria-label', `Move slide ${index + 1} earlier`);
+    moveEarlier.disabled = index === 0;
+    moveEarlier.addEventListener('click', () => {
+      slidesService.moveSlide(doc, index, index - 1);
+      renderSlides();
+      persist();
+    });
+    const moveLater = document.createElement('button');
+    moveLater.type = 'button';
+    moveLater.textContent = '↓';
+    moveLater.title = 'Move slide later';
+    moveLater.setAttribute('aria-label', `Move slide ${index + 1} later`);
+    moveLater.disabled = index === doc.slides.length - 1;
+    moveLater.addEventListener('click', () => {
+      slidesService.moveSlide(doc, index, index + 1);
+      renderSlides();
+      persist();
+    });
+    order.append(moveEarlier, moveLater);
+    card.append(select, order);
+
+    card.addEventListener('dragstart', event => {
+      draggedIndex = index;
+      card.classList.add('dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(index));
+      }
+    });
+    card.addEventListener('dragend', () => {
+      draggedIndex = -1;
+      card.classList.remove('dragging');
+      thumbnailList.querySelectorAll('.drag-over').forEach(node => node.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', event => {
+      event.preventDefault();
+      if (draggedIndex !== index) card.classList.add('drag-over');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', event => {
+      event.preventDefault();
+      card.classList.remove('drag-over');
+      const source = draggedIndex;
+      if (source < 0 || source === index) return;
+      slidesService.moveSlide(doc, source, index);
+      renderSlides();
+      persist();
+    });
+
+    thumbnailList.append(card);
+  });
+
+  navigator.append(navigatorHeader, thumbnailList);
+
+  const editorMain = document.createElement('section');
+  editorMain.className = 'slide-editor-main';
+  editorMain.setAttribute('aria-label', 'Slide editor');
+
+  const stage = document.createElement('div');
+  stage.className = `slide-stage theme-${state.slideTheme}`;
+  const title = document.createElement('textarea');
+  title.className = 'slide-title';
+  title.value = slide.title || '';
+  title.setAttribute('aria-label', 'Slide title');
+  title.lang = state.proofingLanguage;
+  const body = document.createElement('textarea');
+  body.className = 'slide-body';
+  body.value = slide.body || '';
+  body.setAttribute('aria-label', 'Slide text');
+  body.lang = state.proofingLanguage;
+  title.addEventListener('input', () => {
+    slidesService.updateSlide(doc, doc.current, { title: title.value });
+    updateThumbnailPreview(doc.current, title.value, body.value);
+    persist();
+  });
+  body.addEventListener('input', () => {
+    slidesService.updateSlide(doc, doc.current, { body: body.value });
+    updateThumbnailPreview(doc.current, title.value, body.value);
+    persist();
+  });
+  stage.append(title, body);
+
+  const notesPanel = document.createElement('section');
+  notesPanel.className = 'slide-speaker-notes';
+  notesPanel.setAttribute('aria-label', 'Speaker notes');
+  const notesHeading = document.createElement('label');
+  notesHeading.className = 'slide-speaker-notes-heading';
+  notesHeading.textContent = 'Speaker notes';
+  const notes = document.createElement('textarea');
+  notes.className = 'slide-speaker-notes-editor';
+  notes.value = slide.notes || '';
+  notes.placeholder = 'Add notes for this slide…';
+  notes.setAttribute('aria-label', 'Speaker notes for current slide');
+  notes.lang = state.proofingLanguage;
+  notes.addEventListener('input', () => {
+    slidesService.updateSlide(doc, doc.current, { notes: notes.value });
+    persist();
+  });
+  notesHeading.append(notes);
+  notesPanel.append(notesHeading);
+
+  const controls = document.createElement('div');
+  controls.className = 'slide-controls';
+  const prev = document.createElement('button');
+  prev.type = 'button';
+  prev.textContent = '← Previous';
+  prev.disabled = doc.current === 0;
+  prev.addEventListener('click', () => {
+    slidesService.setCurrentSlide(doc, doc.current - 1);
+    renderSlides();
+    renderToolbar();
+  });
+  const count = document.createElement('span');
+  count.textContent = `Slide ${doc.current + 1} of ${doc.slides.length}`;
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.textContent = 'Next →';
+  next.disabled = doc.current === doc.slides.length - 1;
+  next.addEventListener('click', () => {
+    slidesService.setCurrentSlide(doc, doc.current + 1);
+    renderSlides();
+    renderToolbar();
+  });
+  controls.append(prev, count, next);
+
+  editorMain.append(stage, notesPanel, controls);
+  shell.append(navigator, editorMain);
+  slideWrap.append(shell);
 }
 function addSlide(){window.BrightdeskSlidesService.addSlide(activeDoc());renderSlides();renderToolbar();persist();}
 function duplicateSlide(){window.BrightdeskSlidesService.duplicateSlide(activeDoc());renderSlides();renderToolbar();persist();}
