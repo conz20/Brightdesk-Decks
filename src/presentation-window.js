@@ -22,7 +22,8 @@
     title.textContent = typeof slide.title === 'string' ? slide.title : '';
     body.textContent = typeof slide.body === 'string' ? slide.body : '';
     secondaryBody.textContent = typeof slide.bodySecondary === 'string' ? slide.bodySecondary : '';
-    columns.hidden = layout !== 'two-content';
+    columns.hidden = false;
+    secondaryBody.hidden = layout !== 'two-content';
   }
 
   if (window.brightdeskPresentation && typeof window.brightdeskPresentation.onPresentationUpdate === 'function') {
