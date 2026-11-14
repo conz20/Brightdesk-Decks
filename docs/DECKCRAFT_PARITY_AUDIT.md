@@ -92,7 +92,7 @@ Match the reference product's information architecture and visual density rather
 - [x] Add editable Outline View for slide titles and content, including the second comparison column, hidden-slide marking and a route back to Normal View.
 
 ### P2 — Present and share
-- Add F5/Shift+F5 start behaviour, complete navigation keys and Escape.
+- [x] Add F5/Shift+F5 start behaviour, arrow/Space/Page Up/Page Down/Enter/Backspace/N/P navigation, Home/End, and Escape.
 - [x] Add slide-number navigation, a G-key visible-slide picker, and B/period black-screen plus W/comma white-screen toggles; hidden slides are omitted from the picker and rejected as numeric destinations.
 - Add presenter view, notes, next-slide preview, timer and rehearsal timings. Black/white blanking is currently available in the audience show window through keyboard controls.
 - Add PDF slides, notes pages and handouts; then PNG/JPEG and supported PPTX round-trip improvements.
