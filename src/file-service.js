@@ -320,8 +320,8 @@ async function readNotesSlideText(zip, notesPart, notesParser) {
   const paragraphs = asArray(bodyPlaceholder.txBody?.p);
   const notes = paragraphs
     .map(paragraph => collectXmlText(paragraph).join(''))
-    .join('\\n')
-    .replace(/\\r\\n/g, '\\n')
+    .join('\n')
+    .replace(/\r\n/g, '\n')
     .trimEnd();
   assertDocumentTextLimit(Buffer.byteLength(notes, 'utf8'));
   return notes;
@@ -390,7 +390,7 @@ async function openOfficeFile(filePath) {
     let totalNotesBytes = 0;
     for (const name of names) {
       const xml = await zip.files[name].async('string');
-      const hidden = /<(?:[A-Za-z0-9_]+:)?sld\\b[^>]*\\bshow=["'](?:0|false)["']/i.test(xml);
+      const hidden = /<(?:[A-Za-z0-9_]+:)?sld\b[^>]*\bshow=["'](?:0|false)["']/i.test(xml);
       const texts = collectXmlText(parser.parse(xml)).filter(Boolean);
       const notesPart = await findNotesSlidePart(zip, name, relationshipParser);
       let notes = '';
@@ -407,7 +407,7 @@ async function openOfficeFile(filePath) {
       slides.push({
         ...(hidden ? { hidden: true } : {}),
         title: texts[0] || `Slide ${slides.length + 1}`,
-        body: texts.slice(1).join('\\n'),
+        body: texts.slice(1).join('\n'),
         notes
       });
     }
