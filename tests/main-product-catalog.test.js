@@ -27,6 +27,7 @@ test('Decks Presenter View uses a separate secure audience window on an external
 
   assert.match(main, /screen\.getAllDisplays\(\)/);
   assert.match(main, /function createPresenterWindow/);
+  assert.ok(main.includes('audienceWindow.showInactive()'), 'audience slide must not steal presenter keyboard focus');
   assert.match(main, /display\.id !== primaryDisplay\.id/);
   assert.match(main, /presentation:start/);
   assert.match(main, /presentation:update/);
