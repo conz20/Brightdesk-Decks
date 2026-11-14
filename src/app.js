@@ -741,6 +741,7 @@ function renderSlideSorter(doc) {
       second.className = 'slide-sorter-secondary';
       second.textContent = slide.bodySecondary.trim().slice(0, 90) || layoutDefinition.secondaryBodyPlaceholder || 'Second column';
       second.style.color = previewTextColor;
+      second.style.backgroundColor = slide.backgroundColor || '';
       preview.append(second);
     }
     select.append(number, preview);
@@ -1159,6 +1160,7 @@ function renderSlides() {
   body.setAttribute('aria-label', layoutDefinition.bodyLabel);
   body.lang = state.proofingLanguage;
   body.style.color = slideTextColor;
+  body.style.backgroundColor = slide.backgroundColor || '';
 
   let secondary = null;
   const updatePrimary = () => {
@@ -1185,6 +1187,7 @@ function renderSlides() {
     secondary.setAttribute('aria-label', layoutDefinition.secondaryBodyLabel || 'Second content column');
     secondary.lang = state.proofingLanguage;
     secondary.style.color = slideTextColor;
+    secondary.style.backgroundColor = slide.backgroundColor || '';
     secondary.addEventListener('input', () => {
       slidesService.updateSlide(doc, doc.current, { bodySecondary: secondary.value });
       commitSlideChange(doc, `slide:${doc.current}:secondary`);
