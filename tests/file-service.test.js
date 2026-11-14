@@ -647,3 +647,62 @@ test('PPTX import ignores external Brightdesk theme metadata relationships', asy
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk project validation accepts legacy slides and known stable layout IDs', () => {
+  assert.doesNotThrow(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Legacy', body: '' }] } }
+  }));
+  assert.doesNotThrow(() => validateProject({
+    docs: {
+      slides: {
+        slides: [
+          { title: 'Title', body: '', layout: 'title', layoutId: 'layout-title' },
+          { title: 'Standard', body: '', layout: 'title-content', layoutId: 'layout-title-content' },
+          { title: 'Comparison', body: '', layout: 'two-content', layoutId: 'layout-two-content' },
+          { title: 'Section', body: '', layout: 'section-header', layoutId: 'layout-section-header' }
+        ]
+      }
+    }
+  }));
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Bad', body: '', layoutId: 'layout-random' }] } }
+  }), /invalid slide/);
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Mismatch', body: '', layout: 'two-content', layoutId: 'layout-title' }] } }
+  }), /invalid slide/);
+});
+
+test('Brightdesk project export and import preserve stable slide layout IDs', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-layout-identifiers-'));
+  const filePath = path.join(directory, 'layout-identifiers.bdesk');
+  const expected = [
+    { id: 'slide-title', layout: 'title', layoutId: 'layout-title' },
+    { id: 'slide-body', layout: 'title-content', layoutId: 'layout-title-content' },
+    { id: 'slide-compare', layout: 'two-content', layoutId: 'layout-two-content' },
+    { id: 'slide-section', layout: 'section-header', layoutId: 'layout-section-header' }
+  ];
+  try {
+    await exportOfficeFile({
+      project: {
+        title: 'Layout identities',
+        docs: {
+          slides: {
+            title: 'Layout identities',
+            slides: expected.map((item, index) => ({
+              ...item, title: 'Slide ' + (index + 1), body: 'Content',
+              ...(item.layout === 'two-content' ? { bodySecondary: 'Second column' } : {})
+            })),
+            current: 0
+          }
+        }
+      }
+    }, filePath);
+    const reopened = await openOfficeFile(filePath);
+    assert.deepEqual(reopened.docs.slides.slides.map(slide => ({
+      id: slide.id, layout: slide.layout, layoutId: slide.layoutId
+    })), expected);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
