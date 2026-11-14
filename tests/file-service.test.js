@@ -1101,6 +1101,13 @@ test('Decks exports embedded slide pictures as real PowerPoint picture objects',
       await archive.file(mediaName).async('nodebuffer'),
       Buffer.from(imageData.split(',')[1], 'base64')
     );
+    const reopened = await openOfficeFile(filePath);
+    assert.equal(reopened.slides[0].objects.length, 1);
+    assert.equal(reopened.slides[0].objects[0].type, 'image');
+    assert.equal(reopened.slides[0].objects[0].imageName, 'team-photo.png');
+    assert.equal(reopened.slides[0].objects[0].imageWidth, 1);
+    assert.equal(reopened.slides[0].objects[0].imageHeight, 1);
+    assert.equal(reopened.slides[0].objects[0].imageData, imageData);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
