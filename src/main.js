@@ -68,6 +68,8 @@ function normalizePresenterObjects(objects) {
     const imageInfo = source.type === 'image' ? inspectSlideImageDataUrl(source.imageData) : null;
     if (source.type === 'image' && (
       !imageInfo ||
+      source.imageWidth !== imageInfo.width ||
+      source.imageHeight !== imageInfo.height ||
       typeof source.imageName !== 'string' || !source.imageName.trim() || source.imageName.length > 255 ||
       !Number.isInteger(source.imageWidth) || source.imageWidth < 1 || source.imageWidth > 20000 ||
       !Number.isInteger(source.imageHeight) || source.imageHeight < 1 || source.imageHeight > 20000 ||
@@ -483,9 +485,21 @@ ipcMain.handle('slides:picture:open', async event => {
     throw new Error('Choose a picture no larger than 5 MB.');
   }
   const imageData = createSlideImageDataUrl(buffer);
+  const inspected = inspectSlideImageDataUrl(imageData);
+  if (
+    !inspected || inspected.width < 1 || inspected.height < 1 ||
+    inspected.width > 20000 || inspected.height > 20000 ||
+    inspected.width * inspected.height > 40000000
+  ) {
+    throw new Error('This picture exceeds the supported image dimensions.');
+  }
+
   const image = nativeImage.createFromBuffer(buffer);
   if (image.isEmpty()) throw new Error('Brightdesk could not read this picture file.');
   const { width, height } = image.getSize();
+  if (width !== inspected.width || height !== inspected.height) {
+    throw new Error('Brightdesk could not verify this picture’s dimensions.');
+  }
   if (
     !Number.isInteger(width) || !Number.isInteger(height) ||
     width < 1 || height < 1 || width > 20000 || height > 20000 ||
