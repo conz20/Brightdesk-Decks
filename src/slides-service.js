@@ -27,7 +27,7 @@
   function normalizeSlide(slide) {
     const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
     const layout = SLIDE_LAYOUTS.includes(source.layout) ? source.layout : DEFAULT_LAYOUT;
-    return {
+    const normalized = {
       ...source,
       title: String(source.title ?? ''),
       body: String(source.body ?? ''),
@@ -35,6 +35,9 @@
       notes: String(source.notes ?? ''),
       layout
     };
+    if (source.hidden === true) normalized.hidden = true;
+    else delete normalized.hidden;
+    return normalized;
   }
 
   function normalizeSectionName(name) {
@@ -188,6 +191,27 @@
     target.current = target.slides.indexOf(selectedSlide);
     normalizeSections(target);
     return moved;
+  }
+
+  function setSlideHidden(presentation, index, hidden) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (typeof hidden !== 'boolean') throw new TypeError('Hidden slide state must be a boolean.');
+    if (hidden && target.slides[index].hidden !== true) {
+      const visibleCount = target.slides.filter(slide => slide.hidden !== true).length;
+      if (visibleCount <= 1) throw new RangeError('A presentation must keep at least one visible slide.');
+    }
+    if (hidden) target.slides[index].hidden = true;
+    else delete target.slides[index].hidden;
+    return target.slides[index].hidden === true;
+  }
+
+  function getVisibleSlideIndices(presentation) {
+    const target = ensurePresentation(presentation);
+    return target.slides.reduce((visible, slide, index) => {
+      if (slide.hidden !== true) visible.push(index);
+      return visible;
+    }, []);
   }
 
   function setSlideSize(presentation, slideSize) {
@@ -445,6 +469,8 @@
     moveSlide,
     setCurrentSlide,
     setSlideSize,
+    setSlideHidden,
+    getVisibleSlideIndices,
     createSection,
     renameSection,
     moveSlideToSection,
