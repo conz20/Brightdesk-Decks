@@ -357,6 +357,7 @@ function renderToolbar() {
       const show = group('startPresentation');
       addButton(show, label('fromCurrentSlide'), () => presentSlides(false));
       addButton(show, 'From first slide', () => presentSlides(true));
+      addButton(show, 'Presenter View', () => presentWithPresenterView(false));
       const currentSlide = window.BrightdeskSlidesService.ensurePresentation(activeDoc()).slides[activeDoc().current];
       addButton(show, currentSlide.hidden ? 'Unhide Slide' : 'Hide Slide', toggleSlideHidden);
     } else {
@@ -1202,6 +1203,14 @@ function toggleSlideHidden() {
 }
 
 function presentSlides(startFromFirst = false) {
+  openPresentation(startFromFirst, false);
+}
+
+function presentWithPresenterView(startFromFirst = false) {
+  openPresentation(startFromFirst, true);
+}
+
+function openPresentation(startFromFirst = false, presenterMode = false) {
   const d = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
   const visibleSlides = window.BrightdeskSlidesService.getVisibleSlideIndices(d);
   if (visibleSlides.length === 0) {
@@ -1213,6 +1222,7 @@ function presentSlides(startFromFirst = false) {
   const currentSlideIndex = () => visibleSlides[position];
   const overlay = document.createElement('div');
   overlay.className = 'presentation-overlay bd-motion-overlay';
+  if (presenterMode) overlay.classList.add('presenter-overlay');
   overlay.dataset.state = 'closed';
 
   const slide = document.createElement('div');
@@ -1231,6 +1241,91 @@ function presentSlides(startFromFirst = false) {
   const footer = document.createElement('div');
   footer.className = 'presentation-footer';
   slide.append(title, content, footer);
+
+  const presenterToolbar = document.createElement('header');
+  presenterToolbar.className = 'presenter-toolbar';
+  const presenterHeading = document.createElement('div');
+  presenterHeading.className = 'presenter-heading';
+  const presenterTitle = document.createElement('h2');
+  presenterTitle.textContent = 'Presenter View';
+  const presenterProgress = document.createElement('p');
+  presenterProgress.className = 'presenter-progress';
+  presenterHeading.append(presenterTitle, presenterProgress);
+
+  const presenterElapsed = document.createElement('span');
+  presenterElapsed.className = 'presenter-elapsed';
+  presenterElapsed.textContent = '00:00';
+  presenterElapsed.setAttribute('role', 'timer');
+  presenterElapsed.setAttribute('aria-label', 'Elapsed presentation time');
+
+  const presenterActions = document.createElement('div');
+  presenterActions.className = 'presenter-actions';
+  const previousButton = document.createElement('button');
+  previousButton.type = 'button';
+  previousButton.className = 'presenter-control';
+  previousButton.textContent = '← Previous';
+  previousButton.setAttribute('aria-label', 'Go to previous visible slide');
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.className = 'presenter-control';
+  nextButton.textContent = 'Next →';
+  nextButton.setAttribute('aria-label', 'Go to next visible slide');
+  const endButton = document.createElement('button');
+  endButton.type = 'button';
+  endButton.className = 'presenter-control presenter-end-control';
+  endButton.textContent = 'End show';
+  presenterActions.append(presenterElapsed, previousButton, nextButton, endButton);
+  presenterToolbar.append(presenterHeading, presenterActions);
+
+  const presenterWorkspace = document.createElement('div');
+  presenterWorkspace.className = 'presenter-workspace';
+  const presenterStage = document.createElement('section');
+  presenterStage.className = 'presenter-stage';
+  presenterStage.setAttribute('aria-label', 'Current slide');
+  presenterStage.append(slide);
+
+  const presenterSidePanel = document.createElement('aside');
+  presenterSidePanel.className = 'presenter-side-panel';
+  const nextPanel = document.createElement('section');
+  nextPanel.className = 'presenter-card presenter-next-panel';
+  nextPanel.setAttribute('aria-label', 'Next visible slide');
+  const nextHeading = document.createElement('h3');
+  nextHeading.textContent = 'Next slide';
+  const nextPreview = document.createElement('div');
+  nextPreview.className = 'presentation-slide presenter-slide-preview';
+  const nextPreviewTitle = document.createElement('h1');
+  const nextPreviewContent = document.createElement('div');
+  nextPreviewContent.className = 'presentation-content';
+  const nextPreviewColumns = document.createElement('div');
+  nextPreviewColumns.className = 'presentation-content-columns';
+  const nextPreviewBody = document.createElement('p');
+  nextPreviewBody.className = 'presentation-body-primary';
+  const nextPreviewSecondary = document.createElement('p');
+  nextPreviewSecondary.className = 'presentation-body-secondary';
+  nextPreviewColumns.append(nextPreviewBody, nextPreviewSecondary);
+  nextPreviewContent.append(nextPreviewColumns);
+  nextPreview.append(nextPreviewTitle, nextPreviewContent);
+  const noNextSlide = document.createElement('p');
+  noNextSlide.className = 'presenter-no-next';
+  noNextSlide.textContent = 'You are on the last visible slide.';
+  nextPanel.append(nextHeading, nextPreview, noNextSlide);
+
+  const notesPanel = document.createElement('section');
+  notesPanel.className = 'presenter-card presenter-notes-panel';
+  notesPanel.setAttribute('aria-label', 'Private speaker notes');
+  const notesHeading = document.createElement('h3');
+  notesHeading.textContent = 'Speaker notes';
+  const presenterNotes = document.createElement('div');
+  presenterNotes.className = 'presenter-speaker-notes';
+  presenterNotes.setAttribute('role', 'note');
+  presenterNotes.setAttribute('aria-label', 'Speaker notes for the current slide');
+  notesPanel.append(notesHeading, presenterNotes);
+  presenterSidePanel.append(nextPanel, notesPanel);
+  presenterWorkspace.append(presenterStage, presenterSidePanel);
+
+  const presenterFooter = document.createElement('footer');
+  presenterFooter.className = 'presenter-footer';
+  presenterFooter.textContent = 'Use the arrow keys, Space, Page Up/Down, N or P to move. Press Escape to end the show.';
 
   const picker = document.createElement('section');
   picker.className = 'presentation-slide-picker';
@@ -1271,10 +1366,13 @@ function presentSlides(startFromFirst = false) {
     pickerGrid.append(button);
   });
   picker.append(pickerHeader, pickerGrid);
-  overlay.append(slide, picker);
+  if (presenterMode) overlay.append(presenterToolbar, presenterWorkspace, presenterFooter, picker);
+  else overlay.append(slide, picker);
   document.body.append(overlay);
 
   let closing = false;
+  let elapsedTimer = null;
+  const presentationStartedAt = Date.now();
   let pickerOpen = false;
   let numberBuffer = '';
   let blankMode = null;
@@ -1299,13 +1397,16 @@ function presentSlides(startFromFirst = false) {
   };
 
   const draw = () => {
-    const currentSlide = d.slides[currentSlideIndex()];
-    slide.className = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${state.slideTheme} layout-${currentSlide.layout || 'title-content'}`;
+    const snapshot = presenterMode
+      ? window.BrightdeskSlidesService.getPresenterSnapshot(d, position)
+      : null;
+    const currentSlide = snapshot?.currentSlide || d.slides[currentSlideIndex()];
+    slide.className = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${state.slideTheme} layout-${currentSlide.layout || 'title-content'}${presenterMode ? ' presenter-current-slide' : ''}`;
     title.textContent = currentSlide.title || '';
     body.textContent = currentSlide.body || '';
     secondaryBody.textContent = currentSlide.bodySecondary || '';
     secondaryBody.hidden = currentSlide.layout !== 'two-content';
-    slide.hidden = pickerOpen;
+    slide.hidden = presenterMode ? false : pickerOpen;
     picker.hidden = !pickerOpen;
     pickerButtons.forEach(button => {
       const active = Number(button.dataset.visiblePosition) === position;
@@ -1315,11 +1416,50 @@ function presentSlides(startFromFirst = false) {
     footer.textContent = numberBuffer
       ? `Go to slide ${numberBuffer} · Enter to jump · Backspace to edit · Esc to clear`
       : showMessage || 'Click or use arrows to move · G all slides · B black · W white · Esc to exit';
+
+    if (presenterMode) {
+      presenterProgress.textContent = `Slide ${snapshot.currentIndex + 1} · ${snapshot.visiblePosition + 1} of ${snapshot.visibleCount} visible`;
+      presenterNotes.textContent = snapshot.currentSlide.notes || 'No speaker notes for this slide.';
+      presenterWorkspace.hidden = pickerOpen;
+      presenterToolbar.hidden = pickerOpen;
+      presenterFooter.hidden = pickerOpen;
+      previousButton.disabled = position <= 0;
+      nextButton.disabled = position >= visibleSlides.length - 1;
+      if (snapshot.nextSlide) {
+        nextPreview.hidden = false;
+        noNextSlide.hidden = true;
+        nextPreview.className = `presentation-slide presenter-slide-preview size-${d.slideSize || 'widescreen'} theme-${state.slideTheme} layout-${snapshot.nextSlide.layout || 'title-content'}`;
+        nextPreviewTitle.textContent = snapshot.nextSlide.title || '';
+        nextPreviewBody.textContent = snapshot.nextSlide.body || '';
+        nextPreviewSecondary.textContent = snapshot.nextSlide.bodySecondary || '';
+        nextPreviewSecondary.hidden = snapshot.nextSlide.layout !== 'two-content';
+      } else {
+        nextPreview.hidden = true;
+        noNextSlide.hidden = false;
+      }
+    }
+  };
+
+  const refreshPresenterElapsed = () => {
+    const totalSeconds = Math.max(0, Math.floor((Date.now() - presentationStartedAt) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const pad = value => String(value).padStart(2, '0');
+    const elapsed = hours > 0
+      ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+      : `${pad(minutes)}:${pad(seconds)}`;
+    presenterElapsed.textContent = elapsed;
+    presenterElapsed.setAttribute('aria-label', `Elapsed presentation time ${elapsed}`);
   };
 
   const close = () => {
     if (closing) return;
     closing = true;
+    if (elapsedTimer !== null) {
+      window.clearInterval(elapsedTimer);
+      elapsedTimer = null;
+    }
     overlay.dataset.state = 'closed';
     document.removeEventListener('keydown', key);
 
@@ -1442,15 +1582,39 @@ function presentSlides(startFromFirst = false) {
   requestAnimationFrame(() => {
     if (!closing && overlay.isConnected) overlay.dataset.state = 'open';
   });
-  overlay.addEventListener('click', () => {
-    if (closing || pickerOpen || overlay.dataset.state !== 'open') return;
+  if (!presenterMode) {
+    overlay.addEventListener('click', () => {
+      if (closing || pickerOpen || overlay.dataset.state !== 'open') return;
+      numberBuffer = '';
+      showMessage = '';
+      position = Math.min(visibleSlides.length - 1, position + 1);
+      draw();
+    });
+  }
+  previousButton.addEventListener('click', event => {
+    event.stopPropagation();
+    position = Math.max(0, position - 1);
     numberBuffer = '';
     showMessage = '';
-    position = Math.min(visibleSlides.length - 1, position + 1);
     draw();
+  });
+  nextButton.addEventListener('click', event => {
+    event.stopPropagation();
+    position = Math.min(visibleSlides.length - 1, position + 1);
+    numberBuffer = '';
+    showMessage = '';
+    draw();
+  });
+  endButton.addEventListener('click', event => {
+    event.stopPropagation();
+    close();
   });
   document.addEventListener('keydown', key);
   draw();
+  if (presenterMode) {
+    refreshPresenterElapsed();
+    elapsedTimer = window.setInterval(refreshPresenterElapsed, 1000);
+  }
 }
 function todoTasks() { return Array.isArray(activeDoc().tasks) ? activeDoc().tasks : (activeDoc().tasks = []); }
 function saveTodoTasks() { persist(); $('todo-status').textContent = 'Saved on this device'; }
