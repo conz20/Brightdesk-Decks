@@ -454,3 +454,35 @@ test('PPTX import restores speaker notes for each matching slide', async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('PPTX import ignores external speaker-notes relationships without following their URLs', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-external-notes-'));
+  const filePath = path.join(directory, 'external-notes.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [{ title: 'External notes', body: 'Keep imports local', notes: 'Do not fetch external notes.' }]
+    }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const relationshipsPath = 'ppt/slides/_rels/slide1.xml.rels';
+    const relationships = await archive.file(relationshipsPath)?.async('string');
+    assert.ok(relationships, 'the slide has an internal relationships part');
+    assert.match(relationships, /Target="\.\.\/notesSlides\/notesSlide1\.xml"/);
+    archive.file(
+      relationshipsPath,
+      relationships.replace(
+        'Target="../notesSlides/notesSlide1.xml"',
+        'Target="https://example.invalid/notesSlide1.xml" TargetMode="External"'
+      )
+    );
+    await fs.writeFile(filePath, await archive.generateAsync({ type: 'nodebuffer' }));
+
+    const reopened = await openOfficeFile(filePath);
+    assert.equal(reopened.slides[0].notes, '');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
