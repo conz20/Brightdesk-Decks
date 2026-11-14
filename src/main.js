@@ -110,7 +110,7 @@ function createPresenterWindow(display, initialState) {
     if (presenterWindow !== audienceWindow || audienceWindow.isDestroyed()) return;
     presenterWindowReady = true;
     audienceWindow.webContents.send('presentation:update', presenterState);
-    audienceWindow.show();
+    audienceWindow.showInactive();
   });
   audienceWindow.on('closed', () => {
     if (presenterWindow !== audienceWindow) return;
