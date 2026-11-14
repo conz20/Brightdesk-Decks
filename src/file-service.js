@@ -1103,7 +1103,7 @@ async function exportOfficeFile(payload, filePath) {
           if (sourceRatio > frameRatio) imageH = imageW / sourceRatio;
           else imageW = imageH * sourceRatio;
           slide.addImage({
-            data: object.imageData,
+            data: imageInfo.mimeType + ';base64,' + object.imageData.slice(object.imageData.indexOf(',') + 1),
             x: frameX + (frameW - imageW) / 2,
             y: frameY + (frameH - imageH) / 2,
             w: imageW,
