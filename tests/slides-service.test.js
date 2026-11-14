@@ -827,7 +827,8 @@ test('Decks slide show supports blank screens, numeric navigation and slide pick
   assert.match(app, /let numberBuffer = ''/);
   assert.match(app, /const togglePresentationBlank =/);
   assert.match(app, /const showSlidePicker =/);
-  assert.match(app, /getVisibleSlidePosition\(d, Number\(numberBuffer\)\)/);
+  assert.match(app, /getVisibleSlidePosition\(d, requestedSlide\)/);
+  assert.match(app, /const requestedSlide = Number\(numberBuffer\)/);
   assert.match(app, /normalized === 'b'/);
   assert.match(app, /normalized === 'w'/);
   assert.match(app, /normalized === 'g'/);
