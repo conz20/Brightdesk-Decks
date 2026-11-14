@@ -961,6 +961,24 @@
       return hydrated;
     }
 
+    function hydrateAssetIds(assetIdByObjectId) {
+      if (!(assetIdByObjectId instanceof Map)) return 0;
+      let assigned = 0;
+      const snapshots = [current, ...past, ...future];
+      for (const snapshot of snapshots) {
+        for (const slide of snapshot.slides || []) {
+          for (const object of slide.objects || []) {
+            if (object.type !== 'image' || object.imageAssetId || typeof object.id !== 'string') continue;
+            const imageAssetId = assetIdByObjectId.get(object.id);
+            if (typeof imageAssetId !== 'string' || !SLIDE_IMAGE_ASSET_ID_PATTERN.test(imageAssetId)) continue;
+            object.imageAssetId = imageAssetId;
+            assigned++;
+          }
+        }
+      }
+      return assigned;
+    }
+
     function exportState() {
       return {
         version: 1,
@@ -993,6 +1011,7 @@
       sync,
       reset,
       hydrateImages,
+      hydrateAssetIds,
       exportState
     };
   }
