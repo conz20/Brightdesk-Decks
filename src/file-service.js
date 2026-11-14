@@ -253,6 +253,80 @@ function collectXmlText(value, output = []) {
   }
   return output;
 }
+function asArray(value) {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function resolveNotesSlideTarget(slidePart, relationship) {
+  if (!relationship || relationship['@_TargetMode'] === 'External') return null;
+  const type = String(relationship['@_Type'] || '');
+  if (!type.endsWith('/notesSlide')) return null;
+
+  let target = String(relationship['@_Target'] || '').trim();
+  if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[?#]/.test(target)) return null;
+  try {
+    target = decodeURIComponent(target);
+  } catch {
+    return null;
+  }
+
+  target = target.replace(/\\/g, '/');
+  const resolved = target.startsWith('/')
+    ? path.posix.normalize(target.slice(1))
+    : path.posix.normalize(path.posix.join(path.posix.dirname(slidePart), target));
+  if (!resolved.startsWith('ppt/notesSlides/') || resolved.includes('/../')) return null;
+  return resolved;
+}
+
+async function findNotesSlidePart(zip, slidePart, relationshipParser) {
+  const relationshipsPart = path.posix.join(
+    path.posix.dirname(slidePart),
+    '_rels',
+    path.posix.basename(slidePart) + '.rels'
+  );
+  const relationshipsFile = zip.file(relationshipsPart);
+  if (!relationshipsFile) return null;
+
+  const relationshipsXml = await relationshipsFile.async('string');
+  const parsed = relationshipParser.parse(relationshipsXml);
+  const relationships = asArray(parsed.Relationships?.Relationship);
+  const notesRelationship = relationships.find(item =>
+    String(item?.['@_Type'] || '').endsWith('/notesSlide')
+  );
+  return resolveNotesSlideTarget(slidePart, notesRelationship);
+}
+
+async function readNotesSlideText(zip, notesPart, notesParser) {
+  const notesFile = zip.file(notesPart);
+  if (!notesFile) return '';
+  const uncompressedSize = notesFile._data?.uncompressedSize || 0;
+  if (uncompressedSize > MAX_DOCUMENT_TEXT_BYTES) {
+    throw new Error('A PowerPoint speaker-notes page exceeds the 10 MB text limit.');
+  }
+
+  let parsed;
+  try {
+    parsed = notesParser.parse(await notesFile.async('string'));
+  } catch {
+    throw new Error('The PowerPoint presentation contains invalid speaker-notes XML.');
+  }
+
+  const notesRoot = parsed.notes || parsed;
+  const shapes = asArray(notesRoot.cSld?.spTree?.sp);
+  const bodyPlaceholder = shapes.find(shape => shape?.nvSpPr?.nvPr?.ph?.['@_type'] === 'body');
+  if (!bodyPlaceholder) return '';
+
+  const paragraphs = asArray(bodyPlaceholder.txBody?.p);
+  const notes = paragraphs
+    .map(paragraph => collectXmlText(paragraph).join(''))
+    .join('\\n')
+    .replace(/\\r\\n/g, '\\n')
+    .trimEnd();
+  assertDocumentTextLimit(Buffer.byteLength(notes, 'utf8'));
+  return notes;
+}
+
 async function openOfficeFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const stat = await fs.stat(filePath);
@@ -310,15 +384,31 @@ async function openOfficeFile(filePath) {
     const names = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a,b) => Number(a.match(/slide(\d+)/)[1]) - Number(b.match(/slide(\d+)/)[1]));
     assertPresentationSlideLimit(names.length);
     const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: false });
+    const relationshipParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', removeNSPrefix: true });
+    const notesParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', removeNSPrefix: true });
     const slides = [];
+    let totalNotesBytes = 0;
     for (const name of names) {
       const xml = await zip.files[name].async('string');
-      const hidden = /<(?:[A-Za-z0-9_]+:)?sld\b[^>]*\bshow=["'](?:0|false)["']/i.test(xml);
+      const hidden = /<(?:[A-Za-z0-9_]+:)?sld\\b[^>]*\\bshow=["'](?:0|false)["']/i.test(xml);
       const texts = collectXmlText(parser.parse(xml)).filter(Boolean);
+      const notesPart = await findNotesSlidePart(zip, name, relationshipParser);
+      let notes = '';
+      if (notesPart) {
+        const notesEntry = zip.file(notesPart);
+        if (notesEntry) {
+          totalNotesBytes += notesEntry._data?.uncompressedSize || 0;
+          if (totalNotesBytes > MAX_PROJECT_BYTES) {
+            throw new Error('The presentation contains too much uncompressed speaker-notes data to import safely.');
+          }
+          notes = await readNotesSlideText(zip, notesPart, notesParser);
+        }
+      }
       slides.push({
         ...(hidden ? { hidden: true } : {}),
         title: texts[0] || `Slide ${slides.length + 1}`,
-        body: texts.slice(1).join('\n')
+        body: texts.slice(1).join('\\n'),
+        notes
       });
     }
     return { kind: 'slides', title: path.basename(filePath, ext), slideSize, slides: slides.length ? slides : [{ title: 'Imported presentation', body: '' }] };
