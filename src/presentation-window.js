@@ -13,6 +13,8 @@
   const supportedThemes = new Set(['lavender', 'midnight', 'paper']);
   const backgroundPattern = /^#[0-9A-F]{6}$/i;
   const supportedTransitions = new Set(['none', 'fade', 'push', 'wipe']);
+  const supportedObjects = new Set(['text', 'rectangle', 'ellipse', 'line', 'image']);
+  const imageDataPattern = /^data:image\\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
   let lastRenderedSlideId = null;
   let activeTransitionClass = '';
 
@@ -33,7 +35,7 @@
     objectLayer.replaceChildren();
     if (!Array.isArray(objects)) return;
     for (const object of objects.slice(0, 500)) {
-      if (!object || !['text', 'rectangle', 'ellipse', 'line'].includes(object.type)) continue;
+      if (!object || !supportedObjects.has(object.type)) continue;
       const element = document.createElement('div');
       element.className = `audience-object audience-object-${object.type}`;
       element.style.left = `${object.x}%`;
@@ -53,8 +55,24 @@
       if (object.type === 'text') {
         element.style.fontSize = `${Math.max(8, Math.min(96, Number(object.fontSize) || 20))}px`;
         element.style.fontWeight = object.bold === true ? '700' : '400';
+        element.textContent = typeof object.text === 'string' ? object.text : '';
+      } else if (object.type === 'image') {
+        if (
+          typeof object.imageData !== 'string' ||
+          object.imageData.length > 7 * 1024 * 1024 ||
+          !imageDataPattern.test(object.imageData) ||
+          typeof object.imageName !== 'string'
+        ) continue;
+        const image = document.createElement('img');
+        image.className = 'audience-object-image';
+        image.src = object.imageData;
+        image.alt = object.imageName || 'Slide picture';
+        image.draggable = false;
+        image.decoding = 'async';
+        element.append(image);
+      } else {
+        element.textContent = typeof object.text === 'string' ? object.text : '';
       }
-      element.textContent = typeof object.text === 'string' ? object.text : '';
       objectLayer.append(element);
     }
   }
