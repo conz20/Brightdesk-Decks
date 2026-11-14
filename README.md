@@ -45,6 +45,10 @@ These are configured build targets, not confirmation that a package has passed i
 
 **Updates and removal:** The approved product version and feature scope must remain aligned across all operating systems. Update packages must come from the same tested release. Native installation and removal controls can differ by operating system, but the expected outcome is consistent: remove the product without silently deleting local project data. Do not claim update, upgrade or uninstall verification for an operating system until its native workflow has passed.
 
+## DeckCraft reference audit
+
+The clean-room [DeckCraft reference parity audit](docs/DECKCRAFT_PARITY_AUDIT.md) compares the current Brightdesk Decks implementation with the supplied DeckCraft documentation and visual references. It records the verified baseline, missing capabilities, Brightdesk-specific constraints and a staged implementation plan. Planned capabilities are not represented as completed features.
+
 ## Current first-use workflows
 
 - Create a presentation and edit slide titles and body text.
