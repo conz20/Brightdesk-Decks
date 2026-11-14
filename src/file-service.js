@@ -1,7 +1,9 @@
 const fs = require('node:fs/promises');
+const crypto = require('node:crypto');
 const path = require('node:path');
 const { TextDecoder } = require('node:util');
 const appCatalog = require('./app-catalog');
+const { inspectSlideImageDataUrl, createSlideImageDataUrl } = require('./slide-image-service');
 
 const MAX_PROJECT_BYTES = 50 * 1024 * 1024;
 const MAX_DOCUMENT_TEXT_BYTES = 10 * 1024 * 1024;
@@ -9,6 +11,28 @@ const MAX_SHEET_CELLS = 250_000;
 const MAX_SLIDES = 2_000;
 const KNOWN_APP_IDS = new Set(appCatalog.map(app => app.id));
 const EXCLUDED_APP_IDS = new Set(['teams', 'outlook', 'onedrive']);
+const SUPPORTED_SLIDE_LAYOUTS = new Set(['title', 'title-content', 'two-content', 'section-header']);
+const SUPPORTED_SLIDE_LAYOUT_IDS = new Set(['layout-title', 'layout-title-content', 'layout-two-content', 'layout-section-header']);
+const SLIDE_LAYOUT_ID_BY_NAME = Object.freeze({
+  title: 'layout-title',
+  'title-content': 'layout-title-content',
+  'two-content': 'layout-two-content',
+  'section-header': 'layout-section-header'
+});
+const SUPPORTED_SLIDE_SIZES = new Set(['widescreen', 'standard']);
+const SUPPORTED_SLIDE_THEMES = new Set(['lavender', 'midnight', 'paper']);
+const SUPPORTED_SLIDE_TRANSITIONS = new Set(['none', 'fade', 'push', 'wipe']);
+const SLIDE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
+const SLIDE_BACKGROUND_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
+const SUPPORTED_SLIDE_OBJECT_TYPES = new Set(['text', 'rectangle', 'ellipse', 'line', 'image']);
+const SLIDE_IMAGE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\.(?:png|jpg|webp)$/i;
+const MAX_SLIDE_IMAGE_BYTES_PER_SLIDE = 15 * 1024 * 1024;
+const MAX_PPTX_IMPORTED_IMAGE_BYTES = 50 * 1024 * 1024;
+const SLIDE_OBJECT_ID_PATTERN = /^object-[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
+const MAX_SLIDE_OBJECTS_PER_SLIDE = 1_000;
+const MAX_SLIDE_OBJECT_TEXT_LENGTH = 10_000;
+const MAX_SLIDE_OBJECT_FONT_SIZE = 96;
+const MAX_SLIDE_OBJECT_STROKE_WIDTH = 12;
 
 /*
  * Load format-specific libraries only when the corresponding format is used.
@@ -93,12 +117,135 @@ function validateProject(project) {
         }
       }
     }
+    if (appId === 'slides') {
+      if (doc.sections !== undefined && (!Array.isArray(doc.sections) || doc.sections.length > MAX_SLIDES)) {
+        throw new Error('The Brightdesk Decks presentation has an invalid section collection.');
+      }
+      const sectionIds = new Set();
+      for (const section of doc.sections || []) {
+        if (
+          !isPlainObject(section) ||
+          typeof section.id !== 'string' ||
+          !section.id.trim() ||
+          section.id.length > 100 ||
+          typeof section.name !== 'string' ||
+          !section.name.trim() ||
+          section.name.length > 80 ||
+          sectionIds.has(section.id)
+        ) {
+          throw new Error('The Brightdesk Decks presentation contains an invalid section.');
+        }
+        sectionIds.add(section.id);
+      }
+      if (Array.isArray(doc.slides) && doc.slides.some(slide =>
+        slide && slide.sectionId !== undefined && !sectionIds.has(slide.sectionId)
+      )) {
+        throw new Error('The Brightdesk Decks presentation refers to an unknown section.');
+      }
+    }
+    if (appId === 'slides' && doc.slideSize !== undefined && !SUPPORTED_SLIDE_SIZES.has(doc.slideSize)) {
+      throw new Error('The Brightdesk Decks presentation has an invalid slide size.');
+    }
+    if (appId === 'slides' && doc.themeId !== undefined && !SUPPORTED_SLIDE_THEMES.has(doc.themeId)) {
+      throw new Error('The Brightdesk Decks presentation has an invalid theme.');
+    }
     if (appId === 'slides' && doc.slides !== undefined) {
       if (!Array.isArray(doc.slides) || doc.slides.length > MAX_SLIDES) throw new Error('The Brightdesk Decks presentation has an invalid slide collection.');
+      const slideIds = new Set();
       for (const slide of doc.slides) {
-        if (!isPlainObject(slide) || (slide.title !== undefined && typeof slide.title !== 'string') || (slide.body !== undefined && typeof slide.body !== 'string')) {
+        if (
+          !isPlainObject(slide) ||
+          (slide.id !== undefined && (
+            typeof slide.id !== 'string' ||
+            !SLIDE_ID_PATTERN.test(slide.id) ||
+            slideIds.has(slide.id)
+          )) ||
+          (slide.hidden !== undefined && typeof slide.hidden !== 'boolean') ||
+          (slide.transition !== undefined && !SUPPORTED_SLIDE_TRANSITIONS.has(slide.transition)) ||
+          (slide.title !== undefined && typeof slide.title !== 'string') ||
+          (slide.body !== undefined && (
+            typeof slide.body !== 'string' ||
+            Buffer.byteLength(slide.body, 'utf8') > MAX_DOCUMENT_TEXT_BYTES
+          )) ||
+          (slide.bodySecondary !== undefined && (
+            typeof slide.bodySecondary !== 'string' ||
+            Buffer.byteLength(slide.bodySecondary, 'utf8') > MAX_DOCUMENT_TEXT_BYTES
+          )) ||
+          (slide.notes !== undefined && (
+            typeof slide.notes !== 'string' ||
+            Buffer.byteLength(slide.notes, 'utf8') > MAX_DOCUMENT_TEXT_BYTES
+          )) ||
+          (slide.layout !== undefined && (
+            typeof slide.layout !== 'string' ||
+            !SUPPORTED_SLIDE_LAYOUTS.has(slide.layout)
+          )) ||
+          (slide.layoutId !== undefined && (
+            typeof slide.layoutId !== 'string' ||
+            !SUPPORTED_SLIDE_LAYOUT_IDS.has(slide.layoutId) ||
+            (slide.layout !== undefined && SLIDE_LAYOUT_ID_BY_NAME[slide.layout] !== slide.layoutId)
+          )) ||
+          (slide.backgroundColor !== undefined && (
+            typeof slide.backgroundColor !== 'string' ||
+            !SLIDE_BACKGROUND_COLOR_PATTERN.test(slide.backgroundColor)
+          )) ||
+          (slide.objects !== undefined && (
+            !Array.isArray(slide.objects) ||
+            slide.objects.length > MAX_SLIDE_OBJECTS_PER_SLIDE
+          ))
+        ) {
           throw new Error('The Brightdesk Decks presentation contains an invalid slide.');
         }
+        if (slide.objects !== undefined) {
+          const objectIds = new Set();
+          let slideImageBytes = 0;
+          for (const object of slide.objects) {
+            const imageInfo = object?.type === 'image' ? inspectSlideImageDataUrl(object.imageData) : null;
+            const validImage = object?.type === 'image'
+              ? Boolean(
+                imageInfo &&
+                (object.imageAssetId === undefined || (typeof object.imageAssetId === 'string' && SLIDE_IMAGE_ASSET_ID_PATTERN.test(object.imageAssetId))) &&
+                object.imageWidth === imageInfo.width &&
+                object.imageHeight === imageInfo.height &&
+                typeof object.imageName === 'string' &&
+                object.imageName.trim().length > 0 &&
+                object.imageName.length <= 255 &&
+                Number.isInteger(object.imageWidth) && object.imageWidth >= 1 && object.imageWidth <= 20000 &&
+                Number.isInteger(object.imageHeight) && object.imageHeight >= 1 && object.imageHeight <= 20000 &&
+                object.imageWidth * object.imageHeight <= 40000000
+              )
+              : !['imageData', 'imageName', 'imageWidth', 'imageHeight'].some(key => object && Object.prototype.hasOwnProperty.call(object, key));
+            const validObject = isPlainObject(object)
+              && typeof object.id === 'string'
+              && SLIDE_OBJECT_ID_PATTERN.test(object.id)
+              && !objectIds.has(object.id)
+              && SUPPORTED_SLIDE_OBJECT_TYPES.has(object.type)
+              && validImage
+              && Number.isFinite(object.x) && object.x >= 0
+              && Number.isFinite(object.y) && object.y >= 0
+              && Number.isFinite(object.width) && object.width > 0
+              && Number.isFinite(object.height) && object.height > 0
+              && object.width <= 100 && object.height <= 100
+              && object.x + object.width <= 100
+              && object.y + object.height <= 100
+              && (object.fill === undefined || object.fill === null || (typeof object.fill === 'string' && SLIDE_BACKGROUND_COLOR_PATTERN.test(object.fill)))
+              && (object.stroke === undefined || object.stroke === null || (typeof object.stroke === 'string' && SLIDE_BACKGROUND_COLOR_PATTERN.test(object.stroke)))
+              && (object.text === undefined || (typeof object.text === 'string' && object.text.length <= MAX_SLIDE_OBJECT_TEXT_LENGTH))
+              && (object.strokeWidth === undefined || (Number.isFinite(object.strokeWidth) && object.strokeWidth >= 0 && object.strokeWidth <= MAX_SLIDE_OBJECT_STROKE_WIDTH))
+              && (object.fontSize === undefined || (Number.isFinite(object.fontSize) && object.fontSize >= 8 && object.fontSize <= MAX_SLIDE_OBJECT_FONT_SIZE))
+              && (object.textColor === undefined || (typeof object.textColor === 'string' && SLIDE_BACKGROUND_COLOR_PATTERN.test(object.textColor)))
+              && (object.bold === undefined || typeof object.bold === 'boolean')
+              && (object.rotation === undefined || (Number.isFinite(object.rotation) && object.rotation >= -360 && object.rotation <= 360));
+            if (!validObject) throw new Error('The Brightdesk Decks presentation contains an invalid slide object.');
+            if (imageInfo) {
+              slideImageBytes += imageInfo.byteLength;
+              if (slideImageBytes > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
+                throw new Error('A Brightdesk Decks slide cannot contain more than 15 MB of embedded pictures.');
+              }
+            }
+            objectIds.add(object.id);
+          }
+        }
+        if (slide.id !== undefined) slideIds.add(slide.id);
       }
       if (doc.current !== undefined && (!Number.isInteger(doc.current) || doc.current < 0 || (doc.slides.length && doc.current >= doc.slides.length))) {
         throw new Error('The Brightdesk Decks presentation has an invalid selected slide.');
@@ -194,7 +341,7 @@ function collectXmlText(value, output = []) {
   if (Array.isArray(value)) value.forEach(item => collectXmlText(item, output));
   else if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value)) {
-      if (key === 'a:t' || key === 't') {
+      if (key === 't' || key.endsWith(':t')) {
         if (Array.isArray(child)) child.forEach(v => output.push(String(v)));
         else if (child !== undefined && typeof child !== 'object') output.push(String(child));
       } else collectXmlText(child, output);
@@ -202,6 +349,628 @@ function collectXmlText(value, output = []) {
   }
   return output;
 }
+function asArray(value) {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function resolveNotesSlideTarget(slidePart, relationship) {
+  if (!relationship || relationship['@_TargetMode'] === 'External') return null;
+  const type = String(relationship['@_Type'] || '');
+  if (!type.endsWith('/notesSlide')) return null;
+
+  let target = String(relationship['@_Target'] || '').trim();
+  if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[?#]/.test(target)) return null;
+  try {
+    target = decodeURIComponent(target);
+  } catch {
+    return null;
+  }
+
+  target = target.replace(/\\/g, '/');
+  const resolved = target.startsWith('/')
+    ? path.posix.normalize(target.slice(1))
+    : path.posix.normalize(path.posix.join(path.posix.dirname(slidePart), target));
+  if (!resolved.startsWith('ppt/notesSlides/') || resolved.includes('/../')) return null;
+  return resolved;
+}
+
+async function findNotesSlidePart(zip, slidePart, relationshipParser) {
+  const relationshipsPart = path.posix.join(
+    path.posix.dirname(slidePart),
+    '_rels',
+    path.posix.basename(slidePart) + '.rels'
+  );
+  const relationshipsFile = zip.file(relationshipsPart);
+  if (!relationshipsFile) return null;
+
+  const relationshipsXml = await relationshipsFile.async('string');
+  const parsed = relationshipParser.parse(relationshipsXml);
+  const relationships = asArray(parsed.Relationships?.Relationship);
+  const notesRelationship = relationships.find(item =>
+    String(item?.['@_Type'] || '').endsWith('/notesSlide')
+  );
+  return resolveNotesSlideTarget(slidePart, notesRelationship);
+}
+
+
+function resolvePresentationSlideTarget(relationship) {
+  if (!relationship || String(relationship['@_TargetMode'] || '').toLowerCase() === 'external') return null;
+  if (!String(relationship['@_Type'] || '').endsWith('/slide')) return null;
+
+  let target = String(relationship['@_Target'] || '').trim();
+  if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[?#]/.test(target)) return null;
+  try {
+    target = decodeURIComponent(target);
+  } catch {
+    return null;
+  }
+
+  target = target.replace(/\\/g, '/');
+  if (target.split('/').some(segment => segment === '..')) return null;
+  const resolved = target.startsWith('/')
+    ? path.posix.normalize(target.replace(/^\/+/, ''))
+    : path.posix.normalize(path.posix.join('ppt', target));
+  if (!resolved.startsWith('ppt/slides/') || resolved.endsWith('/')) return null;
+  return resolved;
+}
+
+async function getPptxSlidePartsInPresentationOrder(zip, relationshipParser) {
+  const presentationFile = zip.file('ppt/presentation.xml');
+  const relationshipsFile = zip.file('ppt/_rels/presentation.xml.rels');
+  if (!presentationFile || !relationshipsFile) {
+    throw new Error('The PowerPoint presentation is missing its slide-order metadata.');
+  }
+
+  const presentationXml = await presentationFile.async('string');
+  const slideList = presentationXml.match(
+    /<(?:[A-Za-z_][\w.-]*:)?sldIdLst\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?sldIdLst\s*>/i
+  );
+  if (!slideList) {
+    throw new Error('The PowerPoint presentation has an invalid slide-order list.');
+  }
+
+  const slideReferences = [...slideList[1].matchAll(/<(?:[A-Za-z_][\w.-]*:)?sldId\b([^>]*)\/?\s*>/gi)];
+  if (!slideReferences.length) {
+    throw new Error('The PowerPoint presentation does not contain any slides.');
+  }
+
+  let parsedRelationships;
+  try {
+    parsedRelationships = relationshipParser.parse(await relationshipsFile.async('string'));
+  } catch {
+    throw new Error('The PowerPoint presentation relationships are invalid.');
+  }
+  const relationships = asArray(parsedRelationships.Relationships?.Relationship);
+  const relationshipById = new Map();
+  for (const relationship of relationships) {
+    const id = String(relationship?.['@_Id'] || '');
+    if (!id || relationshipById.has(id)) {
+      throw new Error('The PowerPoint presentation contains invalid slide relationships.');
+    }
+    relationshipById.set(id, relationship);
+  }
+
+  const seenParts = new Set();
+  return slideReferences.map(reference => {
+    const relationshipId = reference[1].match(/(?:^|\s)[A-Za-z_][\w.-]*:id\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!relationshipId) {
+      throw new Error('The PowerPoint presentation contains a slide without a valid relationship.');
+    }
+    const relationship = relationshipById.get(relationshipId);
+    const part = resolvePresentationSlideTarget(relationship);
+    if (!part || !zip.file(part) || seenParts.has(part)) {
+      throw new Error('The PowerPoint presentation contains an invalid or external slide relationship.');
+    }
+    seenParts.add(part);
+    return part;
+  });
+}
+
+async function readNotesSlideText(zip, notesPart, notesParser) {
+  const notesFile = zip.file(notesPart);
+  if (!notesFile) return '';
+  const uncompressedSize = notesFile._data?.uncompressedSize || 0;
+  if (uncompressedSize > MAX_DOCUMENT_TEXT_BYTES) {
+    throw new Error('A PowerPoint speaker-notes page exceeds the 10 MB text limit.');
+  }
+
+  let parsed;
+  try {
+    parsed = notesParser.parse(await notesFile.async('string'));
+  } catch {
+    throw new Error('The PowerPoint presentation contains invalid speaker-notes XML.');
+  }
+
+  const notesRoot = parsed.notes || parsed;
+  const shapes = asArray(notesRoot.cSld?.spTree?.sp);
+  const bodyPlaceholder = shapes.find(shape => shape?.nvSpPr?.nvPr?.ph?.['@_type'] === 'body');
+  if (!bodyPlaceholder) return '';
+
+  const paragraphs = asArray(bodyPlaceholder.txBody?.p);
+  const notes = paragraphs
+    .map(paragraph => collectXmlText(paragraph).join(''))
+    .join('\n')
+    .replace(/\r\n/g, '\n')
+    .trimEnd();
+  assertDocumentTextLimit(Buffer.byteLength(notes, 'utf8'));
+  return notes;
+}
+
+const PPTX_CUSTOM_PROPERTIES_RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties';
+const PPTX_CUSTOM_PROPERTIES_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.custom-properties+xml';
+
+async function writePptxThemeMetadata(filePath, themeId) {
+  const JSZip = require('jszip');
+  const { XMLParser } = require('fast-xml-parser');
+  const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+  const relationshipsPath = '_rels/.rels';
+  const contentTypesPath = '[Content_Types].xml';
+  const relationshipsFile = archive.file(relationshipsPath);
+  const contentTypesFile = archive.file(contentTypesPath);
+  if (!relationshipsFile || !contentTypesFile) {
+    throw new Error('The PowerPoint package is missing required metadata files.');
+  }
+
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  let relationshipsXml = await relationshipsFile.async('string');
+  let parsedRelationships;
+  try {
+    parsedRelationships = parser.parse(relationshipsXml);
+  } catch {
+    throw new Error('The PowerPoint package relationships are invalid.');
+  }
+  const relationships = asArray(parsedRelationships.Relationships?.Relationship);
+  const matching = relationships.filter(item =>
+    String(item?.['@_Type'] || '') === PPTX_CUSTOM_PROPERTIES_RELATIONSHIP
+  );
+  if (matching.some(item => item?.['@_TargetMode'] === 'External')) {
+    throw new Error('The generated PowerPoint package contains an external custom-properties relationship.');
+  }
+  if (matching.some(item => String(item?.['@_Target'] || '').replace(/^\/+/, '') !== 'docProps/custom.xml')) {
+    throw new Error('The generated PowerPoint custom-properties relationship has an unexpected target.');
+  }
+
+  const hasThemeProperties = matching.some(item =>
+    String(item?.['@_Target'] || '').replace(/^\/+/, '') === 'docProps/custom.xml'
+  );
+  if (!hasThemeProperties) {
+    const ids = relationships
+      .map(item => String(item?.['@_Id'] || '').match(/^rId(\d+)$/))
+      .filter(Boolean)
+      .map(match => Number(match[1]));
+    const nextId = Math.max(0, ...ids) + 1;
+    const relationship = '<Relationship Id="rId' + nextId + '" Type="' +
+      PPTX_CUSTOM_PROPERTIES_RELATIONSHIP + '" Target="docProps/custom.xml"/>';
+    if (!relationshipsXml.includes('</Relationships>')) {
+      throw new Error('The PowerPoint package relationships are malformed.');
+    }
+    relationshipsXml = relationshipsXml.replace('</Relationships>', relationship + '</Relationships>');
+    archive.file(relationshipsPath, relationshipsXml);
+  }
+
+  let contentTypesXml = await contentTypesFile.async('string');
+  if (!contentTypesXml.includes('PartName="/docProps/custom.xml"')) {
+    const override = '<Override PartName="/docProps/custom.xml" ContentType="' +
+      PPTX_CUSTOM_PROPERTIES_CONTENT_TYPE + '"/>';
+    if (!contentTypesXml.includes('</Types>')) {
+      throw new Error('The PowerPoint content-type manifest is malformed.');
+    }
+    contentTypesXml = contentTypesXml.replace('</Types>', override + '</Types>');
+    archive.file(contentTypesPath, contentTypesXml);
+  }
+
+  const customProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" ' +
+    'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+    '<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="BrightdeskTheme">' +
+    '<vt:lpwstr>' + themeId + '</vt:lpwstr></property></Properties>';
+  archive.file('docProps/custom.xml', customProperties);
+  const output = await archive.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  await fs.writeFile(filePath, output);
+}
+
+async function readPptxThemeMetadata(zip) {
+  const relationshipsFile = zip.file('_rels/.rels');
+  if (!relationshipsFile) return 'lavender';
+  const relationshipParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  let relationships;
+  try {
+    relationships = relationshipParser.parse(await relationshipsFile.async('string'));
+  } catch {
+    return 'lavender';
+  }
+  const entries = asArray(relationships.Relationships?.Relationship);
+  const relation = entries.find(item =>
+    String(item?.['@_Type'] || '') === PPTX_CUSTOM_PROPERTIES_RELATIONSHIP &&
+    item?.['@_TargetMode'] !== 'External'
+  );
+  if (!relation) return 'lavender';
+
+  let target = String(relation['@_Target'] || '').trim();
+  if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[?#]/.test(target)) return 'lavender';
+  try {
+    target = decodeURIComponent(target);
+  } catch {
+    return 'lavender';
+  }
+  const partName = path.posix.normalize(target.replace(/^\/+/, ''));
+  if (partName !== 'docProps/custom.xml') return 'lavender';
+
+  const customFile = zip.file(partName);
+  if (!customFile || (customFile._data?.uncompressedSize || 0) > 64 * 1024) return 'lavender';
+  let parsed;
+  try {
+    parsed = relationshipParser.parse(await customFile.async('string'));
+  } catch {
+    return 'lavender';
+  }
+  const properties = asArray(parsed.Properties?.property);
+  const themeProperty = properties.find(item => item?.['@_name'] === 'BrightdeskTheme');
+  const themeId = typeof themeProperty?.lpwstr === 'string' ? themeProperty.lpwstr.trim() : '';
+  return SUPPORTED_SLIDE_THEMES.has(themeId) ? themeId : 'lavender';
+}
+
+function getReadablePptxTextColor(backgroundColor) {
+  if (typeof backgroundColor !== 'string' || !SLIDE_BACKGROUND_COLOR_PATTERN.test(backgroundColor)) {
+    return null;
+  }
+  const hex = backgroundColor.slice(1);
+  const channels = [0, 2, 4].map(offset => {
+    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  return luminance < 0.179 ? 'FFFFFF' : '000000';
+}
+
+function readPptxSlideSolidBackground(xml) {
+  const backgroundMatch = String(xml || '').match(/<(?:[A-Za-z_][\w.-]*:)?bg\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?bg\s*>/i);
+  if (!backgroundMatch) return null;
+  const fillMatch = backgroundMatch[1].match(/<(?:[A-Za-z_][\w.-]*:)?solidFill\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?solidFill\s*>/i);
+  if (!fillMatch) return null;
+  const colorMatch = fillMatch[1].match(/<(?:[A-Za-z_][\w.-]*:)?srgbClr\b[^>]*\bval=["']([0-9A-F]{6})["']/i);
+  return colorMatch ? '#' + colorMatch[1].toUpperCase() : null;
+}
+
+function readPptxSlideTransition(xml) {
+  const transitionElement = String(xml || '').match(
+    /<(?:[\w.-]+:)?transition\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?transition\s*>/i
+  );
+  if (!transitionElement) return 'none';
+  const child = transitionElement[1].match(/<(?:[\w.-]+:)?(fade|push|wipe)\b/i);
+  const transition = child?.[1]?.toLowerCase() || 'none';
+  return SUPPORTED_SLIDE_TRANSITIONS.has(transition) ? transition : 'none';
+}
+
+async function writePptxSlideTransitions(filePath, transitions) {
+  const JSZip = require('jszip');
+  const { XMLParser } = require('fast-xml-parser');
+  const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+  const relationshipParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  const slideParts = await getPptxSlidePartsInPresentationOrder(archive, relationshipParser);
+  if (slideParts.length !== transitions.length) {
+    throw new Error('The generated PowerPoint slide order does not match its transition data.');
+  }
+
+  const transitionMarkup = {
+    fade: '<p:transition spd="med"><p:fade/></p:transition>',
+    push: '<p:transition spd="med"><p:push dir="l"/></p:transition>',
+    wipe: '<p:transition spd="med"><p:wipe dir="l"/></p:transition>'
+  };
+
+  for (let index = 0; index < slideParts.length; index++) {
+    const transition = SUPPORTED_SLIDE_TRANSITIONS.has(transitions[index])
+      ? transitions[index]
+      : 'none';
+    if (transition === 'none') continue;
+    const slideFile = archive.file(slideParts[index]);
+    if (!slideFile) throw new Error('The generated PowerPoint slide is missing its XML part.');
+    const xml = await slideFile.async('string');
+    const closingTag = '</p:sld>';
+    const closingIndex = xml.lastIndexOf(closingTag);
+    if (closingIndex < 0) throw new Error('The generated PowerPoint slide XML is malformed.');
+    const updatedXml = xml.slice(0, closingIndex)
+      + transitionMarkup[transition]
+      + xml.slice(closingIndex);
+    archive.file(slideParts[index], updatedXml);
+  }
+
+  const output = await archive.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  await fs.writeFile(filePath, output);
+}
+
+function findFirstXmlNode(value, key) {');
+    const existingTransition = new RegExp(
+      `<${escapedPrefix}transition\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/${escapedPrefix}transition\\s*>)`,
+      'gi'
+    );
+    xml = xml.replace(existingTransition, '');
+    const currentClosing = xml.match(/<\\/([A-Za-z_][\\w.-]*:)?sld\\s*>/i);
+    if (!currentClosing || currentClosing[1] !== prefix) {
+      throw new Error('The generated PowerPoint slide closing tag changed unexpectedly.');
+    }
+    xml = xml.replace(currentClosing[0], transitionMarkup[transition](prefix) + currentClosing[0]);
+    archive.file(slideParts[index], xml);
+  }
+
+  const output = await archive.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  await fs.writeFile(filePath, output);
+}
+
+function findFirstXmlNode(value, key) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findFirstXmlNode(item, key);
+      if (found !== null && found !== undefined) return found;
+    }
+    return null;
+  }
+  if (!value || typeof value !== 'object') return null;
+  if (Object.prototype.hasOwnProperty.call(value, key)) return value[key];
+  for (const child of Object.values(value)) {
+    const found = findFirstXmlNode(child, key);
+    if (found !== null && found !== undefined) return found;
+  }
+  return null;
+}
+
+function readPptxRgbColour(value) {
+  const node = findFirstXmlNode(value, 'srgbClr');
+  const hex = typeof node?.['@_val'] === 'string' ? node['@_val'] : '';
+  const alpha = Number(node?.alpha?.['@_val']);
+  if (Number.isFinite(alpha) && alpha <= 0) return null;
+  return /^[0-9A-F]{6}$/i.test(hex) ? '#' + hex.toUpperCase() : null;
+}
+
+async function readPptxSlidePictures(zip, slidePart, slideXml, slideWidthEmu, slideHeightEmu, budgets) {
+  const { XMLParser } = require('fast-xml-parser');
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  let parsed;
+  try {
+    parsed = parser.parse(slideXml);
+  } catch {
+    return [];
+  }
+
+  const relationshipPart = path.posix.join(
+    path.posix.dirname(slidePart),
+    '_rels',
+    path.posix.basename(slidePart) + '.rels'
+  );
+  const relationshipFile = zip.file(relationshipPart);
+  if (!relationshipFile) return [];
+
+  let relationshipDocument;
+  try {
+    relationshipDocument = parser.parse(await relationshipFile.async('string'));
+  } catch {
+    return [];
+  }
+  const relationships = new Map();
+  for (const relationship of asArray(relationshipDocument.Relationships?.Relationship)) {
+    if (!isPlainObject(relationship)) continue;
+    const id = relationship['@_Id'];
+    const type = String(relationship['@_Type'] || '');
+    const target = relationship['@_Target'];
+    const targetMode = String(relationship['@_TargetMode'] || '').toLowerCase();
+    if (typeof id !== 'string' || !type.endsWith('/image') || typeof target !== 'string' || targetMode === 'external') continue;
+    if (target.startsWith('/') || target.includes('\\') || target.includes('\0')) continue;
+    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(slidePart), target));
+    if (!resolved.startsWith('ppt/media/') || resolved.includes('/../')) continue;
+    relationships.set(id, resolved);
+  }
+
+  const pictures = asArray(parsed.sld?.cSld?.spTree?.pic);
+  const objects = [];
+  for (const picture of pictures) {
+    if (!isPlainObject(picture)) continue;
+    const relationshipId = picture.blipFill?.blip?.['@_embed'];
+    const mediaPart = relationships.get(relationshipId);
+    if (!mediaPart) continue;
+    const mediaFile = zip.file(mediaPart);
+    if (!mediaFile) continue;
+    const declaredBytes = mediaFile._data?.uncompressedSize;
+    if (Number.isFinite(declaredBytes) && declaredBytes > MAX_SLIDE_IMAGE_BYTES) continue;
+    if (objects.length >= 1000) break;
+    const transform = picture.spPr?.xfrm;
+    const offset = transform?.off;
+    const extent = transform?.ext;
+    const xEmu = Number(offset?.['@_x']);
+    const yEmu = Number(offset?.['@_y']);
+    const widthEmu = Number(extent?.['@_cx']);
+    const heightEmu = Number(extent?.['@_cy']);
+    if (
+      !Number.isFinite(xEmu) || !Number.isFinite(yEmu) ||
+      !Number.isFinite(widthEmu) || !Number.isFinite(heightEmu) ||
+      xEmu < 0 || yEmu < 0 || widthEmu <= 0 || heightEmu <= 0 ||
+      slideWidthEmu <= 0 || slideHeightEmu <= 0
+    ) continue;
+    const x = xEmu / slideWidthEmu * 100;
+    const y = yEmu / slideHeightEmu * 100;
+    const width = widthEmu / slideWidthEmu * 100;
+    const height = heightEmu / slideHeightEmu * 100;
+    if (x + width > 100.001 || y + height > 100.001 || width <= 0 || height <= 0) continue;
+
+    const crop = picture.blipFill?.srcRect;
+    const hasCrop = crop && ['l', 't', 'r', 'b'].some(key => {
+      const value = Number(crop['@_' + key]);
+      return Number.isFinite(value) && value !== 0;
+    });
+    if (hasCrop) continue;
+
+    let buffer;
+    try {
+      buffer = await mediaFile.async('nodebuffer');
+    } catch {
+      continue;
+    }
+    if (buffer.length === 0 || buffer.length > MAX_SLIDE_IMAGE_BYTES) continue;
+    let imageData;
+    try {
+      imageData = createSlideImageDataUrl(buffer);
+    } catch {
+      continue;
+    }
+    const imageInfo = inspectSlideImageDataUrl(imageData);
+    if (
+      !imageInfo ||
+      imageInfo.width > 20000 || imageInfo.height > 20000 ||
+      imageInfo.width * imageInfo.height > 40000000 ||
+      budgets.totalBytes + imageInfo.byteLength > MAX_PPTX_IMPORTED_IMAGE_BYTES ||
+      budgets.slideBytes + imageInfo.byteLength > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE
+    ) continue;
+
+    budgets.totalBytes += imageInfo.byteLength;
+    budgets.slideBytes += imageInfo.byteLength;
+    const properties = picture.nvPicPr?.cNvPr;
+    const requestedName = typeof properties?.['@_descr'] === 'string' && properties['@_descr'].trim()
+      ? properties['@_descr']
+      : (typeof properties?.['@_name'] === 'string' ? properties['@_name'] : 'Picture');
+    const imageName = requestedName.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 255) || 'Picture';
+    const rotationValue = Number(transform?.['@_rot']);
+    const rotation = Number.isFinite(rotationValue) ? Math.max(-360, Math.min(360, rotationValue / 60000)) : 0;
+    objects.push({
+      id: 'object-' + crypto.randomUUID(),
+      type: 'image',
+      x, y, width, height,
+      fill: null, stroke: null, strokeWidth: 0,
+      text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation,
+      imageData,
+      imageName,
+      imageWidth: imageInfo.width,
+      imageHeight: imageInfo.height
+    });
+  }
+  return objects;
+}
+
+function readPptxSlideObjects(xml, slideWidthEmu, slideHeightEmu) {
+  const { XMLParser } = require('fast-xml-parser');
+  const objectParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  let parsed;
+  try {
+    parsed = objectParser.parse(xml);
+  } catch {
+    return { objects: [], text: [] };
+  }
+
+  const tree = parsed.sld?.cSld?.spTree;
+  const shapes = [...asArray(tree?.sp), ...asArray(tree?.cxnSp)];
+  const objects = [];
+  const objectText = [];
+  const seenIds = new Set();
+  for (const shape of shapes) {
+    if (!isPlainObject(shape)) continue;
+    const shapeProperties = shape.nvSpPr || shape.nvCxnSpPr;
+    const name = String(shapeProperties?.cNvPr?.['@_name'] || '');
+    const match = name.match(/^Brightdesk (text|rectangle|ellipse|line) (object-[A-Za-z0-9][A-Za-z0-9._:-]{0,99})$/);
+    if (!match) continue;
+    const [, type, id] = match;
+    if (seenIds.has(id)) continue;
+
+    const transform = shape.spPr?.xfrm;
+    const offset = transform?.off;
+    const extent = transform?.ext;
+    const xEmu = Number(offset?.['@_x']);
+    const yEmu = Number(offset?.['@_y']);
+    const widthEmu = Number(extent?.['@_cx']);
+    const heightEmu = Number(extent?.['@_cy']);
+    if (
+      !Number.isFinite(xEmu) || !Number.isFinite(yEmu) ||
+      !Number.isFinite(widthEmu) || !Number.isFinite(heightEmu) ||
+      xEmu < 0 || yEmu < 0 || widthEmu <= 0 || heightEmu < 0 ||
+      slideWidthEmu <= 0 || slideHeightEmu <= 0
+    ) continue;
+
+    const x = xEmu / slideWidthEmu * 100;
+    const y = yEmu / slideHeightEmu * 100;
+    const width = widthEmu / slideWidthEmu * 100;
+    const height = Math.max(1, heightEmu / slideHeightEmu * 100);
+    if (x + width > 100.001 || y + height > 100.001 || width <= 0 || height <= 0) continue;
+
+    const geometry = String(shape.spPr?.prstGeom?.['@_prst'] || '');
+    if (
+      (type === 'rectangle' && geometry !== 'rect') ||
+      (type === 'ellipse' && geometry !== 'ellipse') ||
+      (type === 'line' && geometry !== 'line' && !(shape.nvCxnSpPr && !geometry)) ||
+      (type === 'text' && String(shape.nvSpPr?.cNvSpPr?.['@_txBox'] || '') !== '1')
+    ) continue;
+
+    const fill = readPptxRgbColour(shape.spPr?.solidFill);
+    const stroke = readPptxRgbColour(shape.spPr?.ln?.solidFill);
+    const strokeWidthEmu = Number(shape.spPr?.ln?.['@_w']);
+    const strokeWidth = Number.isFinite(strokeWidthEmu) && strokeWidthEmu > 0
+      ? Math.min(12, strokeWidthEmu / 12700)
+      : 0;
+    const rotationValue = Number(transform?.['@_rot']);
+    const rotation = Number.isFinite(rotationValue) ? Math.max(-360, Math.min(360, rotationValue / 60000)) : 0;
+
+    const paragraphs = asArray(shape.txBody?.p);
+    const text = paragraphs
+      .map(paragraph => collectXmlText(paragraph).join(''))
+      .join('\n')
+      .slice(0, MAX_SLIDE_OBJECT_TEXT_LENGTH);
+    if (type === 'text' && text) objectText.push(text);
+
+    const runProperties = findFirstXmlNode(shape.txBody, 'rPr') || findFirstXmlNode(shape.txBody, 'defRPr');
+    const runSize = Number(runProperties?.['@_sz']);
+    const textFill = readPptxRgbColour(runProperties?.solidFill);
+    const object = {
+      id,
+      type,
+      x,
+      y,
+      width,
+      height,
+      fill: type === 'line' || !fill ? null : fill,
+      stroke,
+      strokeWidth,
+      text,
+      fontSize: Number.isFinite(runSize) && runSize > 0 ? Math.max(8, Math.min(96, runSize / 100)) : 20,
+      textColor: textFill || '#26364D',
+      bold: runProperties?.['@_b'] === '1' || runProperties?.['@_b'] === 'true',
+      rotation
+    };
+    objects.push(object);
+    seenIds.add(id);
+    if (objects.length >= 1000) break;
+  }
+  return { objects, text: objectText };
+}
+
 async function openOfficeFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const stat = await fs.stat(filePath);
@@ -239,19 +1008,66 @@ async function openOfficeFile(filePath) {
     const JSZip = require('jszip');
     const { XMLParser } = require('fast-xml-parser');
     const zip = await JSZip.loadAsync(buffer);
-    const slideEntries = Object.values(zip.files).filter(entry => /^ppt\/slides\/slide\d+\.xml$/.test(entry.name));
-    const totalSlideBytes = slideEntries.reduce((total, entry) => total + (entry._data?.uncompressedSize || 0), 0);
-    if (totalSlideBytes > 50 * 1024 * 1024) throw new Error('The presentation contains too much uncompressed slide XML to import safely.');
-    const names = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a,b) => Number(a.match(/slide(\d+)/)[1]) - Number(b.match(/slide(\d+)/)[1]));
-    assertPresentationSlideLimit(names.length);
-    const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: false });
-    const slides = [];
-    for (const name of names) {
-      const xml = await zip.files[name].async('string');
-      const texts = collectXmlText(parser.parse(xml)).filter(Boolean);
-      slides.push({ title: texts[0] || `Slide ${slides.length + 1}`, body: texts.slice(1).join('\n') });
+    let slideSize = 'widescreen';
+    let slideWidthEmu = 12192000;
+    let slideHeightEmu = 6858000;
+    const presentationPart = zip.file('ppt/presentation.xml');
+    if (presentationPart) {
+      const presentationXml = await presentationPart.async('string');
+      const sizeTag = presentationXml.match(/<(?:[A-Za-z0-9_]+:)?sldSz\b([^>]*)\/?\s*>/i);
+      if (sizeTag) {
+        const width = Number(sizeTag[1].match(/\bcx=["'](\d+)["']/i)?.[1]);
+        const height = Number(sizeTag[1].match(/\bcy=["'](\d+)["']/i)?.[1]);
+        if (Number.isFinite(width) && width > 0) slideWidthEmu = width;
+        if (Number.isFinite(height) && height > 0) slideHeightEmu = height;
+        if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+          const ratio = width / height;
+          if (Math.abs(ratio - 4 / 3) < 0.02) slideSize = 'standard';
+        }
+      }
     }
-    return { kind: 'slides', title: path.basename(filePath, ext), slides: slides.length ? slides : [{ title: 'Imported presentation', body: '' }] };
+    const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: false });
+    const relationshipParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', removeNSPrefix: true });
+    const notesParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', removeNSPrefix: true });
+    const names = await getPptxSlidePartsInPresentationOrder(zip, relationshipParser);
+    assertPresentationSlideLimit(names.length);
+    const totalSlideBytes = names.reduce((total, name) => total + (zip.file(name)?._data?.uncompressedSize || 0), 0);
+    if (totalSlideBytes > 50 * 1024 * 1024) throw new Error('The presentation contains too much uncompressed slide XML to import safely.');
+    const slides = [];
+    let totalNotesBytes = 0;
+    const pictureBudget = { totalBytes: 0, slideBytes: 0 };
+    for (const name of names) {
+      pictureBudget.slideBytes = 0;
+      const xml = await zip.files[name].async('string');
+      const backgroundColor = readPptxSlideSolidBackground(xml);
+      const hidden = /<(?:[A-Za-z0-9_]+:)?sld\b[^>]*\bshow=["'](?:0|false)["']/i.test(xml);
+      const importedObjects = readPptxSlideObjects(xml, slideWidthEmu, slideHeightEmu);
+      const importedPictures = await readPptxSlidePictures(zip, name, xml, slideWidthEmu, slideHeightEmu, pictureBudget);
+      const nativeObjectText = new Set(importedObjects.text);
+      const texts = collectXmlText(parser.parse(xml)).filter(value => Boolean(value) && !nativeObjectText.has(value));
+      const notesPart = await findNotesSlidePart(zip, name, relationshipParser);
+      let notes = '';
+      if (notesPart) {
+        const notesEntry = zip.file(notesPart);
+        if (notesEntry) {
+          totalNotesBytes += notesEntry._data?.uncompressedSize || 0;
+          if (totalNotesBytes > MAX_PROJECT_BYTES) {
+            throw new Error('The presentation contains too much uncompressed speaker-notes data to import safely.');
+          }
+          notes = await readNotesSlideText(zip, notesPart, notesParser);
+        }
+      }
+      slides.push({
+        ...(hidden ? { hidden: true } : {}),
+        ...(backgroundColor ? { backgroundColor } : {}),
+        ...((importedObjects.objects.length || importedPictures.length) ? { objects: [...importedObjects.objects, ...importedPictures].slice(0, MAX_SLIDE_OBJECTS_PER_SLIDE) } : {}),
+        transition: readPptxSlideTransition(xml),
+        title: texts[0] || `Slide ${slides.length + 1}`,
+        body: texts.slice(1).join('\n'),
+        notes
+      });
+    }
+    return { kind: 'slides', title: path.basename(filePath, ext), slideSize, themeId: await readPptxThemeMetadata(zip), slides: slides.length ? slides : [{ title: 'Imported presentation', body: '' }] };
   }
   if (ext === '.txt' || ext === '.md' || ext === '.html') {
     assertDocumentTextLimit(buffer.byteLength);
@@ -309,13 +1125,198 @@ async function exportOfficeFile(payload, filePath) {
   }
   if (kind === 'slides' && ext === '.pptx') {
     const PptxGenJS = require('pptxgenjs');
-    const pptx = new PptxGenJS(); pptx.layout = 'LAYOUT_WIDE'; pptx.author = 'Brightdesk'; pptx.subject = 'Brightdesk presentation';
+    const slideSize = SUPPORTED_SLIDE_SIZES.has(payload.slideSize) ? payload.slideSize : 'widescreen';
+    const isStandard = slideSize === 'standard';
+    const horizontalScale = isStandard ? 0.75 : 1;
+    const x = value => value * horizontalScale;
+    const w = value => value * horizontalScale;
+    const themeId = SUPPORTED_SLIDE_THEMES.has(payload.themeId) ? payload.themeId : 'lavender';
+    const theme = {
+      lavender: {
+        background: 'FCF3E9', surface: 'FFFFFF', title: '26364D',
+        body: '4A5A70', accent: '9A5E20', divider: 'E5E8EE'
+      },
+      midnight: {
+        background: '202B3B', surface: '202B3B', title: 'FFFFFF',
+        body: 'D0D9E6', accent: 'D0D9E6', divider: '35445B'
+      },
+      paper: {
+        background: 'FFFFFF', surface: 'FFFFFF', title: '26364D',
+        body: '53647B', accent: '53647B', divider: 'E1E1E1'
+      }
+    }[themeId];
+    const pptx = new PptxGenJS();
+    pptx.layout = isStandard ? 'LAYOUT_4x3' : 'LAYOUT_WIDE';
+    pptx.author = 'Brightdesk'; pptx.subject = 'Brightdesk presentation';
     for (const data of (payload.slides || [])) {
-      const slide = pptx.addSlide(); slide.background = { color: 'F6F5FF' };
-      slide.addText(data.title || '', { x: 0.8, y: 1.1, w: 11, h: 1.2, fontFace: 'Aptos Display', fontSize: 30, bold: true, color: '38356F' });
-      slide.addText(data.body || '', { x: 0.85, y: 2.65, w: 10.8, h: 3.7, fontFace: 'Aptos', fontSize: 20, color: '55566B', breakLine: false, valign: 'top' });
+      const slide = pptx.addSlide();
+      if (data.hidden === true) slide.hidden = true;
+      const layout = SUPPORTED_SLIDE_LAYOUTS.has(data.layout) ? data.layout : 'title-content';
+      const backgroundColor = typeof data.backgroundColor === 'string' && SLIDE_BACKGROUND_COLOR_PATTERN.test(data.backgroundColor)
+        ? data.backgroundColor.toUpperCase()
+        : null;
+      const customTextColor = backgroundColor ? getReadablePptxTextColor(backgroundColor) : null;
+      slide.background = { color: backgroundColor ? backgroundColor.slice(1) : (layout === 'title' ? theme.background : theme.surface) };
+      const titleStyle = {
+        x: x(0.72), y: 0.48, w: w(11.9), h: 0.9,
+        fontFace: 'Aptos Display', fontSize: 30, bold: true,
+        color: customTextColor || theme.title, margin: 0.04, breakLine: false
+      };
+      if (layout === 'title') {
+        slide.addText(data.title || '', {
+          ...titleStyle, x: x(1.1), y: 2.0, w: w(11.1), h: 1.5,
+          fontSize: 38, align: 'center', valign: 'mid'
+        });
+        if (data.body) slide.addText(data.body, {
+          x: x(1.4), y: 3.75, w: w(10.5), h: 0.9,
+          fontFace: 'Aptos', fontSize: 22, color: customTextColor || theme.body,
+          align: 'center', valign: 'mid', margin: 0.04
+        });
+      } else if (layout === 'section-header') {
+        slide.addText(data.title || '', {
+          ...titleStyle, x: x(0.95), y: 2.1, w: w(11.0), h: 1.4,
+          fontSize: 36, color: customTextColor || theme.accent, valign: 'mid'
+        });
+        if (data.body) slide.addText(data.body, {
+          x: x(1.0), y: 3.65, w: w(10.5), h: 1.0,
+          fontFace: 'Aptos', fontSize: 21, color: customTextColor || theme.body,
+          valign: 'top', margin: 0.04
+        });
+      } else if (layout === 'two-content') {
+        slide.addText(data.title || '', titleStyle);
+        slide.addShape(pptx.ShapeType.line, {
+          x: x(6.65), y: 1.7, w: w(0), h: 4.9,
+          line: { color: customTextColor || theme.divider, width: 1 }
+        });
+        slide.addText(data.body || '', {
+          x: x(0.8), y: 1.7, w: w(5.45), h: 4.9,
+          fontFace: 'Aptos', fontSize: 20, color: customTextColor || theme.body,
+          valign: 'top', margin: 0.08, breakLine: false
+        });
+        slide.addText(data.bodySecondary || '', {
+          x: x(6.95), y: 1.7, w: w(5.45), h: 4.9,
+          fontFace: 'Aptos', fontSize: 20, color: customTextColor || theme.body,
+          valign: 'top', margin: 0.08, breakLine: false
+        });
+      } else {
+        slide.addText(data.title || '', titleStyle);
+        slide.addText(data.body || '', {
+          x: x(0.85), y: 1.7, w: w(11.7), h: 4.9,
+          fontFace: 'Aptos', fontSize: 20, color: customTextColor || theme.body,
+          breakLine: false, valign: 'top', margin: 0.08
+        });
+      }
+      const slideObjects = Array.isArray(data.objects) ? data.objects : [];
+      let slideImageBytes = 0;
+      for (const object of slideObjects) {
+        if (!isPlainObject(object) || !SUPPORTED_SLIDE_OBJECT_TYPES.has(object.type)) continue;
+        if (object.type === 'image') {
+          const imageInfo = inspectSlideImageDataUrl(object.imageData);
+          if (
+            !imageInfo ||
+            object.imageWidth !== imageInfo.width ||
+            object.imageHeight !== imageInfo.height ||
+            !Number.isFinite(object.x) || object.x < 0 ||
+            !Number.isFinite(object.y) || object.y < 0 ||
+            !Number.isFinite(object.width) || object.width <= 0 || object.width > 100 ||
+            !Number.isFinite(object.height) || object.height <= 0 || object.height > 100 ||
+            object.x + object.width > 100 || object.y + object.height > 100 ||
+            !Number.isFinite(object.rotation) || object.rotation < -360 || object.rotation > 360 ||
+            typeof object.imageName !== 'string' ||
+            !object.imageName.trim() ||
+            object.imageName.length > 255 ||
+            !Number.isInteger(object.imageWidth) || object.imageWidth < 1 || object.imageWidth > 20000 ||
+            !Number.isInteger(object.imageHeight) || object.imageHeight < 1 || object.imageHeight > 20000 ||
+            object.imageWidth * object.imageHeight > 40000000
+          ) {
+            throw new Error('This presentation contains an invalid embedded picture.');
+          }
+          slideImageBytes += imageInfo.byteLength;
+          if (slideImageBytes > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
+            throw new Error('A slide cannot contain more than 15 MB of embedded pictures.');
+          }
+          const frameX = x(13.333333 * object.x / 100);
+          const frameY = 7.5 * object.y / 100;
+          const frameW = w(13.333333 * object.width / 100);
+          const frameH = 7.5 * object.height / 100;
+          const sourceRatio = object.imageWidth / object.imageHeight;
+          const frameRatio = frameW / frameH;
+          let imageW = frameW;
+          let imageH = frameH;
+          if (sourceRatio > frameRatio) imageH = imageW / sourceRatio;
+          else imageW = imageH * sourceRatio;
+          slide.addImage({
+            data: imageInfo.mimeType + ';base64,' + object.imageData.slice(object.imageData.indexOf(',') + 1),
+            x: frameX + (frameW - imageW) / 2,
+            y: frameY + (frameH - imageH) / 2,
+            w: imageW,
+            h: imageH,
+            altText: object.imageName,
+            objectName: 'Brightdesk image ' + String(object.id || 'object-unknown'),
+            rotate: object.rotation
+          });
+          continue;
+        }
+        const objectX = x(13.333333 * object.x / 100);
+        const objectY = 7.5 * object.y / 100;
+        const objectW = w(13.333333 * object.width / 100);
+        const objectH = 7.5 * object.height / 100;
+        const rotation = Number.isFinite(object.rotation) ? object.rotation : 0;
+        const objectName = 'Brightdesk ' + object.type + ' ' + String(object.id || 'object-unknown');
+        if (object.type === 'text') {
+          const textOptions = {
+            x: objectX,
+            y: objectY,
+            w: objectW,
+            h: objectH,
+            fontFace: 'Aptos',
+            fontSize: Number.isFinite(object.fontSize) ? object.fontSize : 20,
+            color: String(object.textColor || theme.body).replace(/^#/, ''),
+            bold: object.bold === true,
+            margin: 0.04,
+            valign: 'mid',
+            breakLine: false,
+            rotate: rotation,
+            objectName
+          };
+          if (object.fill) textOptions.fill = { color: String(object.fill).replace(/^#/, '') };
+          if (object.stroke && object.strokeWidth > 0) {
+            textOptions.line = { color: String(object.stroke).replace(/^#/, ''), width: object.strokeWidth };
+          } else {
+            textOptions.line = { color: 'FFFFFF', transparency: 100 };
+          }
+          slide.addText(typeof object.text === 'string' ? object.text : '', textOptions);
+          continue;
+        }
+
+        const shapeType = object.type === 'rectangle'
+          ? pptx.ShapeType.rect
+          : object.type === 'ellipse'
+            ? pptx.ShapeType.ellipse
+            : pptx.ShapeType.line;
+        slide.addShape(shapeType, {
+          x: objectX,
+          y: objectY,
+          w: objectW,
+          h: object.type === 'line' ? 0 : objectH,
+          rotate: rotation,
+          objectName,
+          fill: object.type === 'line' || object.fill === null
+            ? { color: 'FFFFFF', transparency: 100 }
+            : { type: 'solid', color: String(object.fill || '#F3EBDD').replace(/^#/, '') },
+          line: object.stroke && object.strokeWidth > 0
+            ? { color: String(object.stroke).replace(/^#/, ''), width: object.strokeWidth }
+            : { color: 'FFFFFF', transparency: 100 }
+        });
+      }
+      if (typeof data.notes === 'string' && data.notes.trim()) slide.addNotes(data.notes);
     }
-    await pptx.writeFile({ fileName: filePath }); return;
+    await pptx.writeFile({ fileName: filePath });
+    await writePptxThemeMetadata(filePath, themeId);
+    await writePptxSlideTransitions(filePath, (payload.slides || []).map(slide =>
+      SUPPORTED_SLIDE_TRANSITIONS.has(slide.transition) ? slide.transition : 'none'
+    ));
+    return;
   }
   if (kind === 'pages' && ext === '.html') { await fs.writeFile(filePath, payload.html || '', 'utf8'); return; }
   if (kind === 'notes' && (ext === '.md' || ext === '.txt')) { await fs.writeFile(filePath, payload.text || '', 'utf8'); return; }

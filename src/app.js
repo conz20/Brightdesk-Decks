@@ -34,22 +34,197 @@ const state = {
   todoView: 'my-day', todoQuery: '',
   selectedCell: { row: 0, col: 0 }, update: null, ribbonTab: 'home',
   installedApps: [], setupComplete: false, firstRunSelection: new Set(installableCatalog.map(item => item.id)),
-  slideTheme: 'lavender', focusMode: false, editorZoom: 100, sheetZoom: 100,
+  slideView: 'normal', collapsedSlideSections: new Set(), selectedSlideObjectId: null, focusMode: false, editorZoom: 100, sheetZoom: 100,
   languageCatalog: [], installedLanguagePacks: [], spellCheckerLanguages: [], usesNativeMacSpellChecker: false,
   displayLanguage: 'en-AU', proofingLanguage: 'en-AU',
   installedDictionaries: [], dictionaryCatalogue: [], selectedDictionary: localStorage.getItem('brightdesk-selected-dictionary') || ''
 };
 const editor = $('editor'), sheetWrap = $('sheet-wrap'), slideWrap = $('slide-wrap'), notesWrap = $('notes-wrap');
+const slideHistories = new WeakMap();
+const SLIDE_HISTORY_STORAGE_KEY = 'brightdesk-decks-history-v1';
 const pageLayout = window.BrightdeskPageLayout;
 const commonJsonStorage = window.BrightdeskCommonLibs;
 if (!commonJsonStorage) throw new Error('Brightdesk common storage helper was not loaded.');
 
 function clone(value) { return commonJsonStorage.cloneJsonValue(value); }
 function activeDoc() { return state.docs[state.app]; }
+
+function stripSlidePictureData(value) {
+  const output = clone(value);
+  const collections = [];
+  if (output?.docs && typeof output.docs === 'object') collections.push(...Object.values(output.docs));
+  if (Array.isArray(output?.slides)) collections.push(output);
+  if (Array.isArray(output?.current?.slides)) collections.push(output.current);
+  if (Array.isArray(output?.past)) collections.push(...output.past);
+  if (Array.isArray(output?.future)) collections.push(...output.future);
+  for (const collection of collections) {
+    if (!Array.isArray(collection?.slides)) continue;
+    for (const slide of collection.slides) {
+      for (const object of slide?.objects || []) {
+        if (object?.type === 'image' && object.imageAssetId) delete object.imageData;
+      }
+    }
+  }
+  return output;
+}
+
+function getPicturesFromSlides(slides) {
+  if (!Array.isArray(slides)) return [];
+  return slides.flatMap(slide => Array.isArray(slide?.objects)
+    ? slide.objects.filter(object => object?.type === 'image')
+    : []);
+}
+
+function getHistorySnapshots(historyState) {
+  return [
+    historyState?.current,
+    ...(Array.isArray(historyState?.past) ? historyState.past : []),
+    ...(Array.isArray(historyState?.future) ? historyState.future : [])
+  ].filter(Boolean);
+}
+
+function collectLocalSlidePictureAssetIds() {
+  const assetIds = new Set();
+  const history = slideHistories.get(state.docs.slides);
+  const pictureGroups = [getPicturesFromSlides(state.docs.slides?.slides)];
+  if (history) {
+    pictureGroups.push(...getHistorySnapshots(history.exportState()).map(snapshot => getPicturesFromSlides(snapshot.slides)));
+  }
+  pictureGroups.flat().forEach(object => {
+    if (typeof object.imageAssetId === 'string') assetIds.add(object.imageAssetId);
+  });
+  return [...assetIds];
+}
+
+async function hydrateSavedSlidePictures(doc = state.docs.slides) {
+  if (!doc || !Array.isArray(doc.slides)) return { loaded: 0, missing: 0 };
+  const history = getSlideHistory(doc);
+  const savedHistory = history.exportState();
+  const pictures = [
+    ...getPicturesFromSlides(doc.slides),
+    ...getHistorySnapshots(savedHistory).flatMap(snapshot => getPicturesFromSlides(snapshot.slides))
+  ];
+  const assetIdsByImageData = new Map();
+  for (const object of pictures) {
+    if (object.imageAssetId || !object.imageData) continue;
+    let assetId = assetIdsByImageData.get(object.imageData);
+    if (!assetId) {
+      assetId = await window.brightdesk.storeSlidePicture(object.imageData);
+      assetIdsByImageData.set(object.imageData, assetId);
+    }
+    object.imageAssetId = assetId;
+  }
+  if (assetIdsByImageData.size) history.hydrateAssetIds(assetIdsByImageData);
+
+  const allPictures = [
+    ...getPicturesFromSlides(doc.slides),
+    ...getHistorySnapshots(history.exportState()).flatMap(snapshot => getPicturesFromSlides(snapshot.slides))
+  ];
+  const assetIds = [...new Set(allPictures.map(object => object.imageAssetId).filter(Boolean))];
+  const imageDataByAssetId = new Map();
+  let missing = 0;
+  await Promise.all(assetIds.map(async assetId => {
+    try {
+      const imageData = await window.brightdesk.loadSlidePicture(assetId);
+      if (typeof imageData === 'string') imageDataByAssetId.set(assetId, imageData);
+      else missing++;
+    } catch (error) {
+      missing++;
+      console.warn('A saved slide picture could not be loaded.', error);
+    }
+  }));
+  getPicturesFromSlides(doc.slides).forEach(object => {
+    const imageData = imageDataByAssetId.get(object.imageAssetId);
+    if (imageData) object.imageData = imageData;
+  });
+  history.hydrateImages(imageDataByAssetId);
+  return { loaded: imageDataByAssetId.size, missing };
+}
+
+function readSavedSlideHistory() {
+  try {
+    const raw = localStorage.getItem(SLIDE_HISTORY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.warn('Saved slide history could not be read.', error);
+    return null;
+  }
+}
+function writeSavedSlideHistory(doc) {
+  if (doc !== state.docs.slides) return;
+  const history = slideHistories.get(doc);
+  if (!history) return;
+  try {
+    localStorage.setItem(SLIDE_HISTORY_STORAGE_KEY, JSON.stringify(stripSlidePictureData(history.exportState())));
+  } catch (error) {
+    console.warn('Slide history could not be saved on this device.', error);
+  }
+}
+function clearSavedSlideHistory() {
+  slideHistories.delete(state.docs.slides);
+  try {
+    localStorage.removeItem(SLIDE_HISTORY_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Old slide history could not be cleared.', error);
+  }
+}
+function getSlideHistory(doc = activeDoc()) {
+  let history = slideHistories.get(doc);
+  if (!history) {
+    const savedState = doc === state.docs.slides ? readSavedSlideHistory() : null;
+    history = window.BrightdeskSlidesService.createHistory(doc, { state: savedState });
+    slideHistories.set(doc, history);
+    if (savedState && !history.restored) {
+      try { localStorage.removeItem(SLIDE_HISTORY_STORAGE_KEY); }
+      catch (error) { console.warn('Stale slide history could not be cleared.', error); }
+    }
+  }
+  return history;
+}
+function refreshSlideHistoryControls() {
+  if (state.app !== 'slides') return;
+  const history = getSlideHistory(activeDoc());
+  const undo = document.querySelector('[data-slide-undo]');
+  const redo = document.querySelector('[data-slide-redo]');
+  if (undo) undo.disabled = !history.canUndo();
+  if (redo) redo.disabled = !history.canRedo();
+}
+function commitSlideChange(doc = activeDoc(), group = null) {
+  const history = getSlideHistory(doc);
+  history.commit(doc, group);
+  const imageDataByAssetId = new Map(
+    getPicturesFromSlides(doc.slides).filter(object => object.imageAssetId && object.imageData)
+      .map(object => [object.imageAssetId, object.imageData])
+  );
+  history.hydrateImages(imageDataByAssetId);
+  refreshSlideHistoryControls();
+}
+function applySlideHistory(direction) {
+  const doc = activeDoc();
+  const history = getSlideHistory(doc);
+  const changed = direction === 'undo' ? history.undo(doc) : history.redo(doc);
+  if (!changed) return false;
+  renderSlides();
+  renderToolbar();
+  persist();
+  setStatus(direction === 'undo' ? 'Slide change undone' : 'Slide change redone');
+  return true;
+}
+function undoSlideEdit() { return applySlideHistory('undo'); }
+function redoSlideEdit() { return applySlideHistory('redo'); }
 function setStatus(message) { $('save-status').textContent = message; }
 function persist() {
-  try { commonJsonStorage.writeJsonValue(localStorage, 'brightdesk-docs-v3', state.docs); setStatus('Saved on this device'); }
-  catch (error) { setStatus('Could not save locally'); console.error(error); }
+  try {
+    commonJsonStorage.writeJsonValue(localStorage, 'brightdesk-docs-v3', stripSlidePictureData(state.docs));
+    writeSavedSlideHistory(state.docs.slides);
+    window.brightdesk.pruneSlidePictures(collectLocalSlidePictureAssetIds()).catch(error => {
+      console.warn('Unused local slide pictures could not be cleaned up.', error);
+    });
+    setStatus('Saved on this device');
+  } catch (error) {
+    setStatus('Could not save locally');
+    console.error(error);
+  }
 }
 function loadLocal() {
   try {
@@ -104,7 +279,7 @@ function colIndex(label) { return window.BrightdeskFormula.columnIndex(label); }
 const ribbonTabs = {
   pages: ['home', 'insert', 'layout', 'review', 'view'],
   sheets: ['home', 'insert', 'formulas', 'data', 'view'],
-  slides: ['home', 'insert', 'design', 'slideShow', 'view'],
+  slides: ['home', 'insert', 'draw', 'design', 'transitions', 'slideShow', 'view'],
   notes: ['home', 'insert', 'view']
 };
 function ribbonGroup(toolbar, label) {
@@ -113,9 +288,17 @@ function ribbonGroup(toolbar, label) {
   const caption = document.createElement('span'); caption.className = 'ribbon-group-label'; caption.textContent = label;
   group.append(commands, caption); toolbar.append(group); return commands;
 }
+function getSelectedSlideObject(doc = activeDoc()) {
+  if (state.app !== 'slides' || !state.selectedSlideObjectId) return null;
+  const presentation = window.BrightdeskSlidesService.ensurePresentation(doc);
+  return presentation.slides[presentation.current]?.objects?.find(object => object.id === state.selectedSlideObjectId) || null;
+}
 function renderRibbonTabs() {
   const tabs = $('ribbon-tabs'); tabs.innerHTML = '';
-  (ribbonTabs[state.app] || ['home']).forEach(tabKey => {
+  const tabKeys = [...(ribbonTabs[state.app] || ['home'])];
+  if (state.app === 'slides' && getSelectedSlideObject()) tabKeys.push('shapeFormat');
+  if (state.app === 'slides' && state.ribbonTab === 'shapeFormat' && !tabKeys.includes('shapeFormat')) state.ribbonTab = 'draw';
+  tabKeys.forEach(tabKey => {
     const tab = t(`ribbon.${tabKey}`);
     const button = document.createElement('button'); button.className = 'ribbon-tab'; button.textContent = tab;
     button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(state.ribbonTab === tabKey));
@@ -197,17 +380,233 @@ function renderToolbar() {
     }
   } else if (app === 'slides') {
     if (tab === 'home') {
-      const slides = group('slides'); addButton(slides, label('newSlide'), addSlide); addButton(slides, label('duplicate'), duplicateSlide); addButton(slides, label('delete'), deleteSlide);
+      const slides = group('slides'); addButton(slides, label('newSlide'), addSlide); addButton(slides, label('reuseSlides'), reuseSlides); addButton(slides, label('duplicate'), duplicateSlide); addButton(slides, label('delete'), deleteSlide);
+      const editing = group('editing');
+      const history = getSlideHistory(activeDoc());
+      const undo = addButton(editing, label('undo'), undoSlideEdit);
+      undo.dataset.slideUndo = 'true';
+      undo.disabled = !history.canUndo();
+      const redo = addButton(editing, label('redo'), redoSlideEdit);
+      redo.dataset.slideRedo = 'true';
+      redo.disabled = !history.canRedo();
+
+      const layoutGroup = ribbonGroup(toolbar, 'Layout');
+      const layoutSelect = document.createElement('select');
+      layoutSelect.className = 'slide-layout-select';
+      layoutSelect.setAttribute('aria-label', 'Slide layout');
+      const layoutOptions = [
+        ['title', 'Title slide'],
+        ['title-content', 'Title and content'],
+        ['two-content', 'Two content'],
+        ['section-header', 'Section header']
+      ];
+      layoutOptions.forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        layoutSelect.append(option);
+      });
+      const currentSlide = window.BrightdeskSlidesService.ensurePresentation(activeDoc()).slides[activeDoc().current];
+      layoutSelect.value = currentSlide.layout;
+      layoutSelect.addEventListener('change', () => setSlideLayout(layoutSelect.value));
+      layoutGroup.append(layoutSelect);
+      addButton(layoutGroup, 'Reset Layout', resetCurrentSlideLayout);
+
+      const sectionGroup = ribbonGroup(toolbar, 'Sections');
+      const sectionDoc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+      const selectedSlide = sectionDoc.slides[sectionDoc.current];
+      const selectedSection = sectionDoc.sections.find(section => section.id === selectedSlide.sectionId);
+      addButton(sectionGroup, 'New Section', addSlideSection);
+      const renameSectionButton = addButton(sectionGroup, 'Rename Section', renameSlideSection);
+      renameSectionButton.disabled = !selectedSection;
+      const removeSectionButton = addButton(sectionGroup, 'Remove Section', removeSlideSection);
+      removeSectionButton.disabled = !selectedSection;
+      const sectionSelect = document.createElement('select');
+      sectionSelect.className = 'slide-section-select';
+      sectionSelect.setAttribute('aria-label', 'Move current slide to section');
+      const noSection = document.createElement('option');
+      noSection.value = '';
+      noSection.textContent = 'No section';
+      sectionSelect.append(noSection);
+      sectionDoc.sections.forEach(section => {
+        const option = document.createElement('option');
+        option.value = section.id;
+        option.textContent = section.name;
+        sectionSelect.append(option);
+      });
+      sectionSelect.value = selectedSlide.sectionId || '';
+      sectionSelect.addEventListener('change', () => moveCurrentSlideToSection(sectionSelect.value || null));
+      sectionGroup.append(sectionSelect);
     } else if (tab === 'insert') {
-      const insert = group('slideContent'); addButton(insert, label('titleSlide'), () => addSlideWithContent('Title', 'Add a subtitle')); addButton(insert, label('textSlide'), () => addSlideWithContent('New section', 'Add your points here'));
+      const insert = group('slideContent');
+      addButton(insert, label('titleSlide'), () => addSlideWithLayout('title'));
+      addButton(insert, label('textSlide'), () => addSlideWithLayout('title-content'));
+      addButton(insert, 'Two content', () => addSlideWithLayout('two-content'));
+      addButton(insert, 'Section header', () => addSlideWithLayout('section-header'));
+    } else if (tab === 'draw') {
+      const shapes = ribbonGroup(toolbar, 'Insert shapes');
+      addButton(shapes, 'Text box', () => insertSlideObject('text'));
+      addButton(shapes, 'Rectangle', () => insertSlideObject('rectangle'));
+      addButton(shapes, 'Ellipse', () => insertSlideObject('ellipse'));
+      addButton(shapes, 'Line', () => insertSlideObject('line'));
+      const pictures = ribbonGroup(toolbar, 'Pictures');
+      addButton(pictures, 'Picture', insertSlidePicture, 'Insert a picture from this device');
+      const selection = ribbonGroup(toolbar, 'Selection');
+      const selected = getSelectedSlideObject();
+      const remove = addButton(selection, 'Delete selected', deleteSelectedSlideObject);
+      remove.disabled = !selected;
+      const clear = addButton(selection, 'Deselect', () => selectSlideObject(null));
+      clear.disabled = !selected;
+      const count = document.createElement('span');
+      count.className = 'slide-object-count';
+      const current = window.BrightdeskSlidesService.ensurePresentation(activeDoc()).slides[activeDoc().current];
+      count.textContent = `${current.objects?.length || 0} objects`;
+      selection.append(count);
+    } else if (tab === 'shapeFormat') {
+      const object = getSelectedSlideObject();
+      if (!object) {
+        state.ribbonTab = 'draw';
+        renderToolbar();
+        return;
+      }
+      const addColourPicker = (caption, className, value, disabled, patchKey) => {
+        const labelElement = document.createElement('label');
+        labelElement.className = 'slide-format-control';
+        const captionElement = document.createElement('span');
+        captionElement.textContent = caption;
+        const input = document.createElement('input');
+        input.type = 'color';
+        input.className = className;
+        input.value = value || '#FFFFFF';
+        input.disabled = Boolean(disabled);
+        input.setAttribute('aria-label', caption);
+        input.addEventListener('change', () => updateSelectedSlideObject({ [patchKey]: input.value }));
+        labelElement.append(captionElement, input);
+        return labelElement;
+      };
+      const fillGroup = ribbonGroup(toolbar, 'Fill');
+      fillGroup.append(addColourPicker('Fill colour', 'slide-object-fill', object.fill, object.type === 'text' || object.type === 'line', 'fill'));
+      const outlineGroup = ribbonGroup(toolbar, 'Outline');
+      outlineGroup.append(addColourPicker('Outline colour', 'slide-object-outline', object.stroke, false, 'stroke'));
+      const widthLabel = document.createElement('label');
+      widthLabel.className = 'slide-format-control';
+      widthLabel.textContent = 'Weight';
+      const widthInput = document.createElement('input');
+      widthInput.type = 'number';
+      widthInput.min = '0';
+      widthInput.max = '12';
+      widthInput.step = '0.5';
+      widthInput.value = String(object.strokeWidth);
+      widthInput.setAttribute('aria-label', 'Outline weight');
+      widthInput.addEventListener('change', () => updateSelectedSlideObject({ strokeWidth: Number(widthInput.value) }));
+      widthLabel.append(widthInput);
+      outlineGroup.append(widthLabel);
+      const textGroup = ribbonGroup(toolbar, 'Text');
+      textGroup.append(addColourPicker('Text colour', 'slide-object-text-colour', object.textColor, object.type !== 'text', 'textColor'));
+      const fontSizeLabel = document.createElement('label');
+      fontSizeLabel.className = 'slide-format-control';
+      fontSizeLabel.textContent = 'Size';
+      const fontSizeInput = document.createElement('input');
+      fontSizeInput.type = 'number';
+      fontSizeInput.min = '8';
+      fontSizeInput.max = '96';
+      fontSizeInput.value = String(object.fontSize);
+      fontSizeInput.disabled = object.type !== 'text';
+      fontSizeInput.setAttribute('aria-label', 'Text size');
+      fontSizeInput.addEventListener('change', () => updateSelectedSlideObject({ fontSize: Number(fontSizeInput.value) }));
+      fontSizeLabel.append(fontSizeInput);
+      textGroup.append(fontSizeLabel);
+      const boldButton = addButton(textGroup, object.bold ? 'Bold on' : 'Bold off', () => updateSelectedSlideObject({ bold: !object.bold }));
+      boldButton.disabled = object.type !== 'text';
+      const deleteGroup = ribbonGroup(toolbar, 'Object');
+      addButton(deleteGroup, 'Delete object', deleteSelectedSlideObject);
+    } else if (tab === 'transitions') {
+      const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+      const currentSlide = doc.slides[doc.current];
+      const transitionGroup = ribbonGroup(toolbar, label('transition'));
+      const transitionSelect = document.createElement('select');
+      transitionSelect.className = 'slide-transition-select';
+      transitionSelect.setAttribute('aria-label', 'Slide transition');
+      [
+        ['none', label('transitionNone')],
+        ['fade', label('transitionFade')],
+        ['push', label('transitionPush')],
+        ['wipe', label('transitionWipe')]
+      ].forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        transitionSelect.append(option);
+      });
+      transitionSelect.value = currentSlide.transition || 'none';
+      transitionSelect.addEventListener('change', () => setSlideTransition(transitionSelect.value));
+      transitionGroup.append(transitionSelect);
+      const hint = document.createElement('span');
+      hint.className = 'slide-transition-hint';
+      hint.textContent = label('transitionHint');
+      transitionGroup.append(hint);
     } else if (tab === 'design') {
       const design = group('themes');
-      [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => addButton(design, label, () => setSlideTheme(theme)));
+      const presentation = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+      [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => {
+        const button = addButton(design, label, () => setSlideTheme(theme));
+        const selected = presentation.themeId === theme;
+        button.setAttribute('aria-pressed', String(selected));
+        if (selected) button.classList.add('active');
+      });
+
+      const backgroundGroup = group('slideBackground');
+      const backgroundLabel = document.createElement('label');
+      backgroundLabel.className = 'slide-background-picker';
+      const backgroundText = document.createElement('span');
+      backgroundText.textContent = label('backgroundColour');
+      const backgroundInput = document.createElement('input');
+      backgroundInput.type = 'color';
+      backgroundInput.className = 'slide-background-colour';
+      backgroundInput.value = window.BrightdeskSlidesService.getSlideBackgroundColor(presentation, presentation.current);
+      backgroundInput.setAttribute('aria-label', label('backgroundColour'));
+      backgroundInput.addEventListener('change', () => setSlideBackgroundColor(backgroundInput.value));
+      backgroundLabel.append(backgroundText, backgroundInput);
+      backgroundGroup.append(backgroundLabel);
+      addButton(backgroundGroup, label('resetBackground'), () => setSlideBackgroundColor(null));
+
+      const sizeGroup = ribbonGroup(toolbar, 'Slide Size');
+      const sizeSelect = document.createElement('select');
+      sizeSelect.className = 'slide-size-select';
+      sizeSelect.setAttribute('aria-label', 'Slide size');
+      [
+        ['widescreen', 'Widescreen (16:9)'],
+        ['standard', 'Standard (4:3)']
+      ].forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        sizeSelect.append(option);
+      });
+      sizeSelect.value = presentation.slideSize;
+      sizeSelect.addEventListener('change', () => setSlideSize(sizeSelect.value));
+      sizeGroup.append(sizeSelect);
     } else if (tab === 'slideShow') {
-      const show = group('startPresentation'); addButton(show, label('fromCurrentSlide'), presentSlides);
+      const show = group('startPresentation');
+      addButton(show, label('fromCurrentSlide'), () => presentSlides(false));
+      addButton(show, 'From first slide', () => presentSlides(true));
+      addButton(show, 'Presenter View', () => presentWithPresenterView(false));
+      const currentSlide = window.BrightdeskSlidesService.ensurePresentation(activeDoc()).slides[activeDoc().current];
+      addButton(show, currentSlide.hidden ? 'Unhide Slide' : 'Hide Slide', toggleSlideHidden);
     } else {
-      const view = group('zoom'); addButton(view, label('fitSlide'), () => { slideWrap.scrollTop = 0; setStatus('Slide fitted to workspace'); });
+      const view = group('zoom');
+      addButton(view, label('fitSlide'), () => { slideWrap.scrollTop = 0; setStatus('Slide fitted to workspace'); });
       addButton(view, label('slideCount'), () => setStatus(`${activeDoc().slides.length} slides`));
+      const views = ribbonGroup(toolbar, 'Views');
+      [
+        ['normal', 'Normal view'],
+        ['sorter', 'Slide Sorter'],
+        ['outline', 'Outline View']
+      ].forEach(([viewName, viewLabel]) => {
+        const button = addButton(views, viewLabel, () => setSlideView(viewName));
+        button.setAttribute('aria-pressed', String(state.slideView === viewName));
+        button.classList.toggle('active', state.slideView === viewName);
+      });
     }
   } else if (app === 'notes') {
     if (tab === 'home') {
@@ -261,8 +660,62 @@ function applyEditorZoom() { editor.style.fontSize = `${14 * state.editorZoom / 
 function changeSheetZoom(delta) { state.sheetZoom = Math.max(70, Math.min(160, state.sheetZoom + delta)); applySheetZoom(); }
 function applySheetZoom() { sheetWrap.style.zoom = `${state.sheetZoom}%`; setStatus(`Sheet zoom ${state.sheetZoom}%`); }
 function insertNoteText(value) { const input = $('notes-editor'); const start = input.selectionStart, end = input.selectionEnd; input.setRangeText(value, start, end, 'end'); activeDoc().text = input.value; persist(); input.focus(); }
-function addSlideWithContent(title, body) { activeDoc().slides.push({ title, body }); activeDoc().current = activeDoc().slides.length - 1; renderSlides(); renderToolbar(); persist(); }
-function setSlideTheme(theme) { state.slideTheme = theme; renderSlides(); setStatus(`${theme[0].toUpperCase()}${theme.slice(1)} theme selected`); }
+function addSlideWithContent(title, body) { const doc = activeDoc(); doc.slides.push({ title, body }); doc.current = doc.slides.length - 1; commitSlideChange(doc); renderSlides(); renderToolbar(); persist(); }
+function setSlideTheme(theme) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  try {
+    window.BrightdeskSlidesService.setSlideTheme(doc, theme);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`${theme[0].toUpperCase()}${theme.slice(1)} theme selected`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+function setSlideBackgroundColor(backgroundColor) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  try {
+    window.BrightdeskSlidesService.setSlideBackgroundColor(doc, doc.current, backgroundColor);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(backgroundColor ? 'Slide background updated' : 'Slide background reset to the presentation theme');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function setSlideTransition(transition) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  try {
+    window.BrightdeskSlidesService.setSlideTransition(doc, doc.current, transition);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    const label = transition === 'none' ? 'No transition' : transition[0].toUpperCase() + transition.slice(1);
+    setStatus(`${label} transition selected for this slide`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+function addSlideWithLayout(layout) {
+  const doc = activeDoc();
+  const slide = window.BrightdeskSlidesService.addSlide(doc, {
+    title: '',
+    body: '',
+    bodySecondary: '',
+    layout
+  });
+  commitSlideChange(doc);
+  renderSlides();
+  renderToolbar();
+  persist();
+  return slide;
+}
 function setCell(row,col,value) { while (activeDoc().cells.length <= row) activeDoc().cells.push([]); while (activeDoc().cells[row].length <= col) activeDoc().cells[row].push(''); activeDoc().cells[row][col]=value; persist(); }
 function refreshSheetValues() {
   sheetWrap.querySelectorAll('input.grid-cell').forEach(input => {
@@ -288,51 +741,1602 @@ function renderSheet() {
     tbody.append(tr);
   }); table.append(tbody); sheetWrap.innerHTML=''; sheetWrap.append(table);
 }
-function renderSlides() {
-  const doc=activeDoc(); if(!Array.isArray(doc.slides)||!doc.slides.length)doc.slides=[{title:t('common.newSlide'),body:''}];
-  doc.current=Math.min(Math.max(0,doc.current||0),doc.slides.length-1); const slide=doc.slides[doc.current];
-  slideWrap.innerHTML='';
-  const stage=document.createElement('div');stage.className=`slide-stage theme-${state.slideTheme}`;
-  const title=document.createElement('textarea');title.className='slide-title';title.value=slide.title||'';title.setAttribute('aria-label','Slide title');title.lang=state.proofingLanguage;
-  const body=document.createElement('textarea');body.className='slide-body';body.value=slide.body||'';body.setAttribute('aria-label','Slide text');body.lang=state.proofingLanguage;
-  title.addEventListener('input',()=>{slide.title=title.value;persist();});body.addEventListener('input',()=>{slide.body=body.value;persist();});
-  stage.append(title,body);
-  const controls=document.createElement('div');controls.className='slide-controls';
-  const prev=document.createElement('button');prev.textContent='← Previous';prev.disabled=doc.current===0;prev.onclick=()=>{doc.current--;renderSlides();renderToolbar();};
-  const count=document.createElement('span');count.textContent=`Slide ${doc.current+1} of ${doc.slides.length}`;
-  const next=document.createElement('button');next.textContent='Next →';next.disabled=doc.current===doc.slides.length-1;next.onclick=()=>{doc.current++;renderSlides();renderToolbar();};
-  controls.append(prev,count,next);slideWrap.append(stage,controls);
+function renderSlideOutline(doc) {
+  slideWrap.innerHTML = '';
+  const slidesService = window.BrightdeskSlidesService;
+  const view = document.createElement('section');
+  view.className = 'slide-outline-view';
+  view.setAttribute('aria-label', 'Presentation outline');
+
+  const header = document.createElement('header');
+  header.className = 'slide-outline-header';
+  const heading = document.createElement('div');
+  const title = document.createElement('h2');
+  title.textContent = 'Outline View';
+  const description = document.createElement('p');
+  description.textContent = 'Edit slide titles and content in one continuous outline.';
+  heading.append(title, description);
+  const count = document.createElement('span');
+  count.className = 'slide-outline-count';
+  count.textContent = `${doc.slides.length} slides`;
+  header.append(heading, count);
+
+  const list = document.createElement('div');
+  list.className = 'slide-outline-list';
+
+  doc.slides.forEach((slide, index) => {
+    if (slide.sectionId && (index === 0 || doc.slides[index - 1].sectionId !== slide.sectionId)) {
+      const section = doc.sections.find(item => item.id === slide.sectionId);
+      if (section) {
+        const sectionHeading = document.createElement('div');
+        sectionHeading.className = 'slide-outline-section-heading';
+        sectionHeading.textContent = section.name;
+        list.append(sectionHeading);
+      }
+    }
+
+    const entry = document.createElement('article');
+    entry.className = 'slide-outline-entry';
+    entry.classList.toggle('is-hidden-slide', slide.hidden === true);
+    entry.dataset.slideIndex = String(index);
+
+    const meta = document.createElement('div');
+    meta.className = 'slide-outline-meta';
+    const number = document.createElement('span');
+    number.className = 'slide-outline-number';
+    number.textContent = `Slide ${index + 1}`;
+    meta.append(number);
+
+    if (slide.hidden === true) {
+      const hiddenBadge = document.createElement('span');
+      hiddenBadge.className = 'slide-hidden-indicator';
+      hiddenBadge.textContent = 'Hidden';
+      meta.append(hiddenBadge);
+    }
+
+    const openButton = document.createElement('button');
+    openButton.type = 'button';
+    openButton.className = 'slide-outline-open-button';
+    openButton.textContent = 'Edit slide';
+    openButton.setAttribute('aria-label', `Open slide ${index + 1} in Normal view`);
+    openButton.addEventListener('click', () => {
+      slidesService.setCurrentSlide(doc, index);
+      getSlideHistory(doc).sync(doc);
+      setSlideView('normal');
+    });
+    meta.append(openButton);
+
+    const fields = document.createElement('div');
+    fields.className = 'slide-outline-fields';
+
+    const layoutDefinition = slidesService.getSlideLayoutDefinition(slide.layout);
+    const titleLabel = document.createElement('label');
+    titleLabel.className = 'slide-outline-field';
+    const titleCaption = document.createElement('span');
+    titleCaption.textContent = layoutDefinition.titleLabel;
+    const titleInput = document.createElement('textarea');
+    titleInput.className = 'slide-outline-title';
+    titleInput.rows = 1;
+    titleInput.value = slide.title || '';
+    titleInput.placeholder = layoutDefinition.titlePlaceholder;
+    titleInput.setAttribute('aria-label', `Slide ${index + 1} title`);
+    titleInput.lang = state.proofingLanguage;
+    titleInput.addEventListener('input', () => {
+      slidesService.updateSlide(doc, index, { title: titleInput.value });
+      commitSlideChange(doc, `slide:${index}:title`);
+      persist();
+    });
+    titleLabel.append(titleCaption, titleInput);
+    fields.append(titleLabel);
+
+    const contentFields = document.createElement('div');
+    contentFields.className = 'slide-outline-content-fields';
+    const bodyLabel = document.createElement('label');
+    bodyLabel.className = 'slide-outline-field slide-outline-content-field';
+    const bodyCaption = document.createElement('span');
+    bodyCaption.textContent = layoutDefinition.bodyLabel;
+    const bodyInput = document.createElement('textarea');
+    bodyInput.className = 'slide-outline-body';
+    bodyInput.rows = 3;
+    bodyInput.value = slide.body || '';
+    bodyInput.placeholder = layoutDefinition.bodyPlaceholder;
+    bodyInput.setAttribute('aria-label', `Slide ${index + 1} content`);
+    bodyInput.lang = state.proofingLanguage;
+    bodyInput.addEventListener('input', () => {
+      slidesService.updateSlide(doc, index, { body: bodyInput.value });
+      commitSlideChange(doc, `slide:${index}:body`);
+      persist();
+    });
+    bodyLabel.append(bodyCaption, bodyInput);
+    contentFields.append(bodyLabel);
+
+    if (slide.layout === 'two-content') {
+      const secondaryLabel = document.createElement('label');
+      secondaryLabel.className = 'slide-outline-field slide-outline-content-field';
+      const secondaryCaption = document.createElement('span');
+      secondaryCaption.textContent = layoutDefinition.secondaryBodyLabel || 'Second content column';
+      const secondaryInput = document.createElement('textarea');
+      secondaryInput.className = 'slide-outline-body slide-outline-body-secondary';
+      secondaryInput.rows = 3;
+      secondaryInput.value = slide.bodySecondary || '';
+      secondaryInput.placeholder = layoutDefinition.secondaryBodyPlaceholder || '';
+      secondaryInput.setAttribute('aria-label', `Slide ${index + 1} ${layoutDefinition.secondaryBodyLabel || 'second content column'}`);
+      secondaryInput.lang = state.proofingLanguage;
+      secondaryInput.addEventListener('input', () => {
+        slidesService.updateSlide(doc, index, { bodySecondary: secondaryInput.value });
+        commitSlideChange(doc, `slide:${index}:secondary`);
+        persist();
+      });
+      secondaryLabel.append(secondaryCaption, secondaryInput);
+      contentFields.append(secondaryLabel);
+    }
+
+    fields.append(contentFields);
+    entry.append(meta, fields);
+    list.append(entry);
+  });
+
+  view.append(header, list);
+  slideWrap.append(view);
 }
-function addSlide(){activeDoc().slides.push({title:`Slide ${activeDoc().slides.length+1}`,body:''});activeDoc().current=activeDoc().slides.length-1;renderSlides();renderToolbar();persist();}
-function duplicateSlide(){const d=activeDoc(),copy=clone(d.slides[d.current]);d.slides.splice(d.current+1,0,copy);d.current++;renderSlides();renderToolbar();persist();}
-function deleteSlide(){const d=activeDoc();if(d.slides.length===1){alert('A presentation needs at least one slide.');return;}d.slides.splice(d.current,1);d.current=Math.max(0,d.current-1);renderSlides();renderToolbar();persist();}
-function presentSlides() {
-  const d = activeDoc();
-  let i = d.current;
+
+function renderSlideSorter(doc) {
+  slideWrap.innerHTML = '';
+  const view = document.createElement('section');
+  view.className = 'slide-sorter-view';
+  const header = document.createElement('header');
+  header.className = 'slide-sorter-header';
+  const heading = document.createElement('div');
+  const title = document.createElement('h2');
+  title.textContent = 'Slide Sorter';
+  const description = document.createElement('p');
+  description.textContent = 'Select a slide, change its order, or double-click to edit it.';
+  heading.append(title, description);
+  const count = document.createElement('span');
+  count.className = 'slide-sorter-count';
+  count.textContent = `${doc.slides.length} slides`;
+  header.append(heading, count);
+
+  const grid = document.createElement('div');
+  grid.className = 'slide-sorter-grid';
+  let draggedIndex = -1;
+
+  doc.slides.forEach((slide, index) => {
+    if (slide.sectionId && (index === 0 || doc.slides[index - 1].sectionId !== slide.sectionId)) {
+      const section = doc.sections.find(item => item.id === slide.sectionId);
+      if (section) {
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'slide-sorter-section-heading';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.textContent = state.collapsedSlideSections.has(section.id) ? '▸' : '▾';
+        toggle.setAttribute('aria-label', `${state.collapsedSlideSections.has(section.id) ? 'Expand' : 'Collapse'} section ${section.name}`);
+        const name = document.createElement('strong');
+        name.textContent = section.name;
+        const memberCount = doc.slides.filter(item => item.sectionId === section.id).length;
+        const total = document.createElement('small');
+        total.textContent = `${memberCount} slides`;
+        toggle.append(name, total);
+        toggle.addEventListener('click', () => {
+          const collapsed = !state.collapsedSlideSections.has(section.id);
+          if (collapsed) state.collapsedSlideSections.add(section.id);
+          else state.collapsedSlideSections.delete(section.id);
+          grid.querySelectorAll('.slide-sorter-card').forEach(item => {
+            if (item.dataset.sectionId === section.id) item.hidden = collapsed;
+          });
+          toggle.firstChild.textContent = collapsed ? '▸' : '▾';
+          toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} section ${section.name}`);
+        });
+        sectionHeader.append(toggle);
+        grid.append(sectionHeader);
+      }
+    }
+
+    const card = document.createElement('article');
+    card.className = 'slide-sorter-card';
+    card.classList.toggle('active', index === doc.current);
+    card.classList.toggle('is-hidden-slide', slide.hidden === true);
+    card.draggable = true;
+    card.dataset.slideIndex = String(index);
+    card.dataset.sectionId = slide.sectionId || '';
+    card.hidden = Boolean(slide.sectionId && state.collapsedSlideSections.has(slide.sectionId));
+
+    const select = document.createElement('button');
+    select.type = 'button';
+    select.className = 'slide-sorter-select';
+    select.setAttribute('aria-label', `Select slide ${index + 1}: ${slide.title || 'Untitled slide'}${slide.hidden ? ', hidden from slide show' : ''}`);
+    select.setAttribute('aria-current', index === doc.current ? 'true' : 'false');
+    const number = document.createElement('span');
+    number.className = 'slide-sorter-number';
+    number.textContent = String(index + 1);
+    const preview = document.createElement('span');
+    preview.className = `slide-sorter-preview theme-${doc.themeId} layout-${slide.layout} size-${doc.slideSize}`;
+    const previewTitle = document.createElement('b');
+    previewTitle.textContent = slide.title.trim() || `Slide ${index + 1}`;
+    const layoutDefinition = slidesService.getSlideLayoutDefinition(slide.layout);
+    const previewBody = document.createElement('span');
+    previewBody.textContent = slide.body.trim().slice(0, 120) || layoutDefinition.bodyPlaceholder;
+    const previewTextColor = slide.backgroundColor
+      ? window.BrightdeskSlidesService.getReadableTextColor(slide.backgroundColor)
+      : '';
+    preview.style.backgroundColor = slide.backgroundColor || '';
+    previewTitle.style.color = previewTextColor;
+    previewBody.style.color = previewTextColor;
+    preview.append(previewTitle, previewBody);
+    if (slide.layout === 'two-content') {
+      const second = document.createElement('span');
+      second.className = 'slide-sorter-secondary';
+      second.textContent = slide.bodySecondary.trim().slice(0, 90) || layoutDefinition.secondaryBodyPlaceholder || 'Second column';
+      second.style.color = previewTextColor;
+      second.style.backgroundColor = slide.backgroundColor || '';
+      preview.append(second);
+    }
+    select.append(number, preview);
+    const sorterTransition = document.createElement('span');
+    sorterTransition.className = 'slide-sorter-transition';
+    sorterTransition.dataset.slideTransition = slide.transition || 'none';
+    sorterTransition.textContent = slide.transition && slide.transition !== 'none'
+      ? slide.transition[0].toUpperCase() + slide.transition.slice(1)
+      : 'No transition';
+    select.append(sorterTransition);
+    if (slide.hidden) {
+      const hiddenBadge = document.createElement('span');
+      hiddenBadge.className = 'slide-hidden-indicator';
+      hiddenBadge.textContent = 'Hidden';
+      select.append(hiddenBadge);
+    }
+    select.addEventListener('click', () => {
+      window.BrightdeskSlidesService.setCurrentSlide(doc, index);
+      getSlideHistory(doc).sync(doc);
+      grid.querySelectorAll('.slide-sorter-card').forEach((item, itemIndex) => {
+        const active = itemIndex === index;
+        item.classList.toggle('active', active);
+        item.querySelector('.slide-sorter-select')?.setAttribute('aria-current', String(active));
+      });
+    });
+    select.addEventListener('dblclick', () => setSlideView('normal'));
+
+    const actions = document.createElement('div');
+    actions.className = 'slide-sorter-actions';
+    const earlier = document.createElement('button');
+    earlier.type = 'button';
+    earlier.textContent = 'Move earlier';
+    earlier.disabled = index === 0;
+    earlier.addEventListener('click', () => {
+      window.BrightdeskSlidesService.moveSlide(doc, index, index - 1);
+      commitSlideChange(doc);
+      renderSlides();
+      persist();
+    });
+    const later = document.createElement('button');
+    later.type = 'button';
+    later.textContent = 'Move later';
+    later.disabled = index === doc.slides.length - 1;
+    later.addEventListener('click', () => {
+      window.BrightdeskSlidesService.moveSlide(doc, index, index + 1);
+      commitSlideChange(doc);
+      renderSlides();
+      persist();
+    });
+    actions.append(earlier, later);
+    card.append(select, actions);
+
+    card.addEventListener('dragstart', event => {
+      draggedIndex = index;
+      card.classList.add('dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(index));
+      }
+    });
+    card.addEventListener('dragend', () => {
+      draggedIndex = -1;
+      card.classList.remove('dragging');
+      grid.querySelectorAll('.drag-over').forEach(node => node.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', event => {
+      event.preventDefault();
+      if (draggedIndex !== index) card.classList.add('drag-over');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', event => {
+      event.preventDefault();
+      card.classList.remove('drag-over');
+      const source = draggedIndex;
+      if (source < 0 || source === index) return;
+      window.BrightdeskSlidesService.moveSlide(doc, source, index);
+      commitSlideChange(doc);
+      renderSlides();
+      persist();
+    });
+    grid.append(card);
+  });
+
+  view.append(header, grid);
+  slideWrap.append(view);
+}
+
+
+function insertSlideObject(type) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  const definitions = {
+    text: { type: 'text', x: 28, y: 34, width: 38, height: 16, text: 'Add your text', fill: null, stroke: '#9A5E20', strokeWidth: 1, fontSize: 24, textColor: '#26364D', bold: false },
+    rectangle: { type: 'rectangle', x: 18, y: 32, width: 22, height: 22, fill: '#F3EBDD', stroke: '#9A5E20', strokeWidth: 2 },
+    ellipse: { type: 'ellipse', x: 48, y: 32, width: 22, height: 22, fill: '#DCE6F3', stroke: '#4E6687', strokeWidth: 2 },
+    line: { type: 'line', x: 20, y: 70, width: 54, height: 1, fill: null, stroke: '#26364D', strokeWidth: 2 }
+  };
+  if (!definitions[type]) return;
+  try {
+    const object = window.BrightdeskSlidesService.addSlideObject(doc, doc.current, definitions[type]);
+    state.selectedSlideObjectId = object.id;
+    state.ribbonTab = 'shapeFormat';
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`${type === 'text' ? 'Text box' : type[0].toUpperCase() + type.slice(1)} added`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+async function insertSlidePicture() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  try {
+    const picture = await window.brightdesk.openSlidePicture();
+    if (!picture) return;
+    const imageAssetId = await window.brightdesk.storeSlidePicture(picture.imageData);
+    const object = window.BrightdeskSlidesService.addSlideObject(doc, doc.current, {
+      type: 'image',
+      x: 20, y: 22, width: 42, height: 32,
+      fill: null, stroke: null, strokeWidth: 0,
+      text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0,
+      imageData: picture.imageData,
+      imageAssetId,
+      imageName: picture.imageName,
+      imageWidth: picture.imageWidth,
+      imageHeight: picture.imageHeight
+    });
+    state.selectedSlideObjectId = object.id;
+    state.ribbonTab = 'shapeFormat';
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`Picture added: ${picture.imageName}`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function selectSlideObject(objectId) {
+  state.selectedSlideObjectId = objectId || null;
+  const selectedObject = getSelectedSlideObject();
+  if (selectedObject) state.ribbonTab = 'shapeFormat';
+  else if (state.ribbonTab === 'shapeFormat') state.ribbonTab = 'draw';
+  slideWrap.querySelectorAll('[data-slide-object]').forEach(element => {
+    const active = element.dataset.slideObject === state.selectedSlideObjectId;
+    element.classList.toggle('slide-object-selected', active);
+    element.setAttribute('aria-pressed', String(active));
+  });
+  const canvasRow = slideWrap.querySelector('.slide-editor-canvas-row');
+  const existingPane = canvasRow?.querySelector('.slide-format-pane');
+  existingPane?.remove();
+  if (canvasRow) {
+    canvasRow.classList.toggle('has-format-pane', Boolean(selectedObject));
+    if (selectedObject) canvasRow.append(renderSlideFormatPane(selectedObject));
+  }
+  renderToolbar();
+}
+
+function updateSelectedSlideObject(patch) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  if (!state.selectedSlideObjectId) return;
+  try {
+    window.BrightdeskSlidesService.updateSlideObject(doc, doc.current, state.selectedSlideObjectId, patch);
+    commitSlideChange(doc);
+    persist();
+    renderSlides();
+    renderToolbar();
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function reorderSelectedSlideObject(action) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  if (!state.selectedSlideObjectId) return;
+  try {
+    const changed = window.BrightdeskSlidesService.reorderSlideObject(
+      doc,
+      doc.current,
+      state.selectedSlideObjectId,
+      action
+    );
+    if (!changed) return;
+    commitSlideChange(doc);
+    persist();
+    renderSlides();
+    renderToolbar();
+    const messages = {
+      front: 'Object brought to front',
+      forward: 'Object moved forward',
+      backward: 'Object moved backward',
+      back: 'Object sent to back'
+    };
+    setStatus(messages[action] || 'Object layer order updated');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function deleteSelectedSlideObject() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  if (!state.selectedSlideObjectId) return;
+  const deleted = window.BrightdeskSlidesService.deleteSlideObject(doc, doc.current, state.selectedSlideObjectId);
+  if (!deleted) return;
+  state.selectedSlideObjectId = null;
+  state.ribbonTab = 'draw';
+  commitSlideChange(doc);
+  renderSlides();
+  renderToolbar();
+  persist();
+  setStatus('Slide object deleted');
+}
+
+function createSlideObjectElement(object, editable = false) {
+  const element = document.createElement('div');
+  element.className = `slide-object slide-object-${object.type}`;
+  element.dataset.slideObject = object.id;
+  element.setAttribute('role', 'group');
+  element.setAttribute('aria-label', `${object.type} object`);
+  element.tabIndex = 0;
+  element.style.left = `${object.x}%`;
+  element.style.top = `${object.y}%`;
+  element.style.width = `${object.width}%`;
+  element.style.height = object.type === 'line' ? '0' : `${object.height}%`;
+  element.style.transform = object.rotation ? `rotate(${object.rotation}deg)` : '';
+  element.style.backgroundColor = object.fill || 'transparent';
+  element.style.color = object.textColor || '#26364D';
+  element.style.border = object.stroke
+    ? `${Math.max(0, object.strokeWidth)}px solid ${object.stroke}`
+    : 'none';
+  if (object.type === 'ellipse') element.style.borderRadius = '50%';
+  if (object.type === 'line') {
+    element.style.backgroundColor = 'transparent';
+    element.style.border = '0';
+    element.style.borderTop = `${Math.max(1, object.strokeWidth)}px solid ${object.stroke || '#26364D'}`;
+  }
+  let textEditor = null;
+  if (object.type === 'text') {
+    textEditor = document.createElement('div');
+    textEditor.className = 'slide-object-text-content';
+    textEditor.contentEditable = editable ? 'true' : 'false';
+    textEditor.spellcheck = true;
+    textEditor.style.fontSize = `${object.fontSize}px`;
+    textEditor.style.fontWeight = object.bold ? '700' : '400';
+    textEditor.textContent = object.text || '';
+    element.append(textEditor);
+    element.setAttribute('aria-label', 'Text box');
+  } else if (object.type === 'image') {
+    const image = document.createElement('img');
+    image.className = 'slide-object-image-content';
+    image.src = object.imageData;
+    image.alt = object.imageName || 'Slide picture';
+    image.draggable = false;
+    image.decoding = 'async';
+    element.append(image);
+    element.setAttribute('aria-label', image.alt);
+  } else if (object.text) {
+    element.textContent = object.text;
+  }
+
+  if (editable) {
+    if (textEditor) {
+      textEditor.addEventListener('input', () => {
+        const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+        window.BrightdeskSlidesService.updateSlideObject(doc, doc.current, object.id, { text: textEditor.textContent || '' });
+        commitSlideChange(doc, `slide-object:${object.id}:text`);
+        persist();
+      });
+    }
+    element.addEventListener('click', event => {
+      event.stopPropagation();
+      selectSlideObject(object.id);
+    });
+
+    const moveHandle = document.createElement('button');
+    moveHandle.type = 'button';
+    moveHandle.className = 'slide-object-drag-handle';
+    moveHandle.textContent = '⋮⋮';
+    moveHandle.title = 'Move object';
+    moveHandle.setAttribute('aria-label', 'Move object');
+    const resizeHandle = document.createElement('button');
+    resizeHandle.type = 'button';
+    resizeHandle.className = 'slide-object-resize-handle';
+    resizeHandle.textContent = '◢';
+    resizeHandle.title = 'Resize object';
+    resizeHandle.setAttribute('aria-label', 'Resize object');
+
+    const startGesture = (event, mode, handle) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectSlideObject(object.id);
+      const stage = element.parentElement;
+      const bounds = stage.getBoundingClientRect();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const original = { x: object.x, y: object.y, width: object.width, height: object.height };
+      const next = { ...original };
+      const apply = () => {
+        element.style.left = `${next.x}%`;
+        element.style.top = `${next.y}%`;
+        element.style.width = `${next.width}%`;
+        element.style.height = object.type === 'line' ? '0' : `${next.height}%`;
+      };
+      const onMove = moveEvent => {
+        const deltaX = (moveEvent.clientX - startX) / Math.max(1, bounds.width) * 100;
+        const deltaY = (moveEvent.clientY - startY) / Math.max(1, bounds.height) * 100;
+        if (mode === 'move') {
+          next.x = Math.max(0, Math.min(100 - original.width, original.x + deltaX));
+          next.y = Math.max(0, Math.min(100 - original.height, original.y + deltaY));
+        } else {
+          next.width = Math.max(3, Math.min(100 - original.x, original.width + deltaX));
+          next.height = Math.max(3, Math.min(100 - original.y, original.height + deltaY));
+        }
+        apply();
+      };
+      const onEnd = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onEnd);
+        window.removeEventListener('pointercancel', onEnd);
+        const changed = Math.abs(next.x - original.x) > 0.01
+          || Math.abs(next.y - original.y) > 0.01
+          || Math.abs(next.width - original.width) > 0.01
+          || Math.abs(next.height - original.height) > 0.01;
+        if (!changed) return;
+        const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+        window.BrightdeskSlidesService.updateSlideObject(doc, doc.current, object.id, next);
+        commitSlideChange(doc);
+        persist();
+        renderSlides();
+        renderToolbar();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onEnd, { once: true });
+      window.addEventListener('pointercancel', onEnd, { once: true });
+      handle.setPointerCapture?.(event.pointerId);
+    };
+    moveHandle.addEventListener('pointerdown', event => startGesture(event, 'move', moveHandle));
+    resizeHandle.addEventListener('pointerdown', event => startGesture(event, 'resize', resizeHandle));
+    element.append(moveHandle, resizeHandle);
+  }
+  return element;
+}
+
+
+function renderSlideFormatPane(object) {
+  const pane = document.createElement('aside');
+  pane.className = 'slide-format-pane';
+  pane.setAttribute('aria-label', 'Format Shape pane');
+
+  const header = document.createElement('header');
+  header.className = 'slide-format-pane-header';
+  const title = document.createElement('h3');
+  title.textContent = 'Format Shape';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'slide-format-pane-close';
+  close.textContent = '×';
+  close.title = 'Close Format Shape pane';
+  close.setAttribute('aria-label', 'Close Format Shape pane');
+  close.addEventListener('click', () => selectSlideObject(null));
+  header.append(title, close);
+  pane.append(header);
+
+  const createGroup = (caption, open = false) => {
+    const details = document.createElement('details');
+    details.className = 'slide-format-pane-group';
+    details.open = open;
+    const summary = document.createElement('summary');
+    summary.textContent = caption;
+    details.append(summary);
+    pane.append(details);
+    return details;
+  };
+
+  const addControl = (container, caption, property, type, options = {}) => {
+    const labelElement = document.createElement('label');
+    labelElement.className = 'slide-format-pane-field';
+    const captionElement = document.createElement('span');
+    captionElement.textContent = caption;
+    const input = document.createElement('input');
+    input.type = type;
+    input.setAttribute('aria-label', caption);
+    input.dataset.shapeProperty = property;
+    if (type === 'color') {
+      input.value = object[property] || options.fallback || '#FFFFFF';
+      input.disabled = options.disabled === true;
+    } else {
+      input.value = String(object[property] ?? options.fallback ?? '');
+      if (options.min !== undefined) input.min = String(options.min);
+      if (options.max !== undefined) input.max = String(options.max);
+      if (options.step !== undefined) input.step = String(options.step);
+    }
+    input.addEventListener('change', () => {
+      const value = type === 'number' ? Number(input.value) : input.value;
+      updateSelectedSlideObject({ [property]: value });
+    });
+    labelElement.append(captionElement, input);
+    container.append(labelElement);
+    return input;
+  };
+
+  const fillLine = createGroup('Fill & Line', true);
+  addControl(fillLine, 'Fill colour', 'fill', 'color', {
+    fallback: '#FFFFFF',
+    disabled: object.type === 'text' || object.type === 'line' || object.type === 'image'
+  });
+  addControl(fillLine, 'Outline colour', 'stroke', 'color');
+  addControl(fillLine, 'Outline weight', 'strokeWidth', 'number', {
+    min: 0, max: 12, step: 0.5
+  });
+
+  if (object.type === 'text') {
+    const textGroup = createGroup('Text');
+    addControl(textGroup, 'Text colour', 'textColor', 'color');
+    addControl(textGroup, 'Font size', 'fontSize', 'number', {
+      min: 8, max: 96, step: 1
+    });
+    const boldLabel = document.createElement('label');
+    boldLabel.className = 'slide-format-pane-toggle';
+    const boldInput = document.createElement('input');
+    boldInput.type = 'checkbox';
+    boldInput.checked = object.bold === true;
+    boldInput.setAttribute('aria-label', 'Bold text');
+    boldInput.addEventListener('change', () => updateSelectedSlideObject({ bold: boldInput.checked }));
+    const boldText = document.createElement('span');
+    boldText.textContent = 'Bold text';
+    boldLabel.append(boldInput, boldText);
+    textGroup.append(boldLabel);
+  }
+
+  const size = createGroup('Size & Properties', true);
+  addControl(size, 'Horizontal position (%)', 'x', 'number', { min: 0, max: 100, step: 0.5 });
+  addControl(size, 'Vertical position (%)', 'y', 'number', { min: 0, max: 100, step: 0.5 });
+  addControl(size, 'Width (%)', 'width', 'number', { min: 1, max: 100, step: 0.5 });
+  addControl(size, 'Height (%)', 'height', 'number', { min: 1, max: 100, step: 0.5 });
+  addControl(size, 'Rotation (degrees)', 'rotation', 'number', { min: -360, max: 360, step: 1 });
+
+  const currentDoc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const currentObjects = window.BrightdeskSlidesService.getSlideObjects(currentDoc, currentDoc.current);
+  const objectIndex = currentObjects.findIndex(item => item.id === object.id);
+  const objectCount = currentObjects.length;
+
+  const selection = createGroup('Selection', true);
+  const selectionList = document.createElement('div');
+  selectionList.className = 'slide-format-pane-selection';
+  selectionList.setAttribute('role', 'group');
+  selectionList.setAttribute('aria-label', 'Objects on this slide');
+  const objectLabels = { text: 'Text box', rectangle: 'Rectangle', ellipse: 'Ellipse', line: 'Line', image: 'Picture' };
+  const typeCounts = new Map();
+  currentObjects.slice().reverse().forEach(item => {
+    const typeCount = (typeCounts.get(item.type) || 0) + 1;
+    typeCounts.set(item.type, typeCount);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'slide-format-pane-selection-item';
+    button.textContent = `${objectLabels[item.type] || 'Object'} ${typeCount}`;
+    button.dataset.selectObject = item.id;
+    button.setAttribute('aria-pressed', String(item.id === object.id));
+    button.addEventListener('click', () => selectSlideObject(item.id));
+    selectionList.append(button);
+  });
+  selection.append(selectionList);
+
+  const arrange = createGroup('Arrange');
+  const actions = document.createElement('div');
+  actions.className = 'slide-format-pane-actions';
+  const actionDefinitions = [
+    { action: 'front', label: 'Bring to Front', unavailable: index => index === objectCount - 1 },
+    { action: 'forward', label: 'Bring Forward', unavailable: index => index === objectCount - 1 },
+    { action: 'backward', label: 'Send Backward', unavailable: index => index === 0 },
+    { action: 'back', label: 'Send to Back', unavailable: index => index === 0 }
+  ];
+  actionDefinitions.forEach(({ action, label, unavailable }) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'slide-format-pane-action';
+    button.textContent = label;
+    button.dataset.layerAction = action;
+    button.setAttribute('aria-label', label);
+    button.disabled = objectIndex < 0 || unavailable(objectIndex);
+    button.addEventListener('click', () => reorderSelectedSlideObject(action));
+    actions.append(button);
+  });
+  arrange.append(actions);
+
+  const footer = document.createElement('p');
+  footer.className = 'slide-format-pane-note';
+  footer.textContent = 'Changes apply to the selected object and are saved with this presentation.';
+  pane.append(footer);
+  return pane;
+}
+
+function renderSlideObjects(stage, objects, doc = activeDoc()) {
+  stage.querySelectorAll('[data-slide-object]').forEach(element => element.remove());
+  if (!Array.isArray(objects)) return;
+  objects.forEach(object => {
+    const element = createSlideObjectElement(object, true);
+    element.classList.toggle('slide-object-selected', object.id === state.selectedSlideObjectId);
+    element.setAttribute('aria-pressed', String(object.id === state.selectedSlideObjectId));
+    stage.append(element);
+  });
+  stage.addEventListener('click', event => {
+    if (event.target === stage) selectSlideObject(null);
+  });
+}
+
+function renderPresentationObjects(container, objects) {
+  container.replaceChildren();
+  if (!Array.isArray(objects)) return;
+  objects.forEach(object => container.append(createSlideObjectElement(object, false)));
+}
+
+function setSlideView(view) {
+  if (!['normal', 'sorter', 'outline'].includes(view)) return;
+  state.slideView = view;
+  renderSlides();
+  renderToolbar();
+}
+
+function resetCurrentSlideLayout() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  try {
+    const slide = window.BrightdeskSlidesService.resetSlideLayout(doc, doc.current);
+    const definition = window.BrightdeskSlidesService.getSlideLayoutDefinition(slide.layout);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`${definition.label} layout restored. Existing slide text and speaker notes were kept.`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function setSlideLayout(layout) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  try {
+    window.BrightdeskSlidesService.setSlideLayout(doc, doc.current, layout);
+    commitSlideChange(doc);
+  } catch (error) {
+    setStatus(error.message);
+    return;
+  }
+  renderSlides();
+  persist();
+  setStatus('Slide layout updated');
+}
+
+function currentSlideSection(doc = activeDoc()) {
+  const presentation = window.BrightdeskSlidesService.ensurePresentation(doc);
+  return presentation.sections.find(section => section.id === presentation.slides[presentation.current].sectionId) || null;
+}
+
+function addSlideSection() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const suggested = `Section ${doc.sections.length + 1}`;
+  const name = window.prompt('Name this section:', suggested);
+  if (name === null) return;
+  try {
+    const section = window.BrightdeskSlidesService.createSection(doc, name);
+    state.collapsedSlideSections.delete(section.id);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`Section “${section.name}” created`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function renameSlideSection() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const section = currentSlideSection(doc);
+  if (!section) return;
+  const name = window.prompt('Rename section:', section.name);
+  if (name === null) return;
+  try {
+    window.BrightdeskSlidesService.renameSection(doc, section.id, name);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus('Section renamed');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function removeSlideSection() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const section = currentSlideSection(doc);
+  if (!section) return;
+  if (!window.confirm(`Remove section “${section.name}”? Its slides will stay in the presentation.`)) return;
+  window.BrightdeskSlidesService.deleteSection(doc, section.id);
+  state.collapsedSlideSections.delete(section.id);
+  commitSlideChange(doc);
+  renderSlides();
+  renderToolbar();
+  persist();
+  setStatus('Section removed; slides kept');
+}
+
+function moveCurrentSlideToSection(sectionId) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  try {
+    window.BrightdeskSlidesService.moveSlideToSection(doc, doc.current, sectionId);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(sectionId ? 'Slide moved to section' : 'Slide removed from its section');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function setSlideSize(slideSize) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  try {
+    window.BrightdeskSlidesService.setSlideSize(doc, slideSize);
+    commitSlideChange(doc);
+  } catch (error) {
+    setStatus(error.message);
+    return;
+  }
+  renderSlides();
+  renderToolbar();
+  persist();
+  setStatus(slideSize === 'standard' ? 'Standard 4:3 slide size selected' : 'Widescreen 16:9 slide size selected');
+}
+
+function renderSlides() {
+  const slidesService = window.BrightdeskSlidesService;
+  const doc = slidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  if (state.slideView === 'sorter') {
+    renderSlideSorter(doc);
+    return;
+  }
+  if (state.slideView === 'outline') {
+    renderSlideOutline(doc);
+    return;
+  }
+  const slide = doc.slides[doc.current];
+  if (state.selectedSlideObjectId && !slide.objects?.some(object => object.id === state.selectedSlideObjectId)) state.selectedSlideObjectId = null;
+  slideWrap.innerHTML = '';
+
+  const shell = document.createElement('div');
+  shell.className = 'slide-editor-shell';
+
+  const navigator = document.createElement('nav');
+  navigator.className = 'slide-navigator';
+  navigator.setAttribute('aria-label', 'Slide thumbnails');
+
+  const navigatorHeader = document.createElement('div');
+  navigatorHeader.className = 'slide-navigator-header';
+  const navigatorTitle = document.createElement('div');
+  navigatorTitle.className = 'slide-navigator-title';
+  const navigatorHeading = document.createElement('b');
+  navigatorHeading.textContent = 'Slides';
+  const navigatorCount = document.createElement('small');
+  navigatorCount.textContent = String(doc.slides.length);
+  navigatorTitle.append(navigatorHeading, navigatorCount);
+
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'slide-add-button';
+  addButton.textContent = '+';
+  addButton.title = 'Add slide';
+  addButton.setAttribute('aria-label', 'Add slide');
+  addButton.addEventListener('click', addSlide);
+  navigatorHeader.append(navigatorTitle, addButton);
+
+  const thumbnailList = document.createElement('div');
+  thumbnailList.className = 'slide-thumbnail-list';
+  let draggedIndex = -1;
+
+  const updateThumbnailPreview = (index, nextTitle, nextBody, nextSecondary = '') => {
+    const card = thumbnailList.querySelector(`[data-slide-index="${index}"]`);
+    if (!card) return;
+    const titleLabel = card.querySelector('.slide-thumbnail-title');
+    const bodyLabel = card.querySelector('.slide-thumbnail-summary');
+    if (titleLabel) titleLabel.textContent = nextTitle.trim() || `Slide ${index + 1}`;
+    const summary = [nextBody.trim(), nextSecondary.trim()].filter(Boolean).join(' · ');
+    if (bodyLabel) bodyLabel.textContent = summary.slice(0, 88) || 'Add text to this slide';
+  };
+
+  doc.slides.forEach((item, index) => {
+    if (item.sectionId && (index === 0 || doc.slides[index - 1].sectionId !== item.sectionId)) {
+      const section = doc.sections.find(entry => entry.id === item.sectionId);
+      if (section) {
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'slide-section-heading';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        const collapsed = state.collapsedSlideSections.has(section.id);
+        toggle.textContent = collapsed ? '▸' : '▾';
+        toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} section ${section.name}`);
+        const name = document.createElement('strong');
+        name.textContent = section.name;
+        const total = document.createElement('small');
+        total.textContent = `${doc.slides.filter(entry => entry.sectionId === section.id).length} slides`;
+        toggle.append(name, total);
+        toggle.addEventListener('click', () => {
+          const nextCollapsed = !state.collapsedSlideSections.has(section.id);
+          if (nextCollapsed) state.collapsedSlideSections.add(section.id);
+          else state.collapsedSlideSections.delete(section.id);
+          thumbnailList.querySelectorAll('.slide-thumbnail-card').forEach(card => {
+            if (card.dataset.sectionId === section.id) card.hidden = nextCollapsed;
+          });
+          toggle.firstChild.textContent = nextCollapsed ? '▸' : '▾';
+          toggle.setAttribute('aria-label', `${nextCollapsed ? 'Expand' : 'Collapse'} section ${section.name}`);
+        });
+        sectionHeader.append(toggle);
+        thumbnailList.append(sectionHeader);
+      }
+    }
+    const card = document.createElement('article');
+    card.className = 'slide-thumbnail-card';
+    card.classList.toggle('is-hidden-slide', item.hidden === true);
+    card.dataset.slideIndex = String(index);
+    card.dataset.sectionId = item.sectionId || '';
+    card.hidden = Boolean(item.sectionId && state.collapsedSlideSections.has(item.sectionId));
+    card.draggable = true;
+    card.classList.toggle('active', index === doc.current);
+
+    const select = document.createElement('button');
+    select.type = 'button';
+    select.className = 'slide-thumbnail-select';
+    select.setAttribute('aria-label', `Select slide ${index + 1}: ${item.title || 'Untitled slide'}${item.hidden ? ', hidden from slide show' : ''}`);
+    select.setAttribute('aria-current', index === doc.current ? 'true' : 'false');
+    const number = document.createElement('span');
+    number.className = 'slide-thumbnail-number';
+    number.textContent = String(index + 1);
+    const preview = document.createElement('span');
+    preview.className = `slide-thumbnail-preview layout-${item.layout} size-${doc.slideSize}`;
+    const previewTitle = document.createElement('b');
+    previewTitle.className = 'slide-thumbnail-title';
+    previewTitle.textContent = item.title.trim() || `Slide ${index + 1}`;
+    const layoutDefinition = slidesService.getSlideLayoutDefinition(item.layout);
+    const previewBody = document.createElement('span');
+    previewBody.className = 'slide-thumbnail-summary';
+    const previewSummary = [item.body.trim(), item.bodySecondary.trim()].filter(Boolean).join(' · ');
+    previewBody.textContent = previewSummary.slice(0, 88) || layoutDefinition.bodyPlaceholder;
+    preview.append(previewTitle, previewBody);
+    select.append(number, preview);
+    const thumbnailTransition = document.createElement('span');
+    thumbnailTransition.className = 'slide-thumbnail-transition';
+    thumbnailTransition.dataset.slideTransition = item.transition || 'none';
+    const transitionLabel = item.transition && item.transition !== 'none'
+      ? item.transition[0].toUpperCase() + item.transition.slice(1)
+      : 'No transition';
+    thumbnailTransition.textContent = transitionLabel;
+    select.append(thumbnailTransition);
+    if (item.hidden) {
+      const hiddenBadge = document.createElement('span');
+      hiddenBadge.className = 'slide-hidden-indicator';
+      hiddenBadge.textContent = 'Hidden';
+      select.append(hiddenBadge);
+    }
+    select.addEventListener('click', () => {
+      slidesService.setCurrentSlide(doc, index);
+      getSlideHistory(doc).sync(doc);
+      renderSlides();
+      renderToolbar();
+    });
+
+    const order = document.createElement('div');
+    order.className = 'slide-thumbnail-order';
+    const moveEarlier = document.createElement('button');
+    moveEarlier.type = 'button';
+    moveEarlier.textContent = '↑';
+    moveEarlier.title = 'Move slide earlier';
+    moveEarlier.setAttribute('aria-label', `Move slide ${index + 1} earlier`);
+    moveEarlier.disabled = index === 0;
+    moveEarlier.addEventListener('click', () => {
+      slidesService.moveSlide(doc, index, index - 1);
+      commitSlideChange(doc);
+      renderSlides();
+      persist();
+    });
+    const moveLater = document.createElement('button');
+    moveLater.type = 'button';
+    moveLater.textContent = '↓';
+    moveLater.title = 'Move slide later';
+    moveLater.setAttribute('aria-label', `Move slide ${index + 1} later`);
+    moveLater.disabled = index === doc.slides.length - 1;
+    moveLater.addEventListener('click', () => {
+      slidesService.moveSlide(doc, index, index + 1);
+      commitSlideChange(doc);
+      renderSlides();
+      persist();
+    });
+    order.append(moveEarlier, moveLater);
+    card.append(select, order);
+
+    card.addEventListener('dragstart', event => {
+      draggedIndex = index;
+      card.classList.add('dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(index));
+      }
+    });
+    card.addEventListener('dragend', () => {
+      draggedIndex = -1;
+      card.classList.remove('dragging');
+      thumbnailList.querySelectorAll('.drag-over').forEach(node => node.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', event => {
+      event.preventDefault();
+      if (draggedIndex !== index) card.classList.add('drag-over');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', event => {
+      event.preventDefault();
+      card.classList.remove('drag-over');
+      const source = draggedIndex;
+      if (source < 0 || source === index) return;
+      slidesService.moveSlide(doc, source, index);
+      commitSlideChange(doc);
+      renderSlides();
+      persist();
+    });
+
+    thumbnailList.append(card);
+  });
+
+  navigator.append(navigatorHeader, thumbnailList);
+
+  const editorMain = document.createElement('section');
+  editorMain.className = 'slide-editor-main';
+  editorMain.setAttribute('aria-label', 'Slide editor');
+
+  const stage = document.createElement('div');
+  stage.className = `slide-stage theme-${doc.themeId} layout-${slide.layout} size-${doc.slideSize}`;
+  stage.classList.toggle('has-custom-background', Boolean(slide.backgroundColor));
+  const slideTextColor = slide.backgroundColor
+    ? window.BrightdeskSlidesService.getReadableTextColor(slide.backgroundColor)
+    : '';
+  stage.style.backgroundColor = slide.backgroundColor || '';
+
+  const layoutDefinition = slidesService.getSlideLayoutDefinition(slide.layout);
+  const title = document.createElement('textarea');
+  title.className = 'slide-title';
+  title.value = slide.title || '';
+  title.placeholder = layoutDefinition.titlePlaceholder;
+  title.setAttribute('aria-label', layoutDefinition.titleLabel);
+  title.lang = state.proofingLanguage;
+  title.style.color = slideTextColor;
+
+  const body = document.createElement('textarea');
+  body.className = 'slide-body slide-body-primary';
+  body.value = slide.body || '';
+  body.placeholder = layoutDefinition.bodyPlaceholder;
+  body.setAttribute('aria-label', layoutDefinition.bodyLabel);
+  body.lang = state.proofingLanguage;
+  body.style.color = slideTextColor;
+  body.style.backgroundColor = slide.backgroundColor || '';
+
+  let secondary = null;
+  const updatePrimary = () => {
+    slidesService.updateSlide(doc, doc.current, { body: body.value });
+    commitSlideChange(doc, `slide:${doc.current}:body`);
+    updateThumbnailPreview(doc.current, title.value, body.value, secondary?.value || '');
+    persist();
+  };
+  title.addEventListener('input', () => {
+    slidesService.updateSlide(doc, doc.current, { title: title.value });
+    commitSlideChange(doc, `slide:${doc.current}:title`);
+    updateThumbnailPreview(doc.current, title.value, body.value, secondary?.value || '');
+    persist();
+  });
+  body.addEventListener('input', updatePrimary);
+
+  if (slide.layout === 'two-content') {
+    const columns = document.createElement('div');
+    columns.className = 'slide-content-columns';
+    secondary = document.createElement('textarea');
+    secondary.className = 'slide-body slide-body-secondary';
+    secondary.value = slide.bodySecondary || '';
+    secondary.placeholder = layoutDefinition.secondaryBodyPlaceholder || '';
+    secondary.setAttribute('aria-label', layoutDefinition.secondaryBodyLabel || 'Second content column');
+    secondary.lang = state.proofingLanguage;
+    secondary.style.color = slideTextColor;
+    secondary.style.backgroundColor = slide.backgroundColor || '';
+    secondary.addEventListener('input', () => {
+      slidesService.updateSlide(doc, doc.current, { bodySecondary: secondary.value });
+      commitSlideChange(doc, `slide:${doc.current}:secondary`);
+      updateThumbnailPreview(doc.current, title.value, body.value, secondary.value);
+      persist();
+    });
+    columns.append(body, secondary);
+    stage.append(title, columns);
+  } else {
+    stage.append(title, body);
+  }
+  renderSlideObjects(stage, slide.objects || [], doc);
+
+  const canvasRow = document.createElement('div');
+  canvasRow.className = 'slide-editor-canvas-row';
+  canvasRow.classList.toggle('has-format-pane', Boolean(getSelectedSlideObject(doc)));
+  canvasRow.append(stage);
+  const selectedObject = getSelectedSlideObject(doc);
+  if (selectedObject) canvasRow.append(renderSlideFormatPane(selectedObject));
+
+  const notesPanel = document.createElement('section');
+  notesPanel.className = 'slide-speaker-notes';
+  notesPanel.setAttribute('aria-label', 'Speaker notes');
+  const notesHeading = document.createElement('label');
+  notesHeading.className = 'slide-speaker-notes-heading';
+  notesHeading.textContent = 'Speaker notes';
+  const notes = document.createElement('textarea');
+  notes.className = 'slide-speaker-notes-editor';
+  notes.value = slide.notes || '';
+  notes.placeholder = 'Add notes for this slide…';
+  notes.setAttribute('aria-label', 'Speaker notes for current slide');
+  notes.lang = state.proofingLanguage;
+  notes.addEventListener('input', () => {
+    slidesService.updateSlide(doc, doc.current, { notes: notes.value });
+    commitSlideChange(doc, `slide:${doc.current}:notes`);
+    persist();
+  });
+  notesHeading.append(notes);
+  notesPanel.append(notesHeading);
+
+  const controls = document.createElement('div');
+  controls.className = 'slide-controls';
+  const prev = document.createElement('button');
+  prev.type = 'button';
+  prev.textContent = '← Previous';
+  prev.disabled = doc.current === 0;
+  prev.addEventListener('click', () => {
+    slidesService.setCurrentSlide(doc, doc.current - 1);
+    getSlideHistory(doc).sync(doc);
+    renderSlides();
+    renderToolbar();
+  });
+  const count = document.createElement('span');
+  count.textContent = `Slide ${doc.current + 1} of ${doc.slides.length}`;
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.textContent = 'Next →';
+  next.disabled = doc.current === doc.slides.length - 1;
+  next.addEventListener('click', () => {
+    slidesService.setCurrentSlide(doc, doc.current + 1);
+    getSlideHistory(doc).sync(doc);
+    renderSlides();
+    renderToolbar();
+  });
+  controls.append(prev, count, next);
+
+  editorMain.append(canvasRow, notesPanel, controls);
+  shell.append(navigator, editorMain);
+  slideWrap.append(shell);
+}
+function addSlide() {
+  const doc = activeDoc();
+  window.BrightdeskSlidesService.addSlide(doc);
+  commitSlideChange(doc);
+  renderSlides();
+  renderToolbar();
+  persist();
+}
+async function reuseSlides() {
+  try {
+    const imported = await window.brightdesk.reuseSlides();
+    if (!imported) return;
+    if (imported.kind !== 'slides' || !Array.isArray(imported.slides)) {
+      throw new Error('The selected file does not contain reusable presentation slides.');
+    }
+
+    const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+    const result = window.BrightdeskSlidesService.insertSlidesAfterCurrent(doc, imported.slides);
+    commitSlideChange(doc);
+    persist();
+    renderSlides();
+    renderToolbar();
+
+    const slideWord = result.count === 1 ? 'slide' : 'slides';
+    setStatus(
+      result.count + ' ' + slideWord + ' reused after the selected slide. ' +
+      'The current theme and slide size are kept; some PowerPoint formatting or objects may not be preserved.'
+    );
+  } catch (error) {
+    alert('Could not reuse slides: ' + error.message);
+  }
+}
+function duplicateSlide() {
+  const doc = activeDoc();
+  window.BrightdeskSlidesService.duplicateSlide(doc);
+  commitSlideChange(doc);
+  renderSlides();
+  renderToolbar();
+  persist();
+}
+function deleteSlide() {
+  const doc = activeDoc();
+  if (!window.BrightdeskSlidesService.deleteSlide(doc)) {
+    alert('A presentation needs at least one slide.');
+    return;
+  }
+  commitSlideChange(doc);
+  renderSlides();
+  renderToolbar();
+  persist();
+}
+function toggleSlideHidden() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const slide = doc.slides[doc.current];
+  try {
+    window.BrightdeskSlidesService.setSlideHidden(doc, doc.current, slide.hidden !== true);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(slide.hidden ? 'Slide hidden from the slide show' : 'Slide will appear in the slide show');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function presentSlides(startFromFirst = false) {
+  openPresentation(startFromFirst, false);
+}
+
+function presentWithPresenterView(startFromFirst = false) {
+  openPresentation(startFromFirst, true);
+}
+
+function openPresentation(startFromFirst = false, presenterMode = false) {
+  const d = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const visibleSlides = window.BrightdeskSlidesService.getVisibleSlideIndices(d);
+  if (visibleSlides.length === 0) {
+    setStatus('This presentation has no visible slides to show');
+    return;
+  }
+  let position = startFromFirst ? 0 : visibleSlides.findIndex(index => index >= d.current);
+  if (position < 0) position = visibleSlides.length - 1;
+  const currentSlideIndex = () => visibleSlides[position];
   const overlay = document.createElement('div');
   overlay.className = 'presentation-overlay bd-motion-overlay';
+  if (presenterMode) overlay.classList.add('presenter-overlay');
   overlay.dataset.state = 'closed';
 
   const slide = document.createElement('div');
-  slide.className = 'presentation-slide';
+  slide.className = `presentation-slide size-${d.slideSize || 'widescreen'}`;
   const title = document.createElement('h1');
+  const content = document.createElement('div');
+  content.className = 'presentation-content';
   const body = document.createElement('p');
+  body.className = 'presentation-body-primary';
+  const columns = document.createElement('div');
+  columns.className = 'presentation-content-columns';
+  const secondaryBody = document.createElement('p');
+  secondaryBody.className = 'presentation-body-secondary';
+  columns.append(body, secondaryBody);
+  content.append(columns);
+  const objectLayer = document.createElement('div');
+  objectLayer.className = 'presentation-object-layer';
   const footer = document.createElement('div');
   footer.className = 'presentation-footer';
-  footer.textContent = 'Click or press an arrow key to move · Esc to exit';
-  slide.append(title, body, footer);
-  overlay.append(slide);
+  slide.append(title, content, objectLayer, footer);
+
+  const presenterToolbar = document.createElement('header');
+  presenterToolbar.className = 'presenter-toolbar';
+  const presenterHeading = document.createElement('div');
+  presenterHeading.className = 'presenter-heading';
+  const presenterTitle = document.createElement('h2');
+  presenterTitle.textContent = 'Presenter View';
+  const presenterProgress = document.createElement('p');
+  presenterProgress.className = 'presenter-progress';
+  const presenterDisplayStatus = document.createElement('p');
+  presenterDisplayStatus.className = 'presenter-display-status';
+  presenterDisplayStatus.setAttribute('role', 'status');
+  presenterDisplayStatus.textContent = 'Checking for a second display…';
+  presenterHeading.append(presenterTitle, presenterProgress, presenterDisplayStatus);
+
+  const presenterElapsed = document.createElement('span');
+  presenterElapsed.className = 'presenter-elapsed';
+  presenterElapsed.textContent = '00:00';
+  presenterElapsed.setAttribute('role', 'timer');
+  presenterElapsed.setAttribute('aria-label', 'Elapsed presentation time');
+
+  const presenterActions = document.createElement('div');
+  presenterActions.className = 'presenter-actions';
+  const previousButton = document.createElement('button');
+  previousButton.type = 'button';
+  previousButton.className = 'presenter-control';
+  previousButton.textContent = '← Previous';
+  previousButton.setAttribute('aria-label', 'Go to previous visible slide');
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.className = 'presenter-control';
+  nextButton.textContent = 'Next →';
+  nextButton.setAttribute('aria-label', 'Go to next visible slide');
+  const endButton = document.createElement('button');
+  endButton.type = 'button';
+  endButton.className = 'presenter-control presenter-end-control';
+  endButton.textContent = 'End show';
+  presenterActions.append(presenterElapsed, previousButton, nextButton, endButton);
+  presenterToolbar.append(presenterHeading, presenterActions);
+
+  const presenterWorkspace = document.createElement('div');
+  presenterWorkspace.className = 'presenter-workspace';
+  const presenterStage = document.createElement('section');
+  presenterStage.className = 'presenter-stage';
+  presenterStage.setAttribute('aria-label', 'Current slide');
+  presenterStage.append(slide);
+
+  const presenterSidePanel = document.createElement('aside');
+  presenterSidePanel.className = 'presenter-side-panel';
+  const nextPanel = document.createElement('section');
+  nextPanel.className = 'presenter-card presenter-next-panel presenter-next-slide';
+  nextPanel.setAttribute('aria-label', 'Next visible slide');
+  const nextHeading = document.createElement('h3');
+  nextHeading.textContent = 'Next slide';
+  const nextPreview = document.createElement('div');
+  nextPreview.className = 'presentation-slide presenter-slide-preview';
+  const nextPreviewTitle = document.createElement('h1');
+  const nextPreviewContent = document.createElement('div');
+  nextPreviewContent.className = 'presentation-content';
+  const nextPreviewColumns = document.createElement('div');
+  nextPreviewColumns.className = 'presentation-content-columns';
+  const nextPreviewBody = document.createElement('p');
+  nextPreviewBody.className = 'presentation-body-primary';
+  const nextPreviewSecondary = document.createElement('p');
+  nextPreviewSecondary.className = 'presentation-body-secondary';
+  nextPreviewColumns.append(nextPreviewBody, nextPreviewSecondary);
+  nextPreviewContent.append(nextPreviewColumns);
+  const nextPreviewObjectLayer = document.createElement('div');
+  nextPreviewObjectLayer.className = 'presentation-object-layer presenter-preview-object-layer';
+  nextPreview.append(nextPreviewTitle, nextPreviewContent, nextPreviewObjectLayer);
+  const noNextSlide = document.createElement('p');
+  noNextSlide.className = 'presenter-no-next';
+  noNextSlide.textContent = 'You are on the last visible slide.';
+  nextPanel.append(nextHeading, nextPreview, noNextSlide);
+
+  const notesPanel = document.createElement('section');
+  notesPanel.className = 'presenter-card presenter-notes-panel';
+  notesPanel.setAttribute('aria-label', 'Speaker notes for the current slide');
+  const notesHeading = document.createElement('h3');
+  notesHeading.textContent = 'Speaker notes';
+  const presenterNotes = document.createElement('div');
+  presenterNotes.className = 'presenter-speaker-notes';
+  presenterNotes.setAttribute('role', 'note');
+  presenterNotes.setAttribute('aria-label', 'Speaker notes for the current slide');
+  notesPanel.append(notesHeading, presenterNotes);
+  presenterSidePanel.append(nextPanel, notesPanel);
+  presenterWorkspace.append(presenterStage, presenterSidePanel);
+
+  const presenterFooter = document.createElement('footer');
+  presenterFooter.className = 'presenter-footer';
+  presenterFooter.textContent = 'Use the arrow keys, Space, Page Up/Down, N or P to move. Press Escape to end the show.';
+
+  const picker = document.createElement('section');
+  picker.className = 'presentation-slide-picker';
+  picker.hidden = true;
+  picker.setAttribute('role', 'dialog');
+  picker.setAttribute('aria-label', 'Choose a slide');
+  const pickerHeader = document.createElement('header');
+  pickerHeader.className = 'presentation-slide-picker-header';
+  const pickerTitle = document.createElement('h2');
+  pickerTitle.textContent = 'All slides';
+  const pickerHint = document.createElement('p');
+  pickerHint.textContent = 'Choose a visible slide to continue. Hidden slides are not listed. Press Escape to return.';
+  pickerHeader.append(pickerTitle, pickerHint);
+  const pickerGrid = document.createElement('div');
+  pickerGrid.className = 'presentation-slide-picker-grid';
+  const pickerButtons = [];
+
+  visibleSlides.forEach((slideIndex, visiblePosition) => {
+    const item = d.slides[slideIndex];
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'presentation-slide-picker-item';
+    button.dataset.visiblePosition = String(visiblePosition);
+    button.setAttribute('aria-label', `Go to slide ${slideIndex + 1}: ${item.title || 'Untitled slide'}`);
+    const number = document.createElement('span');
+    number.className = 'presentation-slide-picker-number';
+    number.textContent = String(slideIndex + 1);
+    const label = document.createElement('strong');
+    label.textContent = item.title.trim() || `Slide ${slideIndex + 1}`;
+    button.append(number, label);
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      position = visiblePosition;
+      pickerOpen = false;
+      draw();
+    });
+    pickerButtons.push(button);
+    pickerGrid.append(button);
+  });
+  picker.append(pickerHeader, pickerGrid);
+  if (presenterMode) overlay.append(presenterToolbar, presenterWorkspace, presenterFooter, picker);
+  else overlay.append(slide, picker);
   document.body.append(overlay);
 
-  const draw = () => {
-    title.textContent = d.slides[i].title;
-    body.textContent = d.slides[i].body;
+  let closing = false;
+  let elapsedTimer = null;
+  const presentationStartedAt = Date.now();
+  let pickerOpen = false;
+  let numberBuffer = '';
+  let blankMode = null;
+  let showMessage = '';
+  let audienceDisplayActive = false;
+  let lastPresentedSlideId = null;
+  let lastPlaybackTransitionClass = '';
+  const removePresenterDisplayLostListener = presenterMode
+    ? window.brightdesk?.onPresenterDisplayLost?.(() => {
+      audienceDisplayActive = false;
+      presenterDisplayStatus.textContent = 'The audience output closed or was disconnected. Presenter View remains open on this screen.';
+    })
+    : null;
+
+  const createAudienceState = () => {
+    const currentSlide = d.slides[currentSlideIndex()];
+    return {
+      slide: {
+        title: currentSlide.title || '',
+        body: currentSlide.body || '',
+        bodySecondary: currentSlide.bodySecondary || '',
+        id: currentSlide.id || '',
+        layout: currentSlide.layout || 'title-content',
+        transition: currentSlide.transition || 'none',
+        ...(currentSlide.backgroundColor ? { backgroundColor: currentSlide.backgroundColor } : {}),
+        objects: Array.isArray(currentSlide.objects) ? currentSlide.objects : []
+      },
+      themeId: d.themeId || 'lavender',
+      slideSize: d.slideSize || 'widescreen',
+      blankMode
+    };
   };
 
-  let closing = false;
+  const togglePresentationBlank = mode => {
+    numberBuffer = '';
+    showMessage = '';
+    blankMode = blankMode === mode ? null : mode;
+    overlay.classList.toggle('is-blank-black', blankMode === 'black');
+    overlay.classList.toggle('is-blank-white', blankMode === 'white');
+    if (presenterMode && audienceDisplayActive && window.brightdesk?.updatePresenter) {
+      window.brightdesk.updatePresenter(createAudienceState());
+    }
+  };
+
+  const showSlidePicker = () => {
+    pickerOpen = !pickerOpen;
+    if (pickerOpen) {
+      numberBuffer = '';
+      showMessage = '';
+      togglePresentationBlank(null);
+    }
+    draw();
+  };
+
+  const draw = () => {
+    const snapshot = presenterMode
+      ? window.BrightdeskSlidesService.getPresenterSnapshot(d, position)
+      : null;
+    const currentSlide = snapshot?.currentSlide || d.slides[currentSlideIndex()];
+    const slideChanged = currentSlide.id !== lastPresentedSlideId;
+    if (slideChanged) {
+      const transition = ['fade', 'push', 'wipe'].includes(currentSlide.transition) ? currentSlide.transition : 'none';
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      lastPlaybackTransitionClass = transition !== 'none' && !reducedMotion
+        ? `slide-transition-${transition}`
+        : '';
+      lastPresentedSlideId = currentSlide.id;
+    }
+    const slideBaseClass = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${d.themeId} layout-${currentSlide.layout || 'title-content'}${presenterMode ? ' presenter-current-slide' : ''}`;
+    slide.className = slideBaseClass + (lastPlaybackTransitionClass ? ` ${lastPlaybackTransitionClass}` : '');
+    if (slideChanged && lastPlaybackTransitionClass) {
+      slide.classList.remove(lastPlaybackTransitionClass);
+      void slide.offsetWidth;
+      slide.classList.add(lastPlaybackTransitionClass);
+    }
+    const currentTextColor = currentSlide.backgroundColor
+      ? window.BrightdeskSlidesService.getReadableTextColor(currentSlide.backgroundColor)
+      : '';
+    slide.style.backgroundColor = currentSlide.backgroundColor || '';
+    title.style.color = currentTextColor;
+    body.style.color = currentTextColor;
+    body.style.backgroundColor = currentSlide.backgroundColor || '';
+    secondaryBody.style.color = currentTextColor;
+    secondaryBody.style.backgroundColor = currentSlide.backgroundColor || '';
+    title.textContent = currentSlide.title || '';
+    body.textContent = currentSlide.body || '';
+    renderPresentationObjects(objectLayer, currentSlide.objects || []);
+    secondaryBody.textContent = currentSlide.bodySecondary || '';
+    secondaryBody.hidden = currentSlide.layout !== 'two-content';
+    slide.hidden = presenterMode ? false : pickerOpen;
+    footer.hidden = presenterMode;
+    picker.hidden = !pickerOpen;
+    pickerButtons.forEach(button => {
+      const active = Number(button.dataset.visiblePosition) === position;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-current', String(active));
+    });
+    footer.textContent = numberBuffer
+      ? `Go to slide ${numberBuffer} · Enter to jump · Backspace to edit · Esc to clear`
+      : showMessage || 'Click or use arrows to move · G all slides · B black · W white · Esc to exit';
+
+    if (presenterMode) {
+      presenterProgress.textContent = `Slide ${snapshot.currentIndex + 1} · ${snapshot.visiblePosition + 1} of ${snapshot.visibleCount} visible`;
+      presenterNotes.textContent = snapshot.currentSlide.notes || 'No speaker notes for this slide.';
+      presenterWorkspace.hidden = pickerOpen;
+      presenterToolbar.hidden = pickerOpen;
+      presenterFooter.hidden = pickerOpen;
+      previousButton.disabled = position <= 0;
+      nextButton.disabled = position >= visibleSlides.length - 1;
+      if (snapshot.nextSlide) {
+        nextPreview.hidden = false;
+        noNextSlide.hidden = true;
+        nextPreview.className = `presentation-slide presenter-slide-preview size-${d.slideSize || 'widescreen'} theme-${d.themeId} layout-${snapshot.nextSlide.layout || 'title-content'}`;
+        const nextTextColor = snapshot.nextSlide.backgroundColor
+          ? window.BrightdeskSlidesService.getReadableTextColor(snapshot.nextSlide.backgroundColor)
+          : '';
+        nextPreview.style.backgroundColor = snapshot.nextSlide.backgroundColor || '';
+        nextPreviewTitle.style.color = nextTextColor;
+        nextPreviewBody.style.color = nextTextColor;
+        nextPreviewBody.style.backgroundColor = snapshot.nextSlide.backgroundColor || '';
+        nextPreviewSecondary.style.color = nextTextColor;
+        nextPreviewSecondary.style.backgroundColor = snapshot.nextSlide.backgroundColor || '';
+        nextPreviewTitle.textContent = snapshot.nextSlide.title || '';
+        nextPreviewBody.textContent = snapshot.nextSlide.body || '';
+        renderPresentationObjects(nextPreviewObjectLayer, snapshot.nextSlide.objects || []);
+        nextPreviewSecondary.textContent = snapshot.nextSlide.bodySecondary || '';
+        nextPreviewSecondary.hidden = snapshot.nextSlide.layout !== 'two-content';
+      } else {
+        nextPreview.hidden = true;
+        noNextSlide.hidden = false;
+        nextPreviewObjectLayer.replaceChildren();
+      }
+    }
+    if (presenterMode && audienceDisplayActive && window.brightdesk?.updatePresenter) {
+      window.brightdesk.updatePresenter(createAudienceState());
+    }
+  };
+
+  const refreshPresenterElapsed = () => {
+    const totalSeconds = Math.max(0, Math.floor((Date.now() - presentationStartedAt) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const pad = value => String(value).padStart(2, '0');
+    const elapsed = hours > 0
+      ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+      : `${pad(minutes)}:${pad(seconds)}`;
+    presenterElapsed.textContent = elapsed;
+    presenterElapsed.setAttribute('aria-label', `Elapsed presentation time ${elapsed}`);
+  };
+
   const close = () => {
     if (closing) return;
     closing = true;
+    if (typeof removePresenterDisplayLostListener === 'function') removePresenterDisplayLostListener();
+    if (presenterMode && window.brightdesk?.endPresenter) {
+      window.brightdesk.endPresenter().catch(() => {});
+      audienceDisplayActive = false;
+    }
+    if (elapsedTimer !== null) {
+      window.clearInterval(elapsedTimer);
+      elapsedTimer = null;
+    }
     overlay.dataset.state = 'closed';
     document.removeEventListener('keydown', key);
 
@@ -354,13 +2358,100 @@ function presentSlides() {
   };
 
   const key = event => {
-    if (event.key === 'Escape') {
-      close();
-    } else if (event.key === 'ArrowRight') {
-      i = Math.min(d.slides.length - 1, i + 1);
+    if (closing) return;
+    const keyName = event.key;
+    const normalized = keyName.toLowerCase();
+
+    if (keyName === 'Escape') {
+      event.preventDefault();
+      if (pickerOpen) {
+        pickerOpen = false;
+        showMessage = '';
+        draw();
+      } else if (numberBuffer) {
+        numberBuffer = '';
+        showMessage = '';
+        draw();
+      } else {
+        close();
+      }
+      return;
+    }
+
+    if (!pickerOpen && !event.ctrlKey && !event.metaKey && !event.altKey && /^[0-9]$/.test(keyName)) {
+      event.preventDefault();
+      showMessage = '';
+      if (numberBuffer.length < 4) numberBuffer += keyName;
       draw();
-    } else if (event.key === 'ArrowLeft') {
-      i = Math.max(0, i - 1);
+      return;
+    }
+
+    if (!pickerOpen && numberBuffer && keyName === 'Backspace') {
+      event.preventDefault();
+      showMessage = '';
+      numberBuffer = numberBuffer.slice(0, -1);
+      draw();
+      return;
+    }
+
+    if (!pickerOpen && numberBuffer && keyName === 'Enter') {
+      event.preventDefault();
+      const requestedSlide = Number(numberBuffer);
+      const targetPosition = window.BrightdeskSlidesService.getVisibleSlidePosition(d, requestedSlide);
+      numberBuffer = '';
+      if (targetPosition >= 0) {
+        position = targetPosition;
+        showMessage = '';
+      } else {
+        showMessage = `Slide ${requestedSlide} is hidden or doesn't exist`;
+      }
+      draw();
+      return;
+    }
+
+    if (normalized === 'g') {
+      event.preventDefault();
+      showSlidePicker();
+      return;
+    }
+
+    if (normalized === 'b' || keyName === '.') {
+      event.preventDefault();
+      togglePresentationBlank('black');
+      return;
+    }
+
+    if (normalized === 'w' || keyName === ',') {
+      event.preventDefault();
+      togglePresentationBlank('white');
+      return;
+    }
+
+    if (pickerOpen) return;
+
+    if (['ArrowRight', 'ArrowDown', 'PageDown', 'Enter', ' '].includes(keyName) || normalized === 'n') {
+      event.preventDefault();
+      numberBuffer = '';
+      showMessage = '';
+      position = Math.min(visibleSlides.length - 1, position + 1);
+      draw();
+    } else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(keyName) || normalized === 'p') {
+      event.preventDefault();
+      numberBuffer = '';
+      showMessage = '';
+      position = Math.max(0, position - 1);
+      draw();
+    } else if (keyName === 'Home') {
+      event.preventDefault();
+      numberBuffer = '';
+      showMessage = '';
+      position = 0;
+      draw();
+    } else if (keyName === 'End') {
+      event.preventDefault();
+      numberBuffer = '';
+      showMessage = '';
+      position = visibleSlides.length - 1;
       draw();
     }
   };
@@ -368,13 +2459,59 @@ function presentSlides() {
   requestAnimationFrame(() => {
     if (!closing && overlay.isConnected) overlay.dataset.state = 'open';
   });
-  overlay.addEventListener('click', () => {
-    if (closing || overlay.dataset.state !== 'open') return;
-    i = Math.min(d.slides.length - 1, i + 1);
+  if (!presenterMode) {
+    overlay.addEventListener('click', () => {
+      if (closing || pickerOpen || overlay.dataset.state !== 'open') return;
+      numberBuffer = '';
+      showMessage = '';
+      position = Math.min(visibleSlides.length - 1, position + 1);
+      draw();
+    });
+  }
+  previousButton.addEventListener('click', event => {
+    event.stopPropagation();
+    position = Math.max(0, position - 1);
+    numberBuffer = '';
+    showMessage = '';
     draw();
+  });
+  nextButton.addEventListener('click', event => {
+    event.stopPropagation();
+    position = Math.min(visibleSlides.length - 1, position + 1);
+    numberBuffer = '';
+    showMessage = '';
+    draw();
+  });
+  endButton.addEventListener('click', event => {
+    event.stopPropagation();
+    close();
   });
   document.addEventListener('keydown', key);
   draw();
+  if (presenterMode) {
+    refreshPresenterElapsed();
+    elapsedTimer = window.setInterval(refreshPresenterElapsed, 1000);
+    if (window.brightdesk?.startPresenter) {
+      window.brightdesk.startPresenter(createAudienceState()).then(result => {
+        if (closing) {
+          if (result?.ok) window.brightdesk.endPresenter().catch(() => {});
+          return;
+        }
+        if (result?.ok) {
+          audienceDisplayActive = true;
+          const displayName = result.display?.label || 'second display';
+          presenterDisplayStatus.textContent = `Audience slide is showing on the ${displayName}.`;
+          window.brightdesk.updatePresenter(createAudienceState());
+        } else {
+          presenterDisplayStatus.textContent = 'No second display detected. Notes and preview remain on this screen.';
+        }
+      }).catch(() => {
+        presenterDisplayStatus.textContent = 'The audience display could not be opened. Notes and preview remain on this screen.';
+      });
+    } else {
+      presenterDisplayStatus.textContent = 'The audience display is not available in this build.';
+    }
+  }
 }
 function todoTasks() { return Array.isArray(activeDoc().tasks) ? activeDoc().tasks : (activeDoc().tasks = []); }
 function saveTodoTasks() { persist(); $('todo-status').textContent = 'Saved on this device'; }
@@ -882,7 +3019,7 @@ function exportPayload(){
   const doc=activeDoc(),title=$('doc-title').value||'Brightdesk file';doc.title=title;
   if(state.app==='pages')return {kind:'pages',title,html:editor.innerHTML,blocks:collectDocxBlocks()};
   if(state.app==='sheets')return {kind:'sheets',title,rows:doc.cells||[]};
-  if(state.app==='slides')return {kind:'slides',title,slides:doc.slides||[]};
+  if(state.app==='slides')return {kind:'slides',title,slideSize:doc.slideSize||'widescreen',themeId:doc.themeId||'lavender',slides:doc.slides||[]};
   return {kind:'notes',title,text:$('notes-editor').value||''};
 }
 async function exportCurrent(){try{const result=await window.brightdesk.exportFile(exportPayload());if(result?.canceled)return;setStatus('Exported successfully');}catch(error){alert(`Export failed: ${error.message}`);}}
@@ -890,6 +3027,7 @@ async function exportPdf(){try{const result=await window.brightdesk.exportPdf({t
 function importProject(data){
   if (launchAppId && data?.kind && data.kind !== launchAppId) throw new Error(`This Brightdesk ${appLabel(launchAppId)} installation opens ${appLabel(launchAppId)} files only.`);
   if(data?.docs && typeof data.docs === 'object'){
+    clearSavedSlideHistory();
     state.docs={...clone(defaults),...data.docs};
     for (const id of Object.keys(configs)) if (!state.docs[id] || typeof state.docs[id] !== 'object') state.docs[id] = clone(defaults[id]);
     const preferred = configs[state.app] ? state.app : 'pages';
@@ -902,15 +3040,53 @@ function importProject(data){
   if (!installedApp(kind)) { state.installedApps.push(kind); state.setupComplete = true; saveAppSetup(); }
   if(kind==='pages')state.docs.pages={title:data.title||'Imported document',html:data.html?safeHtml(data.html):`<p>${escapeHtml(data.text||'')}</p>`};
   if(kind==='sheets')state.docs.sheets={title:data.title||'Imported spreadsheet',cells:(data.cells||[]).map(row=>row.map(v=>String(v??'')))};
-  if(kind==='slides')state.docs.slides={title:data.title||'Imported presentation',slides:data.slides||clone(defaults.slides.slides),current:0};
+  if(kind==='slides'){
+    clearSavedSlideHistory();
+    state.docs.slides={title:data.title||'Imported presentation',slideSize:data.slideSize||'widescreen',themeId:data.themeId||'lavender',slides:data.slides||clone(defaults.slides.slides),current:0};
+  }
   if(kind==='notes')state.docs.notes={title:data.title||'Imported note',text:data.text||''};
   state.app=kind; state.ribbonTab='home';
 }
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
-async function openFile(){try{const data=await window.brightdesk.openFile();if(!data)return;importProject(data);persist();render();setStatus('File opened');}catch(error){alert(`Could not open file: ${error.message}`);}}
+async function openFile() {
+  try {
+    const data = await window.brightdesk.openFile();
+    if (!data) return;
+    importProject(data);
+    const pictures = await hydrateSavedSlidePictures(state.docs.slides);
+    persist();
+    render();
+    setStatus(pictures.missing ? 'File opened. Some saved pictures could not be loaded.' : 'File opened');
+  } catch (error) {
+    alert(`Could not open file: ${error.message}`);
+  }
+}
 async function saveProject(){try{const result=await window.brightdesk.saveProject({title:$('doc-title').value,docs:state.docs});if(!result?.canceled)setStatus('Project saved');}catch(error){alert(`Could not save project: ${error.message}`);}}
 function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
+document.addEventListener('keydown', event => {
+  if (state.app !== 'slides' || state.view !== 'workspace' || document.querySelector('.presentation-overlay')) return;
+  const modifier = event.ctrlKey || event.metaKey;
+  if (modifier && event.shiftKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault();
+    addSlide();
+    return;
+  }
+  if (modifier && event.key.toLowerCase() === 'z') {
+    event.preventDefault();
+    if (event.shiftKey) redoSlideEdit();
+    else undoSlideEdit();
+    return;
+  }
+  if (modifier && event.key.toLowerCase() === 'y') {
+    event.preventDefault();
+    redoSlideEdit();
+    return;
+  }
+  if (event.key !== 'F5' || document.querySelector('.presentation-overlay')) return;
+  event.preventDefault();
+  presentSlides(!event.shiftKey);
+});
 document.querySelectorAll('.nav[data-app]').forEach(btn=>btn.addEventListener('click',()=>setApp(btn.dataset.app)));
 $('manage-apps').addEventListener('click',()=>{if (launchAppId) return; state.view='manager';render();});
 $('manage-languages').addEventListener('click',openLanguageManager);
@@ -977,6 +3153,14 @@ window.brightdesk.onUpdateState?.(updateState => {
 });
 loadLocal();$('platform').textContent=`Brightdesk desktop · ${window.brightdesk.platform}`;
 (async()=>{
+  try {
+    const pictures = await hydrateSavedSlidePictures(state.docs.slides);
+    persist();
+    if (pictures.missing) setStatus('Some saved pictures could not be loaded.');
+  } catch (error) {
+    console.warn('Saved slide pictures could not be restored.', error);
+    setStatus('Some saved pictures could not be loaded.');
+  }
   try {
     const version = await window.brightdesk.getVersion();
     if (version) { $('version-label').textContent = `Version ${version}`; $('footer-version').textContent = `Brightdesk ${version}`; }

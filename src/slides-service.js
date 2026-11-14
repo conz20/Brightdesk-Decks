@@ -1,0 +1,1060 @@
+'use strict';
+
+(function (root, factory) {
+  const service = factory();
+  if (typeof module === 'object' && module.exports) module.exports = service;
+  if (root) root.BrightdeskSlidesService = service;
+})(typeof window !== 'undefined' ? window : globalThis, function () {
+  const SLIDE_LAYOUTS = Object.freeze([
+    'title',
+    'title-content',
+    'two-content',
+    'section-header'
+  ]);
+  const DEFAULT_LAYOUT = 'title-content';
+  const SLIDE_LAYOUT_IDS = Object.freeze({
+    title: 'layout-title',
+    'title-content': 'layout-title-content',
+    'two-content': 'layout-two-content',
+    'section-header': 'layout-section-header'
+  });
+  const SLIDE_LAYOUT_BY_ID = new Map(
+    Object.entries(SLIDE_LAYOUT_IDS).map(([layout, id]) => [id, layout])
+  );
+  const SLIDE_LAYOUT_DEFINITIONS = Object.freeze({
+    title: Object.freeze({
+      layout: 'title',
+      id: SLIDE_LAYOUT_IDS.title,
+      label: 'Title slide',
+      titlePlaceholder: 'Add a presentation title',
+      titleLabel: 'Slide title',
+      bodyPlaceholder: 'Add a subtitle',
+      bodyLabel: 'Slide subtitle',
+      secondaryBodyPlaceholder: null,
+      secondaryBodyLabel: null
+    }),
+    'title-content': Object.freeze({
+      layout: 'title-content',
+      id: SLIDE_LAYOUT_IDS['title-content'],
+      label: 'Title and content',
+      titlePlaceholder: 'Add a slide title',
+      titleLabel: 'Slide title',
+      bodyPlaceholder: 'Add your content',
+      bodyLabel: 'Slide content',
+      secondaryBodyPlaceholder: null,
+      secondaryBodyLabel: null
+    }),
+    'two-content': Object.freeze({
+      layout: 'two-content',
+      id: SLIDE_LAYOUT_IDS['two-content'],
+      label: 'Two content',
+      titlePlaceholder: 'Add a comparison title',
+      titleLabel: 'Slide title',
+      bodyPlaceholder: 'Add first-column content',
+      bodyLabel: 'First content column',
+      secondaryBodyPlaceholder: 'Add second-column content',
+      secondaryBodyLabel: 'Second content column'
+    }),
+    'section-header': Object.freeze({
+      layout: 'section-header',
+      id: SLIDE_LAYOUT_IDS['section-header'],
+      label: 'Section header',
+      titlePlaceholder: 'Add a section title',
+      titleLabel: 'Section title',
+      bodyPlaceholder: 'Add a short introduction',
+      bodyLabel: 'Section introduction',
+      secondaryBodyPlaceholder: null,
+      secondaryBodyLabel: null
+    })
+  });
+  const SLIDE_SIZES = Object.freeze(['widescreen', 'standard']);
+  const DEFAULT_SLIDE_SIZE = 'widescreen';
+  const SLIDE_THEMES = Object.freeze(['lavender', 'midnight', 'paper']);
+  const SLIDE_TRANSITIONS = Object.freeze(['none', 'fade', 'push', 'wipe']);
+  const DEFAULT_SLIDE_THEME = 'lavender';
+  const SLIDE_THEME_BACKGROUND_COLORS = Object.freeze({
+    lavender: '#FCF3E9',
+    midnight: '#202B3B',
+    paper: '#FFFFFF'
+  });
+  const SLIDE_OBJECT_TYPES = Object.freeze(['text', 'rectangle', 'ellipse', 'line', 'image']);
+  const SLIDE_IMAGE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\.(?:png|jpg|webp)$/i;
+  const MAX_SLIDE_OBJECTS = 1000;
+  const MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024;
+  const MAX_SLIDE_IMAGE_BYTES_PER_SLIDE = 15 * 1024 * 1024;
+  const MAX_SLIDE_OBJECT_TEXT_LENGTH = 10000;
+  const MAX_SLIDE_OBJECT_FONT_SIZE = 96;
+  const MAX_SLIDE_OBJECT_STROKE_WIDTH = 12;
+  const MAX_PRESENTATION_SLIDES = 2000;
+  const MAX_SECTION_NAME_LENGTH = 80;
+  let sectionSequence = 0;
+  let slideSequence = 0;
+  let slideObjectSequence = 0;
+
+  function assertPresentation(presentation) {
+    if (!presentation || typeof presentation !== 'object' || Array.isArray(presentation)) {
+      throw new TypeError('A presentation object is required.');
+    }
+    return presentation;
+  }
+
+  function createSlideId(usedIds = new Set()) {
+    let id;
+    do {
+      const random = typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${(++slideSequence).toString(36)}`;
+      id = `slide-${random}`;
+    } while (usedIds.has(id));
+    usedIds.add(id);
+    return id;
+  }
+
+  function isValidSlideId(value) {
+    return typeof value === 'string'
+      && value.length > 0
+      && value.length <= 100
+      && value.trim() === value
+      && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
+  }
+
+  function isValidSlideObjectId(value) {
+    return typeof value === 'string'
+      && value.length > 0
+      && value.length <= 110
+      && value.trim() === value
+      && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
+  }
+
+  function createSlideObjectId(usedIds = new Set()) {
+    let id;
+    do {
+      const random = typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${(++slideObjectSequence).toString(36)}`;
+      id = `object-${random}`;
+    } while (usedIds.has(id));
+    usedIds.add(id);
+    return id;
+  }
+
+  function isValidObjectColour(value, allowNone = false) {
+    return (allowNone && (value === null || value === undefined))
+      || (typeof value === 'string' && /^#[0-9A-F]{6}$/i.test(value));
+  }
+
+  function estimateSlideImageBytes(imageData) {
+    if (typeof imageData !== 'string') return 0;
+    const base64 = imageData.slice(imageData.indexOf(',') + 1);
+    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+    return Math.max(0, Math.floor(base64.length * 3 / 4) - padding);
+  }
+
+  function isValidSlideImageData(imageData) {
+    if (typeof imageData !== 'string' || imageData.length > 7 * 1024 * 1024) return false;
+    const match = imageData.match(/^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+    if (!match || match[1].length % 4 !== 0) return false;
+    const bytes = estimateSlideImageBytes(imageData);
+    return bytes > 0 && bytes <= MAX_SLIDE_IMAGE_BYTES;
+  }
+
+  function getSlideImageBytes(objects, excludedId = null) {
+    return objects.reduce((total, object) => {
+      if (object.id === excludedId || object.type !== 'image') return total;
+      return total + estimateSlideImageBytes(object.imageData);
+    }, 0);
+  }
+
+  function normalizeSlideObject(object, usedIds = new Set()) {
+    if (!object || typeof object !== 'object' || Array.isArray(object)) return null;
+    if (!SLIDE_OBJECT_TYPES.includes(object.type)) return null;
+    const numeric = ['x', 'y', 'width', 'height'];
+    const defaults = { x: 20, y: 20, width: 30, height: 20 };
+    const geometry = {};
+    for (const key of numeric) {
+      const value = object[key] === undefined ? defaults[key] : object[key];
+      if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+      geometry[key] = value;
+    }
+    if (
+      geometry.x < 0 || geometry.y < 0 ||
+      geometry.width <= 0 || geometry.height <= 0 ||
+      geometry.width > 100 || geometry.height > 100 ||
+      geometry.x + geometry.width > 100 ||
+      geometry.y + geometry.height > 100
+    ) return null;
+
+    const fillDefault = object.type === 'text' || object.type === 'line' || object.type === 'image' ? null : '#F3EBDD';
+    const strokeDefault = object.type === 'line' ? '#26364D' : '#26364D';
+    const fill = object.fill === undefined ? fillDefault : object.fill;
+    const stroke = object.stroke === undefined ? strokeDefault : object.stroke;
+    const strokeWidth = object.strokeWidth === undefined ? (object.type === 'line' ? 2 : 1) : object.strokeWidth;
+    const text = object.text === undefined ? '' : object.text;
+    const fontSize = object.fontSize === undefined ? 20 : object.fontSize;
+    const textColor = object.textColor === undefined ? '#26364D' : object.textColor;
+    const bold = object.bold === undefined ? false : object.bold;
+    const rotation = object.rotation === undefined ? 0 : object.rotation;
+    const imageData = object.type === 'image' ? object.imageData : undefined;
+    const imageName = object.type === 'image' ? (object.imageName ?? 'Picture') : undefined;
+    const imageWidth = object.type === 'image' ? object.imageWidth : undefined;
+    const imageHeight = object.type === 'image' ? object.imageHeight : undefined;
+    const imageAssetId = object.type === 'image' ? object.imageAssetId : undefined;
+    const hasImageData = isValidSlideImageData(imageData);
+    const hasImageAsset = typeof imageAssetId === 'string' && SLIDE_IMAGE_ASSET_ID_PATTERN.test(imageAssetId);
+
+    if (!isValidObjectColour(fill, true) || !isValidObjectColour(stroke, true)) return null;
+    if (object.type === 'image' && (
+      (!hasImageData && !hasImageAsset) ||
+      typeof imageName !== 'string' || !imageName.trim() || imageName.length > 255 ||
+      !Number.isInteger(imageWidth) || imageWidth < 1 || imageWidth > 20000 ||
+      !Number.isInteger(imageHeight) || imageHeight < 1 || imageHeight > 20000 ||
+      imageWidth * imageHeight > 40000000
+    )) return null;
+    if (typeof strokeWidth !== 'number' || !Number.isFinite(strokeWidth) || strokeWidth < 0 || strokeWidth > MAX_SLIDE_OBJECT_STROKE_WIDTH) return null;
+    if (typeof text !== 'string' || text.length > MAX_SLIDE_OBJECT_TEXT_LENGTH) return null;
+    if (typeof fontSize !== 'number' || !Number.isFinite(fontSize) || fontSize < 8 || fontSize > MAX_SLIDE_OBJECT_FONT_SIZE) return null;
+    if (!isValidObjectColour(textColor)) return null;
+    if (typeof bold !== 'boolean') return null;
+    if (typeof rotation !== 'number' || !Number.isFinite(rotation) || rotation < -360 || rotation > 360) return null;
+
+    const candidateId = object.id;
+    const id = isValidSlideObjectId(candidateId) && !usedIds.has(candidateId)
+      ? candidateId
+      : createSlideObjectId(usedIds);
+    usedIds.add(id);
+    return {
+      id,
+      type: object.type,
+      ...geometry,
+      fill: fill === null ? null : fill.toUpperCase(),
+      stroke: stroke === null ? null : stroke.toUpperCase(),
+      strokeWidth,
+      text,
+      fontSize,
+      textColor: textColor.toUpperCase(),
+      bold,
+      rotation,
+      ...(object.type === 'image' ? {
+        ...(hasImageData ? { imageData } : {}),
+        ...(hasImageAsset ? { imageAssetId } : {}),
+        imageName, imageWidth, imageHeight
+      } : {})
+    };
+  }
+
+  function normalizeSlideObjects(objects) {
+    if (!Array.isArray(objects)) return [];
+    const usedIds = new Set();
+    const normalized = [];
+    let totalImageBytes = 0;
+    for (const object of objects.slice(0, MAX_SLIDE_OBJECTS)) {
+      const safe = normalizeSlideObject(object, usedIds);
+      if (!safe) continue;
+      const imageBytes = safe.type === 'image' ? estimateSlideImageBytes(safe.imageData) : 0;
+      if (totalImageBytes + imageBytes > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) continue;
+      totalImageBytes += imageBytes;
+      normalized.push(safe);
+    }
+    return normalized;
+  }
+
+  function isValidSlideBackgroundColor(value) {
+    return typeof value === 'string' && /^#[0-9A-F]{6}$/i.test(value);
+  }
+
+  function getReadableTextColor(backgroundColor) {
+    if (!isValidSlideBackgroundColor(backgroundColor)) {
+      throw new RangeError('The selected slide background colour is not supported.');
+    }
+    const hex = backgroundColor.slice(1);
+    const channels = [0, 2, 4].map(offset => {
+      const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    return luminance < 0.179 ? '#FFFFFF' : '#000000';
+  }
+
+  function normalizeSlide(slide, usedIds = null) {
+    const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
+    const layoutFromId = typeof source.layoutId === 'string' ? SLIDE_LAYOUT_BY_ID.get(source.layoutId) : null;
+    const layout = SLIDE_LAYOUTS.includes(source.layout)
+      ? source.layout
+      : (layoutFromId || DEFAULT_LAYOUT);
+    const layoutId = SLIDE_LAYOUT_IDS[layout];
+    const candidateId = source.id;
+    const idIsAvailable = isValidSlideId(candidateId) && (!usedIds || !usedIds.has(candidateId));
+    const id = idIsAvailable ? candidateId : createSlideId(usedIds || new Set());
+    if (usedIds) usedIds.add(id);
+    const normalized = {
+      ...source,
+      id,
+      title: String(source.title ?? ''),
+      body: String(source.body ?? ''),
+      bodySecondary: String(source.bodySecondary ?? ''),
+      notes: String(source.notes ?? ''),
+      layout,
+      layoutId,
+      objects: normalizeSlideObjects(source.objects),
+      transition: SLIDE_TRANSITIONS.includes(source.transition) ? source.transition : 'none'
+    };
+    if (isValidSlideBackgroundColor(source.backgroundColor)) {
+      normalized.backgroundColor = source.backgroundColor.toUpperCase();
+    } else {
+      delete normalized.backgroundColor;
+    }
+    if (source.hidden === true) normalized.hidden = true;
+    else delete normalized.hidden;
+    return normalized;
+  }
+
+  function normalizeSectionName(name) {
+    const normalized = String(name ?? '').trim();
+    if (!normalized) throw new TypeError('A section name is required.');
+    if (normalized.length > MAX_SECTION_NAME_LENGTH) {
+      throw new RangeError(`Section names must be ${MAX_SECTION_NAME_LENGTH} characters or fewer.`);
+    }
+    return normalized;
+  }
+
+  function createSectionId(sections) {
+    const used = new Set(sections.map(section => section.id));
+    let id;
+    do {
+      sectionSequence++;
+      id = `section-${Date.now().toString(36)}-${sectionSequence.toString(36)}`;
+    } while (used.has(id));
+    return id;
+  }
+
+  function normalizeSections(presentation) {
+    const source = Array.isArray(presentation.sections) ? presentation.sections : [];
+    const seen = new Set();
+    const sections = [];
+    for (const item of source) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const id = typeof item.id === 'string' ? item.id.trim() : '';
+      const name = typeof item.name === 'string' ? item.name.trim() : '';
+      if (!id || id.length > 100 || !name || name.length > MAX_SECTION_NAME_LENGTH || seen.has(id)) continue;
+      seen.add(id);
+      sections.push({ id, name });
+    }
+    presentation.sections = sections;
+    const validIds = new Set(sections.map(section => section.id));
+    presentation.slides = presentation.slides.map(slide => {
+      const normalized = normalizeSlide(slide);
+      if (typeof normalized.sectionId !== 'string' || !validIds.has(normalized.sectionId)) {
+        delete normalized.sectionId;
+      }
+      return normalized;
+    });
+    const usedIds = new Set(presentation.slides.map(slide => slide.sectionId).filter(Boolean));
+    const firstIndex = new Map();
+    presentation.slides.forEach((slide, index) => {
+      if (slide.sectionId && !firstIndex.has(slide.sectionId)) firstIndex.set(slide.sectionId, index);
+    });
+    presentation.sections = sections
+      .filter(section => usedIds.has(section.id))
+      .sort((left, right) => firstIndex.get(left.id) - firstIndex.get(right.id));
+  }
+
+  function ensurePresentation(presentation, firstSlideTitle = 'Slide 1') {
+    const target = assertPresentation(presentation);
+    target.slideSize = SLIDE_SIZES.includes(target.slideSize) ? target.slideSize : DEFAULT_SLIDE_SIZE;
+    target.themeId = SLIDE_THEMES.includes(target.themeId) ? target.themeId : DEFAULT_SLIDE_THEME;
+    const usedIds = new Set();
+    if (!Array.isArray(target.slides) || target.slides.length === 0) {
+      target.slides = [normalizeSlide({
+        title: String(firstSlideTitle),
+        body: '',
+        bodySecondary: '',
+        notes: '',
+        layout: DEFAULT_LAYOUT
+      }, usedIds)];
+    } else {
+      target.slides = target.slides.map(slide => normalizeSlide(slide, usedIds));
+    }
+    normalizeSections(target);
+    const requested = Number.isInteger(target.current) ? target.current : 0;
+    target.current = Math.max(0, Math.min(requested, target.slides.length - 1));
+    return target;
+  }
+
+  function assertSlideIndex(presentation, index) {
+    if (!Number.isInteger(index) || index < 0 || index >= presentation.slides.length) {
+      throw new RangeError('Slide index is outside the presentation.');
+    }
+  }
+
+  function copySlide(slide) {
+    return JSON.parse(JSON.stringify(slide));
+  }
+
+  function addSlide(presentation, slide = {}) {
+    const target = ensurePresentation(presentation);
+    const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
+    const inheritedSectionId = source.sectionId ?? target.slides[target.slides.length - 1]?.sectionId;
+    const usedIds = new Set(target.slides.map(item => item.id));
+    const next = normalizeSlide({
+      ...source,
+      ...(inheritedSectionId ? { sectionId: inheritedSectionId } : {}),
+      title: source.title ?? `Slide ${target.slides.length + 1}`
+    }, usedIds);
+    target.slides.push(next);
+    target.current = target.slides.length - 1;
+    return next;
+  }
+
+  function insertSlidesAfterCurrent(presentation, importedSlides) {
+    const target = ensurePresentation(presentation);
+    if (!Array.isArray(importedSlides) || importedSlides.length === 0) {
+      throw new RangeError('Choose a PowerPoint presentation containing at least one slide.');
+    }
+    if (target.slides.length + importedSlides.length > MAX_PRESENTATION_SLIDES) {
+      throw new RangeError('The presentation exceeds the 2,000-slide limit.');
+    }
+    if (importedSlides.some(slide => !slide || typeof slide !== 'object' || Array.isArray(slide))) {
+      throw new TypeError('The imported presentation contains an invalid slide collection.');
+    }
+
+    let copiedSlides;
+    try {
+      copiedSlides = importedSlides.map(slide => copySlide(slide));
+    } catch {
+      throw new TypeError('The imported slides could not be copied safely.');
+    }
+
+    const insertionIndex = target.current + 1;
+    const selectedSectionId = target.slides[target.current]?.sectionId || null;
+    const usedSlideIds = new Set(target.slides.map(slide => slide.id));
+    const slidesToInsert = copiedSlides.map(source => {
+      const {
+        id: _sourceId,
+        sectionId: _sourceSectionId,
+        title,
+        body,
+        bodySecondary,
+        notes,
+        layout,
+        layoutId,
+        backgroundColor,
+        hidden,
+        objects
+      } = source;
+      return normalizeSlide({
+        title,
+        body,
+        bodySecondary,
+        notes,
+        layout,
+        layoutId,
+        backgroundColor,
+        hidden,
+        objects,
+        ...(selectedSectionId ? { sectionId: selectedSectionId } : {})
+      }, usedSlideIds);
+    });
+
+    target.slides.splice(insertionIndex, 0, ...slidesToInsert);
+    target.current = insertionIndex;
+    normalizeSections(target);
+
+    return {
+      count: slidesToInsert.length,
+      firstIndex: insertionIndex,
+      lastIndex: insertionIndex + slidesToInsert.length - 1
+    };
+  }
+
+  function duplicateSlide(presentation, index) {
+    const target = ensurePresentation(presentation);
+    const selected = index === undefined ? target.current : index;
+    assertSlideIndex(target, selected);
+    const copy = copySlide(target.slides[selected]);
+    copy.id = createSlideId(new Set(target.slides.map(item => item.id)));
+    const usedObjectIds = new Set();
+    copy.objects = (copy.objects || []).map(object => ({
+      ...object,
+      id: createSlideObjectId(usedObjectIds)
+    }));
+    target.slides.splice(selected + 1, 0, copy);
+    target.current = selected + 1;
+    return copy;
+  }
+
+  function deleteSlide(presentation, index) {
+    const target = ensurePresentation(presentation);
+    const selected = index === undefined ? target.current : index;
+    assertSlideIndex(target, selected);
+    if (target.slides.length === 1) return false;
+    target.slides.splice(selected, 1);
+    target.current = Math.max(0, Math.min(selected - 1, target.slides.length - 1));
+    normalizeSections(target);
+    return true;
+  }
+
+  function updateSlide(presentation, index, patch = {}) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new TypeError('Slide changes must be an object.');
+    }
+    const slide = target.slides[index];
+    if (Object.prototype.hasOwnProperty.call(patch, 'title')) slide.title = String(patch.title ?? '');
+    if (Object.prototype.hasOwnProperty.call(patch, 'body')) slide.body = String(patch.body ?? '');
+    if (Object.prototype.hasOwnProperty.call(patch, 'bodySecondary')) slide.bodySecondary = String(patch.bodySecondary ?? '');
+    if (Object.prototype.hasOwnProperty.call(patch, 'notes')) slide.notes = String(patch.notes ?? '');
+    if (Object.prototype.hasOwnProperty.call(patch, 'transition')) {
+      if (!SLIDE_TRANSITIONS.includes(patch.transition)) throw new RangeError('The selected slide transition is not supported.');
+      slide.transition = patch.transition;
+    }
+    return slide;
+  }
+
+  function getSlideLayoutDefinition(layout) {
+    if (!SLIDE_LAYOUTS.includes(layout)) {
+      throw new RangeError('The selected slide layout is not supported.');
+    }
+    return { ...SLIDE_LAYOUT_DEFINITIONS[layout] };
+  }
+
+  function resetSlideLayout(presentation, index) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    const layout = target.slides[index].layout;
+    getSlideLayoutDefinition(layout);
+    return setSlideLayout(target, index, layout);
+  }
+
+  function setSlideLayout(presentation, index, layout) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (!SLIDE_LAYOUTS.includes(layout)) {
+      throw new RangeError('The selected slide layout is not supported.');
+    }
+    target.slides[index].layout = layout;
+    target.slides[index].layoutId = SLIDE_LAYOUT_IDS[layout];
+    return target.slides[index];
+  }
+
+  function moveSlide(presentation, fromIndex, toIndex) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, fromIndex);
+    assertSlideIndex(target, toIndex);
+    const selectedSlide = target.slides[target.current];
+    if (fromIndex === toIndex) return target.slides[fromIndex];
+
+    const [moved] = target.slides.splice(fromIndex, 1);
+    target.slides.splice(toIndex, 0, moved);
+    target.current = target.slides.indexOf(selectedSlide);
+    normalizeSections(target);
+    return moved;
+  }
+
+  function setSlideHidden(presentation, index, hidden) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (typeof hidden !== 'boolean') throw new TypeError('Hidden slide state must be a boolean.');
+    if (hidden && target.slides[index].hidden !== true) {
+      const visibleCount = target.slides.filter(slide => slide.hidden !== true).length;
+      if (visibleCount <= 1) throw new RangeError('A presentation must keep at least one visible slide.');
+    }
+    if (hidden) target.slides[index].hidden = true;
+    else delete target.slides[index].hidden;
+    return target.slides[index].hidden === true;
+  }
+
+  function getVisibleSlideIndices(presentation) {
+    const target = ensurePresentation(presentation);
+    return target.slides.reduce((visible, slide, index) => {
+      if (slide.hidden !== true) visible.push(index);
+      return visible;
+    }, []);
+  }
+
+  function getVisibleSlidePosition(presentation, slideNumber) {
+    const target = ensurePresentation(presentation);
+    if (!Number.isInteger(slideNumber) || slideNumber < 1 || slideNumber > target.slides.length) return -1;
+    const slideIndex = slideNumber - 1;
+    if (target.slides[slideIndex].hidden === true) return -1;
+    return getVisibleSlideIndices(target).indexOf(slideIndex);
+  }
+
+  function getPresenterSnapshot(presentation, visiblePosition) {
+    const target = ensurePresentation(presentation);
+    const visibleIndices = getVisibleSlideIndices(target);
+    if (!Number.isInteger(visiblePosition) || visiblePosition < 0 || visiblePosition >= visibleIndices.length) {
+      throw new RangeError('Presenter position is outside the visible slides.');
+    }
+
+    const currentIndex = visibleIndices[visiblePosition];
+    const nextIndex = visibleIndices[visiblePosition + 1] ?? null;
+    return {
+      visiblePosition,
+      visibleCount: visibleIndices.length,
+      currentIndex,
+      nextIndex,
+      currentSlide: copySlide(target.slides[currentIndex]),
+      nextSlide: nextIndex === null ? null : copySlide(target.slides[nextIndex])
+    };
+  }
+
+  function setSlideSize(presentation, slideSize) {
+    const target = ensurePresentation(presentation);
+    if (!SLIDE_SIZES.includes(slideSize)) {
+      throw new RangeError('The selected presentation slide size is not supported.');
+    }
+    target.slideSize = slideSize;
+    return target.slideSize;
+  }
+
+  function setSlideTheme(presentation, themeId) {
+    const target = ensurePresentation(presentation);
+    if (!SLIDE_THEMES.includes(themeId)) {
+      throw new RangeError('The selected presentation theme is not supported.');
+    }
+    target.themeId = themeId;
+    return target.themeId;
+  }
+
+  function setSlideBackgroundColor(presentation, index, backgroundColor) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (backgroundColor === null || backgroundColor === undefined) {
+      delete target.slides[index].backgroundColor;
+      return null;
+    }
+    if (!isValidSlideBackgroundColor(backgroundColor)) {
+      throw new RangeError('The selected slide background colour is not supported.');
+    }
+    target.slides[index].backgroundColor = backgroundColor.toUpperCase();
+    return target.slides[index].backgroundColor;
+  }
+
+  function getSlideBackgroundColor(presentation, index) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    return target.slides[index].backgroundColor || SLIDE_THEME_BACKGROUND_COLORS[target.themeId];
+  }
+
+  function setSlideTransition(presentation, index, transition) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (!SLIDE_TRANSITIONS.includes(transition)) {
+      throw new RangeError('The selected slide transition is not supported.');
+    }
+    target.slides[index].transition = transition;
+    return target.slides[index].transition;
+  }
+
+  function addSlideObject(presentation, slideIndex, definition = {}) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    const slide = target.slides[slideIndex];
+    if (slide.objects.length >= MAX_SLIDE_OBJECTS) {
+      throw new RangeError('A slide cannot contain more than ' + MAX_SLIDE_OBJECTS + ' objects.');
+    }
+    if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
+      throw new TypeError('A slide object definition is required.');
+    }
+    const usedIds = new Set(slide.objects.map(object => object.id));
+    const next = normalizeSlideObject(definition, usedIds);
+    if (!next) throw new RangeError('The slide object definition is invalid.');
+    if (next.type === 'image' && !next.imageData) throw new RangeError('A new picture must include its embedded image data.');
+    if (getSlideImageBytes(slide.objects) + (next.type === 'image' ? estimateSlideImageBytes(next.imageData) : 0) > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
+      throw new RangeError('A slide cannot contain more than 15 MB of embedded pictures.');
+    }
+    slide.objects.push(next);
+    return next;
+  }
+
+  function updateSlideObject(presentation, slideIndex, objectId, patch = {}) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new TypeError('Slide object changes must be an object.');
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'id') || Object.prototype.hasOwnProperty.call(patch, 'type')) {
+      throw new TypeError('A slide object identity and type cannot be changed.');
+    }
+    const allowed = new Set(['x', 'y', 'width', 'height', 'fill', 'stroke', 'strokeWidth', 'text', 'fontSize', 'textColor', 'bold', 'rotation', 'imageData', 'imageName', 'imageWidth', 'imageHeight', 'imageAssetId']);
+    if (Object.keys(patch).some(key => !allowed.has(key))) {
+      throw new TypeError('The slide object update contains an unsupported field.');
+    }
+    const slide = target.slides[slideIndex];
+    const objectIndex = slide.objects.findIndex(object => object.id === objectId);
+    if (objectIndex < 0) throw new RangeError('The slide object could not be found.');
+    const existing = slide.objects[objectIndex];
+    const usedIds = new Set(slide.objects.filter(object => object.id !== objectId).map(object => object.id));
+    if (existing.type !== 'image' && ['imageData', 'imageName', 'imageWidth', 'imageHeight', 'imageAssetId'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) {
+      throw new TypeError('Only picture objects can change picture data.');
+    }
+    const updated = normalizeSlideObject({ ...existing, ...patch, id: existing.id, type: existing.type }, usedIds);
+    if (!updated) throw new RangeError('The slide object changes are outside the supported limits.');
+    if (getSlideImageBytes(slide.objects, objectId) + (updated.type === 'image' ? estimateSlideImageBytes(updated.imageData) : 0) > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
+      throw new RangeError('A slide cannot contain more than 15 MB of embedded pictures.');
+    }
+    slide.objects[objectIndex] = updated;
+    return updated;
+  }
+
+  function moveSlideObject(presentation, slideIndex, objectId, x, y) {
+    return updateSlideObject(presentation, slideIndex, objectId, { x, y });
+  }
+
+  function reorderSlideObject(presentation, slideIndex, objectId, placement) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    if (!['front', 'forward', 'backward', 'back'].includes(placement)) {
+      throw new RangeError('The selected slide-object layer action is not supported.');
+    }
+    const objects = target.slides[slideIndex].objects;
+    const currentIndex = objects.findIndex(object => object.id === objectId);
+    if (currentIndex < 0) throw new RangeError('The slide object could not be found.');
+
+    let nextIndex = currentIndex;
+    if (placement === 'front') nextIndex = objects.length - 1;
+    else if (placement === 'back') nextIndex = 0;
+    else if (placement === 'forward') nextIndex = Math.min(objects.length - 1, currentIndex + 1);
+    else if (placement === 'backward') nextIndex = Math.max(0, currentIndex - 1);
+
+    if (nextIndex === currentIndex) return false;
+    const [object] = objects.splice(currentIndex, 1);
+    objects.splice(nextIndex, 0, object);
+    return true;
+  }
+
+  function deleteSlideObject(presentation, slideIndex, objectId) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    const slide = target.slides[slideIndex];
+    const objectIndex = slide.objects.findIndex(object => object.id === objectId);
+    if (objectIndex < 0) return false;
+    slide.objects.splice(objectIndex, 1);
+    return true;
+  }
+
+  function getSlideObjects(presentation, slideIndex) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    return target.slides[slideIndex].objects.map(copySlide);
+  }
+
+  function createSection(presentation, name, startIndex) {
+    const target = ensurePresentation(presentation);
+    const start = startIndex === undefined ? target.current : startIndex;
+    assertSlideIndex(target, start);
+    const sectionName = normalizeSectionName(name);
+    const previousSectionId = target.slides[start].sectionId || null;
+    let end = start + 1;
+    while (end < target.slides.length && (target.slides[end].sectionId || null) === previousSectionId) end++;
+
+    const section = { id: createSectionId(target.sections), name: sectionName };
+    target.sections.push(section);
+    for (let index = start; index < end; index++) target.slides[index].sectionId = section.id;
+    normalizeSections(target);
+    return section;
+  }
+
+  function renameSection(presentation, sectionId, name) {
+    const target = ensurePresentation(presentation);
+    const section = target.sections.find(item => item.id === sectionId);
+    if (!section) throw new RangeError('The selected section does not exist.');
+    section.name = normalizeSectionName(name);
+    return section;
+  }
+
+  function moveSlideToSection(presentation, index, sectionId = null) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (sectionId !== null && !target.sections.some(section => section.id === sectionId)) {
+      throw new RangeError('The selected section does not exist.');
+    }
+    if (sectionId) target.slides[index].sectionId = sectionId;
+    else delete target.slides[index].sectionId;
+    normalizeSections(target);
+    return target.slides[index];
+  }
+
+  function deleteSection(presentation, sectionId, moveToSectionId = null) {
+    const target = ensurePresentation(presentation);
+    if (!target.sections.some(section => section.id === sectionId)) return false;
+    if (moveToSectionId !== null && (
+      moveToSectionId === sectionId || !target.sections.some(section => section.id === moveToSectionId)
+    )) {
+      throw new RangeError('The destination section does not exist.');
+    }
+    target.slides.forEach(slide => {
+      if (slide.sectionId !== sectionId) return;
+      if (moveToSectionId) slide.sectionId = moveToSectionId;
+      else delete slide.sectionId;
+    });
+    target.sections = target.sections.filter(section => section.id !== sectionId);
+    normalizeSections(target);
+    return true;
+  }
+
+  function setCurrentSlide(presentation, index) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    target.current = index;
+    return target.current;
+  }
+
+  function cloneSnapshot(presentation) {
+    const slides = copySlide(presentation.slides);
+    for (const slide of slides) {
+      for (const object of slide.objects || []) {
+        if (object.type === 'image' && object.imageAssetId) delete object.imageData;
+      }
+    }
+    return {
+      slides,
+      sections: presentation.sections.map(section => ({ ...section })),
+      current: presentation.current,
+      slideSize: presentation.slideSize,
+      themeId: presentation.themeId
+    };
+  }
+
+  function snapshotEquals(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function restoreSnapshot(presentation, snapshot) {
+    presentation.slides = copySlide(snapshot.slides);
+    presentation.sections = snapshot.sections.map(section => ({ ...section }));
+    presentation.current = snapshot.current;
+    presentation.slideSize = snapshot.slideSize;
+    presentation.themeId = SLIDE_THEMES.includes(snapshot.themeId) ? snapshot.themeId : DEFAULT_SLIDE_THEME;
+    return presentation;
+  }
+
+  function createHistory(presentation, options = {}) {
+    const target = ensurePresentation(presentation);
+    const savedLimit = Number.isInteger(options.state?.limit) ? options.state.limit : 100;
+    const requestedLimit = Number.isInteger(options.limit) ? options.limit : savedLimit;
+    const limit = Math.max(1, Math.min(requestedLimit, 500));
+    const groupWindow = 750;
+    let current = cloneSnapshot(target);
+    const past = [];
+    const future = [];
+    let lastGroup = null;
+    let lastAt = 0;
+    let restored = false;
+
+    function normalizeSnapshot(snapshot) {
+      if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.slides) || snapshot.slides.length === 0) {
+        return null;
+      }
+      const normalized = ensurePresentation({
+        slides: copySlide(snapshot.slides),
+        sections: Array.isArray(snapshot.sections) ? snapshot.sections.map(section => ({ ...section })) : [],
+        current: snapshot.current,
+        slideSize: snapshot.slideSize,
+        themeId: snapshot.themeId
+      });
+      return cloneSnapshot(normalized);
+    }
+
+    function restoreSavedState(saved) {
+      if (!saved || typeof saved !== 'object' || saved.version !== 1) return;
+      const savedCurrent = normalizeSnapshot(saved.current);
+      if (!savedCurrent || !snapshotEquals(
+        { slides: savedCurrent.slides, sections: savedCurrent.sections, slideSize: savedCurrent.slideSize, themeId: savedCurrent.themeId },
+        { slides: current.slides, sections: current.sections, slideSize: current.slideSize, themeId: current.themeId }
+      )) return;
+
+      const savedPast = Array.isArray(saved.past) ? saved.past.map(normalizeSnapshot) : null;
+      const savedFuture = Array.isArray(saved.future) ? saved.future.map(normalizeSnapshot) : null;
+      if (!savedPast || !savedFuture || savedPast.some(item => !item) || savedFuture.some(item => !item)) return;
+
+      current.current = target.current;
+      past.push(...savedPast.slice(-limit));
+      future.push(...savedFuture.slice(-limit));
+      restored = true;
+    }
+
+    restoreSavedState(options.state);
+
+    function trimPast() {
+      while (past.length > limit) past.shift();
+    }
+
+    function commit(nextPresentation, group = null, now = Date.now()) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      const next = cloneSnapshot(nextTarget);
+      if (snapshotEquals(next, current)) {
+        lastGroup = null;
+        lastAt = 0;
+        return false;
+      }
+
+      const grouped = typeof group === 'string'
+        && group.length > 0
+        && group === lastGroup
+        && Number.isFinite(now)
+        && now >= lastAt
+        && now - lastAt <= groupWindow;
+
+      if (!grouped) {
+        past.push(current);
+        trimPast();
+      }
+
+      current = next;
+      future.length = 0;
+      lastGroup = typeof group === 'string' && group.length > 0 ? group : null;
+      lastAt = Number.isFinite(now) ? now : Date.now();
+      return true;
+    }
+
+    function undo(nextPresentation) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      if (past.length === 0) return false;
+      future.push(current);
+      current = past.pop();
+      lastGroup = null;
+      lastAt = 0;
+      restoreSnapshot(nextTarget, current);
+      return true;
+    }
+
+    function redo(nextPresentation) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      if (future.length === 0) return false;
+      past.push(current);
+      trimPast();
+      current = future.pop();
+      lastGroup = null;
+      lastAt = 0;
+      restoreSnapshot(nextTarget, current);
+      return true;
+    }
+
+    function sync(nextPresentation) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      current.current = nextTarget.current;
+      current.themeId = nextTarget.themeId;
+      lastGroup = null;
+      lastAt = 0;
+    }
+
+    function reset(nextPresentation) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      current = cloneSnapshot(nextTarget);
+      past.length = 0;
+      future.length = 0;
+      lastGroup = null;
+      lastAt = 0;
+    }
+
+    function hydrateImages(imageDataByAssetId) {
+      if (!(imageDataByAssetId instanceof Map)) return 0;
+      let hydrated = 0;
+      const snapshots = [current, ...past, ...future];
+      for (const snapshot of snapshots) {
+        for (const slide of snapshot.slides || []) {
+          for (const object of slide.objects || []) {
+            if (object.type !== 'image' || typeof object.imageAssetId !== 'string') continue;
+            const imageData = imageDataByAssetId.get(object.imageAssetId);
+            if (typeof imageData !== 'string' || object.imageData === imageData) continue;
+            object.imageData = imageData;
+            hydrated++;
+          }
+        }
+      }
+      return hydrated;
+    }
+
+    function hydrateAssetIds(assetIdByImageData) {
+      if (!(assetIdByImageData instanceof Map)) return 0;
+      let assigned = 0;
+      const snapshots = [current, ...past, ...future];
+      for (const snapshot of snapshots) {
+        for (const slide of snapshot.slides || []) {
+          for (const object of slide.objects || []) {
+            if (object.type !== 'image' || object.imageAssetId || typeof object.imageData !== 'string') continue;
+            const imageAssetId = assetIdByImageData.get(object.imageData);
+            if (typeof imageAssetId !== 'string' || !SLIDE_IMAGE_ASSET_ID_PATTERN.test(imageAssetId)) continue;
+            object.imageAssetId = imageAssetId;
+            assigned++;
+          }
+        }
+      }
+      return assigned;
+    }
+
+    function exportState() {
+      return {
+        version: 1,
+        limit,
+        current: cloneSnapshot(current),
+        past: past.map(snapshot => cloneSnapshot(snapshot)),
+        future: future.map(snapshot => cloneSnapshot(snapshot))
+      };
+    }
+
+    return {
+      restored,
+      canUndo: () => past.length > 0,
+      canRedo: () => future.length > 0,
+      commit,
+      undo,
+      redo,
+      sync,
+      reset,
+      hydrateImages,
+      hydrateAssetIds,
+      exportState
+    };
+  }
+
+  return {
+    SLIDE_LAYOUTS,
+    DEFAULT_LAYOUT,
+    SLIDE_LAYOUT_IDS,
+    SLIDE_SIZES,
+    DEFAULT_SLIDE_SIZE,
+    SLIDE_THEMES,
+    DEFAULT_SLIDE_THEME,
+    SLIDE_TRANSITIONS,
+    SLIDE_THEME_BACKGROUND_COLORS,
+    ensurePresentation,
+    addSlide,
+    insertSlidesAfterCurrent,
+    duplicateSlide,
+    deleteSlide,
+    updateSlide,
+    setSlideLayout,
+    getSlideLayoutDefinition,
+    resetSlideLayout,
+    moveSlide,
+    setCurrentSlide,
+    setSlideSize,
+    setSlideTheme,
+    setSlideBackgroundColor,
+    getSlideBackgroundColor,
+    setSlideTransition,
+    getReadableTextColor,
+    SLIDE_OBJECT_TYPES,
+    MAX_SLIDE_OBJECTS,
+    MAX_SLIDE_IMAGE_BYTES,
+    MAX_SLIDE_IMAGE_BYTES_PER_SLIDE,
+    addSlideObject,
+    updateSlideObject,
+    moveSlideObject,
+    reorderSlideObject,
+    deleteSlideObject,
+    getSlideObjects,
+    setSlideHidden,
+    getVisibleSlideIndices,
+    getVisibleSlidePosition,
+    getPresenterSnapshot,
+    createSection,
+    renameSection,
+    moveSlideToSection,
+    deleteSection,
+    createHistory
+  };
+});
