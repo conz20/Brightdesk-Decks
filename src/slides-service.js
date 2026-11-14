@@ -76,9 +76,15 @@
     midnight: '#202B3B',
     paper: '#FFFFFF'
   });
+  const SLIDE_OBJECT_TYPES = Object.freeze(['text', 'rectangle', 'ellipse', 'line']);
+  const MAX_SLIDE_OBJECTS = 1000;
+  const MAX_SLIDE_OBJECT_TEXT_LENGTH = 10000;
+  const MAX_SLIDE_OBJECT_FONT_SIZE = 96;
+  const MAX_SLIDE_OBJECT_STROKE_WIDTH = 12;
   const MAX_SECTION_NAME_LENGTH = 80;
   let sectionSequence = 0;
   let slideSequence = 0;
+  let slideObjectSequence = 0;
 
   function assertPresentation(presentation) {
     if (!presentation || typeof presentation !== 'object' || Array.isArray(presentation)) {
@@ -105,6 +111,100 @@
       && value.length <= 100
       && value.trim() === value
       && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
+  }
+
+  function isValidSlideObjectId(value) {
+    return typeof value === 'string'
+      && value.length > 0
+      && value.length <= 110
+      && value.trim() === value
+      && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
+  }
+
+  function createSlideObjectId(usedIds = new Set()) {
+    let id;
+    do {
+      const random = typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${(++slideObjectSequence).toString(36)}`;
+      id = `object-${random}`;
+    } while (usedIds.has(id));
+    usedIds.add(id);
+    return id;
+  }
+
+  function isValidObjectColour(value, allowNone = false) {
+    return (allowNone && (value === null || value === undefined))
+      || (typeof value === 'string' && /^#[0-9A-F]{6}$/i.test(value));
+  }
+
+  function normalizeSlideObject(object, usedIds = new Set()) {
+    if (!object || typeof object !== 'object' || Array.isArray(object)) return null;
+    if (!SLIDE_OBJECT_TYPES.includes(object.type)) return null;
+    const numeric = ['x', 'y', 'width', 'height'];
+    const defaults = { x: 20, y: 20, width: 30, height: 20 };
+    const geometry = {};
+    for (const key of numeric) {
+      const value = object[key] === undefined ? defaults[key] : object[key];
+      if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+      geometry[key] = value;
+    }
+    if (
+      geometry.x < 0 || geometry.y < 0 ||
+      geometry.width <= 0 || geometry.height <= 0 ||
+      geometry.width > 100 || geometry.height > 100 ||
+      geometry.x + geometry.width > 100 ||
+      geometry.y + geometry.height > 100
+    ) return null;
+
+    const fillDefault = object.type === 'text' || object.type === 'line' ? null : '#F3EBDD';
+    const strokeDefault = object.type === 'line' ? '#26364D' : '#26364D';
+    const fill = object.fill === undefined ? fillDefault : object.fill;
+    const stroke = object.stroke === undefined ? strokeDefault : object.stroke;
+    const strokeWidth = object.strokeWidth === undefined ? (object.type === 'line' ? 2 : 1) : object.strokeWidth;
+    const text = object.text === undefined ? '' : object.text;
+    const fontSize = object.fontSize === undefined ? 20 : object.fontSize;
+    const textColor = object.textColor === undefined ? '#26364D' : object.textColor;
+    const bold = object.bold === undefined ? false : object.bold;
+    const rotation = object.rotation === undefined ? 0 : object.rotation;
+
+    if (!isValidObjectColour(fill, true) || !isValidObjectColour(stroke, true)) return null;
+    if (typeof strokeWidth !== 'number' || !Number.isFinite(strokeWidth) || strokeWidth < 0 || strokeWidth > MAX_SLIDE_OBJECT_STROKE_WIDTH) return null;
+    if (typeof text !== 'string' || text.length > MAX_SLIDE_OBJECT_TEXT_LENGTH) return null;
+    if (typeof fontSize !== 'number' || !Number.isFinite(fontSize) || fontSize < 8 || fontSize > MAX_SLIDE_OBJECT_FONT_SIZE) return null;
+    if (!isValidObjectColour(textColor)) return null;
+    if (typeof bold !== 'boolean') return null;
+    if (typeof rotation !== 'number' || !Number.isFinite(rotation) || rotation < -360 || rotation > 360) return null;
+
+    const candidateId = object.id;
+    const id = isValidSlideObjectId(candidateId) && !usedIds.has(candidateId)
+      ? candidateId
+      : createSlideObjectId(usedIds);
+    usedIds.add(id);
+    return {
+      id,
+      type: object.type,
+      ...geometry,
+      fill: fill === null ? null : fill.toUpperCase(),
+      stroke: stroke === null ? null : stroke.toUpperCase(),
+      strokeWidth,
+      text,
+      fontSize,
+      textColor: textColor.toUpperCase(),
+      bold,
+      rotation
+    };
+  }
+
+  function normalizeSlideObjects(objects) {
+    if (!Array.isArray(objects)) return [];
+    const usedIds = new Set();
+    const normalized = [];
+    for (const object of objects.slice(0, MAX_SLIDE_OBJECTS)) {
+      const safe = normalizeSlideObject(object, usedIds);
+      if (safe) normalized.push(safe);
+    }
+    return normalized;
   }
 
   function isValidSlideBackgroundColor(value) {
@@ -143,7 +243,8 @@
       bodySecondary: String(source.bodySecondary ?? ''),
       notes: String(source.notes ?? ''),
       layout,
-      layoutId
+      layoutId,
+      objects: normalizeSlideObjects(source.objects)
     };
     if (isValidSlideBackgroundColor(source.backgroundColor)) {
       normalized.backgroundColor = source.backgroundColor.toUpperCase();
