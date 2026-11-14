@@ -183,7 +183,7 @@
       geometry.y + geometry.height > 100
     ) return null;
 
-    const fillDefault = object.type === 'text' || object.type === 'line' ? null : '#F3EBDD';
+    const fillDefault = object.type === 'text' || object.type === 'line' || object.type === 'image' ? null : '#F3EBDD';
     const strokeDefault = object.type === 'line' ? '#26364D' : '#26364D';
     const fill = object.fill === undefined ? fillDefault : object.fill;
     const stroke = object.stroke === undefined ? strokeDefault : object.stroke;
