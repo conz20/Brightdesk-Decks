@@ -542,3 +542,65 @@ test('Brightdesk project export and import preserve stable slide IDs', async () 
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk project validation accepts only supported persisted slide themes', () => {
+  for (const themeId of ['lavender', 'midnight', 'paper']) {
+    assert.doesNotThrow(() => validateProject({
+      docs: { slides: { themeId, slides: [{ title: 'Slide', body: '' }] } }
+    }));
+  }
+  assert.throws(() => validateProject({
+    docs: { slides: { themeId: 'ultraviolet', slides: [{ title: 'Slide', body: '' }] } }
+  }), /invalid theme/);
+});
+
+test('PPTX export applies the saved Brightdesk slide theme colours', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-themes-'));
+  const themeCases = [
+    { themeId: 'lavender', background: 'FCF3E9', title: '26364D' },
+    { themeId: 'midnight', background: '202B3B', title: 'FFFFFF' },
+    { themeId: 'paper', background: 'FFFFFF', title: '26364D' }
+  ];
+  try {
+    for (const theme of themeCases) {
+      const filePath = path.join(directory, theme.themeId + '.pptx');
+      await exportOfficeFile({
+        kind: 'slides',
+        themeId: theme.themeId,
+        slides: [{ title: 'Theme proof', body: 'Same content, saved theme', layout: 'title' }]
+      }, filePath);
+      const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+      const slideXml = await archive.file('ppt/slides/slide1.xml')?.async('string');
+      assert.match(slideXml || '', new RegExp('val="' + theme.background + '"'));
+      assert.match(slideXml || '', new RegExp('val="' + theme.title + '"'));
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Brightdesk project export and import preserve the selected slide theme', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-slide-theme-project-'));
+  const filePath = path.join(directory, 'midnight-theme.bdesk');
+  try {
+    await exportOfficeFile({
+      project: {
+        title: 'Night presentation',
+        docs: {
+          slides: {
+            title: 'Night presentation',
+            themeId: 'midnight',
+            slides: [{ id: 'slide-night', title: 'Night', body: 'Text' }],
+            current: 0
+          }
+        }
+      }
+    }, filePath);
+    const reopened = await openOfficeFile(filePath);
+    assert.equal(reopened.docs.slides.themeId, 'midnight');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
