@@ -21,7 +21,7 @@ const {
 } = require('../src/slides-service');
 
 function withoutSlideId(slide) {
-  const { id, ...content } = slide;
+  const { id, layoutId, ...content } = slide;
   return content;
 }
 
