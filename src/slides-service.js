@@ -643,6 +643,28 @@
     return updateSlideObject(presentation, slideIndex, objectId, { x, y });
   }
 
+  function reorderSlideObject(presentation, slideIndex, objectId, placement) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    if (!['front', 'forward', 'backward', 'back'].includes(placement)) {
+      throw new RangeError('The selected slide-object layer action is not supported.');
+    }
+    const objects = target.slides[slideIndex].objects;
+    const currentIndex = objects.findIndex(object => object.id === objectId);
+    if (currentIndex < 0) throw new RangeError('The slide object could not be found.');
+
+    let nextIndex = currentIndex;
+    if (placement === 'front') nextIndex = objects.length - 1;
+    else if (placement === 'back') nextIndex = 0;
+    else if (placement === 'forward') nextIndex = Math.min(objects.length - 1, currentIndex + 1);
+    else if (placement === 'backward') nextIndex = Math.max(0, currentIndex - 1);
+
+    if (nextIndex === currentIndex) return false;
+    const [object] = objects.splice(currentIndex, 1);
+    objects.splice(nextIndex, 0, object);
+    return true;
+  }
+
   function deleteSlideObject(presentation, slideIndex, objectId) {
     const target = ensurePresentation(presentation);
     assertSlideIndex(target, slideIndex);
@@ -929,6 +951,7 @@
     addSlideObject,
     updateSlideObject,
     moveSlideObject,
+    reorderSlideObject,
     deleteSlideObject,
     getSlideObjects,
     setSlideHidden,
