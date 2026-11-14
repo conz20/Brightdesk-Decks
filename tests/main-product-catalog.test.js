@@ -244,3 +244,22 @@ test('Decks opens picture files only through a guarded local image picker', () =
   assert.match(preload, /openSlidePicture:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(['"]slides:picture:open['"]\)/);
 });
 
+
+test('Decks stores picture bytes in its private device data folder with guarded read and cleanup IPC', () => {
+  const root = path.join(__dirname, '..');
+  const main = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(root, 'src', 'preload.js'), 'utf8');
+
+  assert.match(main, /function getSlidePictureAssetPath\(assetId\)/);
+  assert.match(main, /app\.getPath\('userData'\)/);
+  assert.match(main, /async function storeSlidePictureAsset\(imageData\)/);
+  assert.match(main, /async function loadSlidePictureAsset\(assetId\)/);
+  assert.match(main, /async function prepareProjectSlidePictures\(value\)/);
+  assert.match(main, /ipcMain\.handle\(['"]slides:picture:store['"][\s\S]*?senderIsMain\(event\)/);
+  assert.match(main, /ipcMain\.handle\(['"]slides:picture:load['"][\s\S]*?senderIsMain\(event\)/);
+  assert.match(main, /ipcMain\.handle\(['"]slides:picture:prune['"][\s\S]*?senderIsMain\(event\)/);
+  assert.match(preload, /storeSlidePicture:/);
+  assert.match(preload, /loadSlidePicture:/);
+  assert.match(preload, /pruneSlidePictures:/);
+});
+
