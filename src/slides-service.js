@@ -250,6 +250,25 @@
     return getVisibleSlideIndices(target).indexOf(slideIndex);
   }
 
+  function getPresenterSnapshot(presentation, visiblePosition) {
+    const target = ensurePresentation(presentation);
+    const visibleIndices = getVisibleSlideIndices(target);
+    if (!Number.isInteger(visiblePosition) || visiblePosition < 0 || visiblePosition >= visibleIndices.length) {
+      throw new RangeError('Presenter position is outside the visible slides.');
+    }
+
+    const currentIndex = visibleIndices[visiblePosition];
+    const nextIndex = visibleIndices[visiblePosition + 1] ?? null;
+    return {
+      visiblePosition,
+      visibleCount: visibleIndices.length,
+      currentIndex,
+      nextIndex,
+      currentSlide: copySlide(target.slides[currentIndex]),
+      nextSlide: nextIndex === null ? null : copySlide(target.slides[nextIndex])
+    };
+  }
+
   function setSlideSize(presentation, slideSize) {
     const target = ensurePresentation(presentation);
     if (!SLIDE_SIZES.includes(slideSize)) {
@@ -508,6 +527,7 @@
     setSlideHidden,
     getVisibleSlideIndices,
     getVisibleSlidePosition,
+    getPresenterSnapshot,
     createSection,
     renameSection,
     moveSlideToSection,
