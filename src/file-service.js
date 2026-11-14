@@ -834,7 +834,12 @@ async function readPptxSlidePictures(zip, slidePart, slideXml, slideWidthEmu, sl
       continue;
     }
     if (buffer.length === 0 || buffer.length > MAX_SLIDE_IMAGE_BYTES) continue;
-    const imageData = createSlideImageDataUrl(buffer);
+    let imageData;
+    try {
+      imageData = createSlideImageDataUrl(buffer);
+    } catch {
+      continue;
+    }
     const imageInfo = inspectSlideImageDataUrl(imageData);
     if (
       !imageInfo ||
@@ -850,7 +855,7 @@ async function readPptxSlidePictures(zip, slidePart, slideXml, slideWidthEmu, sl
     const requestedName = typeof properties?.['@_descr'] === 'string' && properties['@_descr'].trim()
       ? properties['@_descr']
       : (typeof properties?.['@_name'] === 'string' ? properties['@_name'] : 'Picture');
-    const imageName = requestedName.replace(/[\\u0000-\\u001f\\u007f]/g, '').trim().slice(0, 255) || 'Picture';
+    const imageName = requestedName.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 255) || 'Picture';
     const rotationValue = Number(transform?.['@_rot']);
     const rotation = Number.isFinite(rotationValue) ? Math.max(-360, Math.min(360, rotationValue / 60000)) : 0;
     objects.push({
