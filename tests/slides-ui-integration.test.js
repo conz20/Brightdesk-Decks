@@ -86,3 +86,25 @@ test('Decks provides a guarded Reuse Slides workflow from the Home ribbon', () =
   assert.match(preload, /reuseSlides: \(\) => ipcRenderer\.invoke\('slides:reuse'\)/);
   assert.match(translations, /'common\.reuseSlides':'Reuse slides/);
 });
+
+
+test('Decks provides a Draw workspace with selectable and editable slide objects', () => {
+  const app = read('src/app.js');
+  const css = read('src/styles.css');
+
+  assert.match(app, /slides: \['home', 'insert', 'draw', 'design'/);
+  assert.match(app, /function insertSlideObject\(/);
+  assert.match(app, /function renderSlideObjects\(/);
+  assert.match(app, /data-slide-object/);
+  assert.match(app, /selectedSlideObjectId/);
+  assert.match(app, /Shape Format/);
+  assert.match(css, /\.slide-object/);
+  assert.match(css, /\.slide-object-selected/);
+});
+
+test('Decks renders saved slide objects in both editing and full-screen playback', () => {
+  const app = read('src/app.js');
+
+  assert.match(app, /renderSlideObjects\(stage, slide\.objects/);
+  assert.match(app, /renderPresentationObjects\(slide, currentSlide\.objects/);
+});
