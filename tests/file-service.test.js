@@ -253,3 +253,73 @@ test('PPTX export writes both content placeholders for a two-content slide', asy
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk project validation accepts supported presentation slide sizes', () => {
+  for (const slideSize of ['widescreen', 'standard']) {
+    assert.doesNotThrow(() => validateProject({
+      docs: {
+        slides: {
+          title: 'Sized presentation',
+          slideSize,
+          slides: [{ title: 'Welcome', body: 'Hello' }],
+          current: 0
+        }
+      }
+    }));
+  }
+});
+
+test('Brightdesk project validation rejects unsupported presentation slide sizes', () => {
+  assert.throws(() => validateProject({
+    docs: {
+      slides: {
+        slideSize: 'cinemascope',
+        slides: [{ title: 'Welcome', body: 'Hello' }],
+        current: 0
+      }
+    }
+  }), /invalid slide size/);
+});
+
+test('PPTX export writes standard 4:3 dimensions and reopening retains the size', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-standard-'));
+  const filePath = path.join(directory, 'standard.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slideSize: 'standard',
+      slides: [{ title: 'Standard size', body: 'Four by three' }]
+    }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const presentationXml = await archive.file('ppt/presentation.xml')?.async('string');
+    assert.match(presentationXml || '', /cx="9144000"[^>]*cy="6858000"/);
+
+    const reopened = await openOfficeFile(filePath);
+    assert.equal(reopened.slideSize, 'standard');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('PPTX export retains widescreen 16:9 dimensions by default', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-widescreen-'));
+  const filePath = path.join(directory, 'widescreen.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [{ title: 'Widescreen', body: 'Sixteen by nine' }]
+    }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const presentationXml = await archive.file('ppt/presentation.xml')?.async('string');
+    assert.match(presentationXml || '', /cx="12192000"[^>]*cy="6858000"/);
+    const reopened = await openOfficeFile(filePath);
+    assert.equal(reopened.slideSize, 'widescreen');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
