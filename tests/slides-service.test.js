@@ -23,6 +23,7 @@ const {
   updateSlideObject,
   deleteSlideObject,
   moveSlideObject,
+  reorderSlideObject,
   insertSlidesAfterCurrent
 } = require('../src/slides-service');
 
@@ -1317,6 +1318,46 @@ test('Decks deletes only the selected slide object', () => {
   assert.equal(deleteSlideObject(presentation, 0, first.id), true);
   assert.equal(deleteSlideObject(presentation, 0, 'object-missing'), false);
   assert.deepEqual(presentation.slides[0].objects.map(object => object.id), [second.id]);
+});
+
+test('Decks changes slide-object stacking order without changing object identity', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  const back = addSlideObject(presentation, 0, { type: 'rectangle' });
+  const middle = addSlideObject(presentation, 0, { type: 'ellipse' });
+  const front = addSlideObject(presentation, 0, { type: 'text', text: 'Title' });
+
+  assert.equal(reorderSlideObject(presentation, 0, middle.id, 'backward'), true);
+  assert.deepEqual(presentation.slides[0].objects.map(object => object.id), [
+    middle.id, back.id, front.id
+  ]);
+
+  assert.equal(reorderSlideObject(presentation, 0, middle.id, 'front'), true);
+  assert.deepEqual(presentation.slides[0].objects.map(object => object.id), [
+    back.id, front.id, middle.id
+  ]);
+
+  assert.equal(reorderSlideObject(presentation, 0, middle.id, 'back'), true);
+  assert.deepEqual(presentation.slides[0].objects.map(object => object.id), [
+    middle.id, back.id, front.id
+  ]);
+
+  assert.equal(reorderSlideObject(presentation, 0, back.id, 'forward'), true);
+  assert.deepEqual(presentation.slides[0].objects.map(object => object.id), [
+    middle.id, front.id, back.id
+  ]);
+  assert.equal(new Set(presentation.slides[0].objects.map(object => object.id)).size, 3);
+});
+
+test('Decks keeps slide objects in place at layer boundaries and rejects invalid moves', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  const back = addSlideObject(presentation, 0, { type: 'rectangle' });
+  const front = addSlideObject(presentation, 0, { type: 'ellipse' });
+
+  assert.equal(reorderSlideObject(presentation, 0, back.id, 'back'), false);
+  assert.equal(reorderSlideObject(presentation, 0, front.id, 'front'), false);
+  assert.throws(() => reorderSlideObject(presentation, 0, back.id, 'sideways'), RangeError);
+  assert.throws(() => reorderSlideObject(presentation, 0, 'object-missing', 'front'), RangeError);
+  assert.deepEqual(presentation.slides[0].objects.map(object => object.id), [back.id, front.id]);
 });
 
 test('Decks creates new object identities when a slide containing objects is duplicated', () => {
