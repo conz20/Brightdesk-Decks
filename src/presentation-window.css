@@ -166,3 +166,11 @@ body{background:#171729;font-family:"Aptos","Segoe UI",Arial,sans-serif}
   .audience-presentation.layout-two-content .audience-content-columns p{min-height:0}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+/* Safe, non-interactive vector objects on the audience slide. */
+.audience-slide{position:relative}
+.audience-object-layer{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+.audience-object{position:absolute;display:flex;align-items:center;justify-content:center;box-sizing:border-box;white-space:pre-wrap;overflow-wrap:anywhere}
+.audience-object-ellipse{border-radius:50%}
+.audience-object-line{min-height:0!important}
+.audience-object-text{align-items:flex-start;justify-content:flex-start;padding:5px;background:transparent}
