@@ -7,6 +7,7 @@
   const body = document.getElementById('audience-body');
   const columns = document.getElementById('audience-columns');
   const secondaryBody = document.getElementById('audience-body-secondary');
+  const objectLayer = root.querySelector('.audience-object-layer');
   title.className = 'audience-title';
   const supportedLayouts = new Set(['title', 'title-content', 'two-content', 'section-header']);
   const supportedThemes = new Set(['lavender', 'midnight', 'paper']);
@@ -23,6 +24,37 @@
     return luminance < 0.179 ? '#FFFFFF' : '#000000';
   }
 
+
+  function renderObjects(objects) {
+    if (!objectLayer) return;
+    objectLayer.replaceChildren();
+    if (!Array.isArray(objects)) return;
+    for (const object of objects.slice(0, 500)) {
+      if (!object || !['text', 'rectangle', 'ellipse', 'line'].includes(object.type)) continue;
+      const element = document.createElement('div');
+      element.className = `audience-object audience-object-${object.type}`;
+      element.style.left = `${object.x}%`;
+      element.style.top = `${object.y}%`;
+      element.style.width = `${object.width}%`;
+      element.style.height = object.type === 'line' ? '0' : `${object.height}%`;
+      element.style.transform = object.rotation ? `rotate(${object.rotation}deg)` : '';
+      element.style.backgroundColor = object.type === 'line' ? 'transparent' : (object.fill || 'transparent');
+      element.style.color = object.textColor || '#26364D';
+      element.style.border = object.type === 'line' || !object.stroke
+        ? '0'
+        : `${Math.max(0, Math.min(12, Number(object.strokeWidth) || 0))}px solid ${object.stroke}`;
+      if (object.type === 'ellipse') element.style.borderRadius = '50%';
+      if (object.type === 'line') {
+        element.style.borderTop = `${Math.max(1, Math.min(12, Number(object.strokeWidth) || 1))}px solid ${object.stroke || '#26364D'}`;
+      }
+      if (object.type === 'text') {
+        element.style.fontSize = `${Math.max(8, Math.min(96, Number(object.fontSize) || 20))}px`;
+        element.style.fontWeight = object.bold === true ? '700' : '400';
+      }
+      element.textContent = typeof object.text === 'string' ? object.text : '';
+      objectLayer.append(element);
+    }
+  }
 
   function render(payload) {
     if (!payload || typeof payload !== 'object' || !payload.slide || typeof payload.slide !== 'object') return;
@@ -47,6 +79,7 @@
     secondaryBody.textContent = typeof slide.bodySecondary === 'string' ? slide.bodySecondary : '';
     columns.hidden = false;
     secondaryBody.hidden = layout !== 'two-content';
+    renderObjects(slide.objects);
   }
 
   if (window.brightdeskPresentation && typeof window.brightdeskPresentation.onPresentationUpdate === 'function') {
