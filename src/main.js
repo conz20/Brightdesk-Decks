@@ -597,6 +597,24 @@ ipcMain.handle('slides:picture:load', async (event, assetId) => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
   return loadSlidePictureAsset(assetId);
 });
+ipcMain.handle('slides:picture:prune', async (event, keepAssetIds) => {
+  if (!senderIsMain(event)) throw new Error('Invalid sender.');
+  if (!Array.isArray(keepAssetIds) || keepAssetIds.length > 50000) {
+    throw new TypeError('The local picture reference list is invalid.');
+  }
+  const keep = new Set(keepAssetIds.filter(id => typeof id === 'string' && SLIDE_PICTURE_ASSET_ID_PATTERN.test(id)));
+  const directory = path.join(app.getPath('userData'), 'slide-images');
+  let entries = [];
+  try { entries = await fs.readdir(directory); }
+  catch (error) { if (error.code === 'ENOENT') return 0; throw error; }
+  let removed = 0;
+  for (const entry of entries) {
+    if (!SLIDE_PICTURE_ASSET_ID_PATTERN.test(entry) || keep.has(entry)) continue;
+    await fs.unlink(path.join(directory, entry));
+    removed++;
+  }
+  return removed;
+});
 ipcMain.handle('slides:reuse', async event => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
   const result = await dialog.showOpenDialog(mainWindow, {
