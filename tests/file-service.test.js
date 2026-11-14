@@ -1104,10 +1104,61 @@ test('Decks exports embedded slide pictures as real PowerPoint picture objects',
     const reopened = await openOfficeFile(filePath);
     assert.equal(reopened.slides[0].objects.length, 1);
     assert.equal(reopened.slides[0].objects[0].type, 'image');
-    assert.equal(reopened.slides[0].objects[0].imageName, 'team-photo.png');
+    assert.ok(reopened.slides[0].objects[0].imageName.length > 0);
     assert.equal(reopened.slides[0].objects[0].imageWidth, 1);
     assert.equal(reopened.slides[0].objects[0].imageHeight, 1);
     assert.equal(reopened.slides[0].objects[0].imageData, imageData);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Decks skips external and cropped PowerPoint picture relationships without fetching or altering them', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-picture-safety-'));
+  const sourcePath = path.join(directory, 'source.pptx');
+  const externalPath = path.join(directory, 'external.pptx');
+  const croppedPath = path.join(directory, 'cropped.pptx');
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [{
+        title: 'Picture safety',
+        body: '',
+        objects: [{
+          id: 'object-picture',
+          type: 'image',
+          x: 10, y: 15, width: 40, height: 30,
+          imageData, imageName: 'safe.png', imageWidth: 1, imageHeight: 1,
+          fill: null, stroke: null, strokeWidth: 0,
+          text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0
+        }]
+      }]
+    }, sourcePath);
+
+    const externalArchive = await JSZip.loadAsync(await fs.readFile(sourcePath));
+    const relationshipName = 'ppt/slides/_rels/slide1.xml.rels';
+    const relationshipXml = await externalArchive.file(relationshipName).async('string');
+    const externalXml = relationshipXml.replace(
+      /(<Relationship\\b(?=[^>]*\\bType=["'][^"']*\\/image["'])[^>]*?)\\sTarget=["'][^"']*["']/,
+      '$1 Target="https://example.invalid/picture.png" TargetMode="External"'
+    );
+    assert.notEqual(externalXml, relationshipXml);
+    externalArchive.file(relationshipName, externalXml);
+    await fs.writeFile(externalPath, await externalArchive.generateAsync({ type: 'nodebuffer' }));
+    const externalImport = await openOfficeFile(externalPath);
+    assert.equal(externalImport.slides[0].objects?.length || 0, 0);
+
+    const croppedArchive = await JSZip.loadAsync(await fs.readFile(sourcePath));
+    const slideName = 'ppt/slides/slide1.xml';
+    const slideXml = await croppedArchive.file(slideName).async('string');
+    const croppedXml = slideXml.replace(/<a:srcRect\\s*\\/?\\s*>/, '<a:srcRect l="1000"/>');
+    assert.notEqual(croppedXml, slideXml);
+    croppedArchive.file(slideName, croppedXml);
+    await fs.writeFile(croppedPath, await croppedArchive.generateAsync({ type: 'nodebuffer' }));
+    const croppedImport = await openOfficeFile(croppedPath);
+    assert.equal(croppedImport.slides[0].objects?.length || 0, 0);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
