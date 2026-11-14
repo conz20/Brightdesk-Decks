@@ -917,7 +917,7 @@ test('Brightdesk project validation accepts structured slide objects and rejects
 });
 
 test('Brightdesk projects accept only bounded embedded PNG, JPEG or WebP picture objects', () => {
-  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=';
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
   const picture = {
     id: 'object-picture',
     type: 'image',
@@ -954,7 +954,7 @@ test('Brightdesk projects accept only bounded embedded PNG, JPEG or WebP picture
 test('Brightdesk project files preserve an embedded picture without an external file link', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-slide-picture-'));
   const filePath = path.join(directory, 'slide-picture.bdesk');
-  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=';
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
   const picture = {
     id: 'object-picture',
     type: 'image',
@@ -1072,7 +1072,7 @@ test('Decks exports embedded slide pictures as real PowerPoint picture objects',
   const JSZip = require('jszip');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-slide-picture-'));
   const filePath = path.join(directory, 'slide-picture.pptx');
-  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=';
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
   try {
     await exportOfficeFile({
       kind: 'slides',
