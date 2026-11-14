@@ -14,6 +14,8 @@
   const DEFAULT_LAYOUT = 'title-content';
   const SLIDE_SIZES = Object.freeze(['widescreen', 'standard']);
   const DEFAULT_SLIDE_SIZE = 'widescreen';
+  const MAX_SECTION_NAME_LENGTH = 80;
+  let sectionSequence = 0;
 
   function assertPresentation(presentation) {
     if (!presentation || typeof presentation !== 'object' || Array.isArray(presentation)) {
@@ -35,6 +37,56 @@
     };
   }
 
+  function normalizeSectionName(name) {
+    const normalized = String(name ?? '').trim();
+    if (!normalized) throw new TypeError('A section name is required.');
+    if (normalized.length > MAX_SECTION_NAME_LENGTH) {
+      throw new RangeError(`Section names must be ${MAX_SECTION_NAME_LENGTH} characters or fewer.`);
+    }
+    return normalized;
+  }
+
+  function createSectionId(sections) {
+    const used = new Set(sections.map(section => section.id));
+    let id;
+    do {
+      sectionSequence++;
+      id = `section-${Date.now().toString(36)}-${sectionSequence.toString(36)}`;
+    } while (used.has(id));
+    return id;
+  }
+
+  function normalizeSections(presentation) {
+    const source = Array.isArray(presentation.sections) ? presentation.sections : [];
+    const seen = new Set();
+    const sections = [];
+    for (const item of source) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const id = typeof item.id === 'string' ? item.id.trim() : '';
+      const name = typeof item.name === 'string' ? item.name.trim() : '';
+      if (!id || id.length > 100 || !name || name.length > MAX_SECTION_NAME_LENGTH || seen.has(id)) continue;
+      seen.add(id);
+      sections.push({ id, name });
+    }
+    presentation.sections = sections;
+    const validIds = new Set(sections.map(section => section.id));
+    presentation.slides = presentation.slides.map(slide => {
+      const normalized = normalizeSlide(slide);
+      if (typeof normalized.sectionId !== 'string' || !validIds.has(normalized.sectionId)) {
+        delete normalized.sectionId;
+      }
+      return normalized;
+    });
+    const usedIds = new Set(presentation.slides.map(slide => slide.sectionId).filter(Boolean));
+    const firstIndex = new Map();
+    presentation.slides.forEach((slide, index) => {
+      if (slide.sectionId && !firstIndex.has(slide.sectionId)) firstIndex.set(slide.sectionId, index);
+    });
+    presentation.sections = sections
+      .filter(section => usedIds.has(section.id))
+      .sort((left, right) => firstIndex.get(left.id) - firstIndex.get(right.id));
+  }
+
   function ensurePresentation(presentation, firstSlideTitle = 'Slide 1') {
     const target = assertPresentation(presentation);
     target.slideSize = SLIDE_SIZES.includes(target.slideSize) ? target.slideSize : DEFAULT_SLIDE_SIZE;
@@ -49,6 +101,7 @@
     } else {
       target.slides = target.slides.map(normalizeSlide);
     }
+    normalizeSections(target);
     const requested = Number.isInteger(target.current) ? target.current : 0;
     target.current = Math.max(0, Math.min(requested, target.slides.length - 1));
     return target;
@@ -67,8 +120,10 @@
   function addSlide(presentation, slide = {}) {
     const target = ensurePresentation(presentation);
     const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
+    const inheritedSectionId = source.sectionId ?? target.slides[target.slides.length - 1]?.sectionId;
     const next = normalizeSlide({
       ...source,
+      ...(inheritedSectionId ? { sectionId: inheritedSectionId } : {}),
       title: source.title ?? `Slide ${target.slides.length + 1}`
     });
     target.slides.push(next);
@@ -93,6 +148,7 @@
     if (target.slides.length === 1) return false;
     target.slides.splice(selected, 1);
     target.current = Math.max(0, Math.min(selected - 1, target.slides.length - 1));
+    normalizeSections(target);
     return true;
   }
 
@@ -130,6 +186,7 @@
     const [moved] = target.slides.splice(fromIndex, 1);
     target.slides.splice(toIndex, 0, moved);
     target.current = target.slides.indexOf(selectedSlide);
+    normalizeSections(target);
     return moved;
   }
 
@@ -142,6 +199,60 @@
     return target.slideSize;
   }
 
+  function createSection(presentation, name, startIndex) {
+    const target = ensurePresentation(presentation);
+    const start = startIndex === undefined ? target.current : startIndex;
+    assertSlideIndex(target, start);
+    const sectionName = normalizeSectionName(name);
+    const previousSectionId = target.slides[start].sectionId || null;
+    let end = start + 1;
+    while (end < target.slides.length && (target.slides[end].sectionId || null) === previousSectionId) end++;
+
+    const section = { id: createSectionId(target.sections), name: sectionName };
+    target.sections.push(section);
+    for (let index = start; index < end; index++) target.slides[index].sectionId = section.id;
+    normalizeSections(target);
+    return section;
+  }
+
+  function renameSection(presentation, sectionId, name) {
+    const target = ensurePresentation(presentation);
+    const section = target.sections.find(item => item.id === sectionId);
+    if (!section) throw new RangeError('The selected section does not exist.');
+    section.name = normalizeSectionName(name);
+    return section;
+  }
+
+  function moveSlideToSection(presentation, index, sectionId = null) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (sectionId !== null && !target.sections.some(section => section.id === sectionId)) {
+      throw new RangeError('The selected section does not exist.');
+    }
+    if (sectionId) target.slides[index].sectionId = sectionId;
+    else delete target.slides[index].sectionId;
+    normalizeSections(target);
+    return target.slides[index];
+  }
+
+  function deleteSection(presentation, sectionId, moveToSectionId = null) {
+    const target = ensurePresentation(presentation);
+    if (!target.sections.some(section => section.id === sectionId)) return false;
+    if (moveToSectionId !== null && (
+      moveToSectionId === sectionId || !target.sections.some(section => section.id === moveToSectionId)
+    )) {
+      throw new RangeError('The destination section does not exist.');
+    }
+    target.slides.forEach(slide => {
+      if (slide.sectionId !== sectionId) return;
+      if (moveToSectionId) slide.sectionId = moveToSectionId;
+      else delete slide.sectionId;
+    });
+    target.sections = target.sections.filter(section => section.id !== sectionId);
+    normalizeSections(target);
+    return true;
+  }
+
   function setCurrentSlide(presentation, index) {
     const target = ensurePresentation(presentation);
     assertSlideIndex(target, index);
@@ -152,6 +263,7 @@
   function cloneSnapshot(presentation) {
     return {
       slides: copySlide(presentation.slides),
+      sections: presentation.sections.map(section => ({ ...section })),
       current: presentation.current,
       slideSize: presentation.slideSize
     };
@@ -163,6 +275,7 @@
 
   function restoreSnapshot(presentation, snapshot) {
     presentation.slides = copySlide(snapshot.slides);
+    presentation.sections = snapshot.sections.map(section => ({ ...section }));
     presentation.current = snapshot.current;
     presentation.slideSize = snapshot.slideSize;
     return presentation;
@@ -187,6 +300,7 @@
       }
       const normalized = ensurePresentation({
         slides: copySlide(snapshot.slides),
+        sections: Array.isArray(snapshot.sections) ? snapshot.sections.map(section => ({ ...section })) : [],
         current: snapshot.current,
         slideSize: snapshot.slideSize
       });
@@ -197,8 +311,8 @@
       if (!saved || typeof saved !== 'object' || saved.version !== 1) return;
       const savedCurrent = normalizeSnapshot(saved.current);
       if (!savedCurrent || !snapshotEquals(
-        { slides: savedCurrent.slides, slideSize: savedCurrent.slideSize },
-        { slides: current.slides, slideSize: current.slideSize }
+        { slides: savedCurrent.slides, sections: savedCurrent.sections, slideSize: savedCurrent.slideSize },
+        { slides: current.slides, sections: current.sections, slideSize: current.slideSize }
       )) return;
 
       const savedPast = Array.isArray(saved.past) ? saved.past.map(normalizeSnapshot) : null;
@@ -291,11 +405,13 @@
         current: cloneSnapshot(current),
         past: past.map(snapshot => ({
           slides: copySlide(snapshot.slides),
+          sections: snapshot.sections.map(section => ({ ...section })),
           current: snapshot.current,
           slideSize: snapshot.slideSize
         })),
         future: future.map(snapshot => ({
           slides: copySlide(snapshot.slides),
+          sections: snapshot.sections.map(section => ({ ...section })),
           current: snapshot.current,
           slideSize: snapshot.slideSize
         }))
@@ -329,6 +445,10 @@
     moveSlide,
     setCurrentSlide,
     setSlideSize,
+    createSection,
+    renameSection,
+    moveSlideToSection,
+    deleteSection,
     createHistory
   };
 });
