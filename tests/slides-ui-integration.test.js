@@ -169,3 +169,20 @@ test('Decks applies the selected slide transition during playback', () => {
   assert.match(audience, /audience-transition-\$\{transition\}/);
   assert.match(audienceStyles, /@keyframes bd-audience-fade/);
 });
+
+
+test('Decks shows a contextual Format Shape pane beside the selected slide', () => {
+  const app = read('src/app.js');
+  const styles = read('src/styles.css');
+
+  assert.match(app, /function renderSlideFormatPane\(/);
+  assert.match(app, /slide-editor-canvas-row/);
+  assert.match(app, /slide-format-pane/);
+  assert.match(app, /data-shape-property="x"/);
+  assert.match(app, /data-shape-property="width"/);
+  assert.match(app, /data-shape-property="rotation"/);
+  assert.match(app, /Fill & Line/);
+  assert.match(app, /Size & Properties/);
+  assert.match(styles, /\.slide-format-pane/);
+  assert.match(styles, /\.slide-editor-canvas-row/);
+});
