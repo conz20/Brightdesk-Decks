@@ -50,7 +50,7 @@ test('Decks delegates slide editing and lifecycle to its dedicated model service
 });
 
 
-test('Presenter View shows private speaker notes, the next visible slide and elapsed time', () => {
+test('Presenter View shows speaker notes, the next visible slide and elapsed time', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const root = path.join(__dirname, '..');
@@ -77,9 +77,10 @@ test('Presenter View sends the current visible slide to its separate audience di
 
 
 test('Presenter View keeps speaker notes in the presenter console and sends only slide content to the audience', () => {
-  const audienceState = app.match(/const createAudienceState = \(\) => \{[\\s\\S]*?\\n  \};/);
-  assert.ok(audienceState, 'audience state builder exists');
-  assert.doesNotMatch(audienceState[0], /notes/i);
+  const audienceStart = app.indexOf('const createAudienceState = () => {');
+  const audienceEnd = app.indexOf('\\n  };', audienceStart);
+  assert.ok(audienceStart >= 0 && audienceEnd > audienceStart, 'audience state builder exists');
+  assert.doesNotMatch(app.slice(audienceStart, audienceEnd), /notes/i);
   assert.match(app, /presenterNotes\.textContent = snapshot\.currentSlide\.notes/);
   assert.match(app, /updatePresenter\(createAudienceState\(\)\)/);
 });
