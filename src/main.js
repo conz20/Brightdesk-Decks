@@ -49,7 +49,7 @@ function createWindow() {
 }
 function senderIsMain(event) { return mainWindow && event.sender === mainWindow.webContents; }
 
-const SLIDE_PICTURE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\\.(?:png|jpg|webp)$/i;
+const SLIDE_PICTURE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\.(?:png|jpg|webp)$/i;
 
 function getSlidePictureAssetPath(assetId) {
   if (typeof assetId !== 'string' || !SLIDE_PICTURE_ASSET_ID_PATTERN.test(assetId)) {
