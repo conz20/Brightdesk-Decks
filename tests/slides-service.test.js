@@ -266,3 +266,89 @@ test('Decks connects slide layout selection and Slide Sorter to its ribbon', () 
   assert.match(styles, /\.slide-sorter-grid/);
   assert.match(styles, /\.layout-two-content/);
 });
+
+
+test('Decks can undo and redo a slide edit without losing the edited content', () => {
+  const { createHistory } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'Draft', body: 'Original', notes: '' }], current: 0 };
+  const history = createHistory(presentation);
+
+  updateSlide(presentation, 0, { body: 'Revised' });
+  history.commit(presentation);
+
+  assert.equal(history.canUndo(), true);
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.slides[0].body, 'Original');
+  assert.equal(history.canRedo(), true);
+  assert.equal(history.redo(presentation), true);
+  assert.equal(presentation.slides[0].body, 'Revised');
+});
+
+test('Decks groups consecutive typing in the same field into one undo step', () => {
+  const { createHistory } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'Draft', body: '', notes: '' }], current: 0 };
+  const history = createHistory(presentation);
+
+  updateSlide(presentation, 0, { title: 'D' });
+  history.commit(presentation, 'slide:0:title', 1000);
+  updateSlide(presentation, 0, { title: 'Dr' });
+  history.commit(presentation, 'slide:0:title', 1100);
+  updateSlide(presentation, 0, { title: 'Draft' });
+  history.commit(presentation, 'slide:0:title', 1200);
+
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.slides[0].title, 'Draft');
+  assert.equal(history.canUndo(), false);
+});
+
+test('Decks clears redo history when a new edit is made after undo', () => {
+  const { createHistory } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'One', body: '', notes: '' }], current: 0 };
+  const history = createHistory(presentation);
+
+  updateSlide(presentation, 0, { title: 'Two' });
+  history.commit(presentation);
+  history.undo(presentation);
+  updateSlide(presentation, 0, { title: 'Three' });
+  history.commit(presentation);
+
+  assert.equal(history.canRedo(), false);
+  assert.equal(history.redo(presentation), false);
+  assert.equal(presentation.slides[0].title, 'Three');
+});
+
+test('Decks bounds undo history and restores slide structure and selection', () => {
+  const { createHistory } = require('../src/slides-service');
+  const presentation = {
+    slides: [{ title: 'One', body: '', notes: '' }],
+    current: 0
+  };
+  const history = createHistory(presentation, { limit: 2 });
+
+  addSlide(presentation, { title: 'Two' });
+  history.commit(presentation);
+  addSlide(presentation, { title: 'Three' });
+  history.commit(presentation);
+  addSlide(presentation, { title: 'Four' });
+  history.commit(presentation);
+
+  assert.equal(history.undo(presentation), true);
+  assert.deepEqual(presentation.slides.map(slide => slide.title), ['One', 'Two']);
+  assert.equal(presentation.current, 1);
+  assert.equal(history.undo(presentation), true);
+  assert.deepEqual(presentation.slides.map(slide => slide.title), ['One']);
+  assert.equal(history.undo(presentation), false);
+});
+
+test('Decks exposes undo and redo controls and keyboard shortcuts in the editor', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+  assert.match(app, /data-slide-undo/);
+  assert.match(app, /data-slide-redo/);
+  assert.match(app, /event\.key\.toLowerCase\(\) === 'z'/);
+  assert.match(app, /event\.shiftKey/);
+  assert.match(app, /history\.undo\(doc\)/);
+  assert.match(app, /history\.redo\(doc\)/);
+});
