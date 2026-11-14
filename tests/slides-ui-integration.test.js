@@ -178,9 +178,9 @@ test('Decks shows a contextual Format Shape pane beside the selected slide', () 
   assert.match(app, /function renderSlideFormatPane\(/);
   assert.match(app, /slide-editor-canvas-row/);
   assert.match(app, /slide-format-pane/);
-  assert.match(app, /data-shape-property="x"/);
-  assert.match(app, /data-shape-property="width"/);
-  assert.match(app, /data-shape-property="rotation"/);
+  assert.match(app, /addControl\(size, 'Horizontal position \\(\\%\\)', 'x', 'number'/);
+  assert.match(app, /addControl\(size, 'Width \\(\\%\\)', 'width', 'number'/);
+  assert.match(app, /addControl\(size, 'Rotation \\(degrees\\)', 'rotation', 'number'/);
   assert.match(app, /Fill & Line/);
   assert.match(app, /Size & Properties/);
   assert.match(styles, /\.slide-format-pane/);
