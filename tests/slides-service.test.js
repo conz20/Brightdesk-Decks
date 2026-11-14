@@ -840,3 +840,23 @@ test('Decks slide show supports blank screens, numeric navigation and slide pick
   assert.match(styles, /\.presentation-overlay\.is-blank-white/);
   assert.match(styles, /\.presentation-slide-picker/);
 });
+
+
+test('Decks presentation playback renders all four layouts and keeps comparison content', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
+
+  assert.match(app, /presentation-content-columns/);
+  assert.match(app, /presentation-body-secondary/);
+  assert.match(app, /secondaryBody\.textContent = currentSlide\.bodySecondary/);
+  assert.match(app, /layout-\$\{currentSlide\.layout/);
+  assert.match(styles, /\.presentation-slide\.layout-title/);
+  assert.match(styles, /\.presentation-slide\.layout-section-header/);
+  assert.match(styles, /\.presentation-slide\.layout-two-content/);
+  assert.match(styles, /\.presentation-content-columns/);
+  assert.match(styles, /\.presentation-slide\.theme-midnight/);
+  assert.match(styles, /\.presentation-slide\.theme-paper/);
+});
