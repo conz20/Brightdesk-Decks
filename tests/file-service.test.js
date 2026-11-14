@@ -575,6 +575,16 @@ test('PPTX export applies the saved Brightdesk slide theme colours', async () =>
       const slideXml = await archive.file('ppt/slides/slide1.xml')?.async('string');
       assert.match(slideXml || '', new RegExp('val="' + theme.background + '"'));
       assert.match(slideXml || '', new RegExp('val="' + theme.title + '"'));
+
+      const customProperties = await archive.file('docProps/custom.xml')?.async('string');
+      const packageRelationships = await archive.file('_rels/.rels')?.async('string');
+      const contentTypes = await archive.file('[Content_Types].xml')?.async('string');
+      assert.match(customProperties || '', new RegExp('name="BrightdeskTheme"><vt:lpwstr>' + theme.themeId + '</vt:lpwstr>'));
+      assert.match(packageRelationships || '', /relationships\/custom-properties/);
+      assert.match(contentTypes || '', /application\/vnd\.openxmlformats-officedocument\.custom-properties\+xml/);
+
+      const reopened = await openOfficeFile(filePath);
+      assert.equal(reopened.themeId, theme.themeId);
     }
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
