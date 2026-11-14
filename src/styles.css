@@ -963,3 +963,91 @@
   .slide-outline-view{padding:16px 12px}
   .slide-outline-entry{padding:10px}
 }
+
+
+/* Brightdesk Decks: slide-show blanking and visible-slide picker. */
+.presentation-overlay.is-blank-black{
+  background:#000;
+}
+.presentation-overlay.is-blank-white{
+  background:#fff;
+}
+.presentation-overlay.is-blank-black .presentation-slide,
+.presentation-overlay.is-blank-white .presentation-slide{
+  visibility:hidden;
+}
+.presentation-slide-picker{
+  width:min(100%,1100px);
+  max-height:100%;
+  overflow:auto;
+  padding:clamp(18px,3vw,36px);
+  border:1px solid #38445a;
+  border-radius:10px;
+  background:#202b3b;
+  color:#f4f6fa;
+  box-shadow:0 18px 60px #0006;
+}
+.presentation-slide-picker[hidden]{
+  display:none;
+}
+.presentation-slide-picker-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:20px;
+}
+.presentation-slide-picker-header h2{
+  margin:0;
+  color:#fff;
+  font-size:clamp(20px,2.4vw,30px);
+}
+.presentation-slide-picker-header p{
+  margin:5px 0 0;
+  color:#c7d0de;
+  font-size:12px;
+}
+.presentation-slide-picker-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr));
+  gap:12px;
+}
+.presentation-slide-picker-item{
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:9px;
+  padding:13px;
+  border:1px solid #4a586e;
+  border-radius:7px;
+  background:#2d394b;
+  color:#f5f7fa;
+  text-align:left;
+  cursor:pointer;
+}
+.presentation-slide-picker-item:hover,
+.presentation-slide-picker-item.active{
+  border-color:#e2a14e;
+  background:#39465a;
+}
+.presentation-slide-picker-number{
+  color:#e4b16e;
+  font-size:10px;
+  font-weight:750;
+}
+.presentation-slide-picker-item strong{
+  overflow:hidden;
+  width:100%;
+  font-size:13px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.presentation-slide-picker-item:focus-visible{
+  outline:2px solid #e2a14e;
+  outline-offset:3px;
+}
+@media(max-width:600px){
+  .presentation-slide-picker-header{flex-direction:column}
+  .presentation-slide-picker-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,140px),1fr))}
+}
