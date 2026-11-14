@@ -70,6 +70,7 @@
   const SLIDE_SIZES = Object.freeze(['widescreen', 'standard']);
   const DEFAULT_SLIDE_SIZE = 'widescreen';
   const SLIDE_THEMES = Object.freeze(['lavender', 'midnight', 'paper']);
+  const SLIDE_TRANSITIONS = Object.freeze(['none', 'fade', 'push', 'wipe']);
   const DEFAULT_SLIDE_THEME = 'lavender';
   const SLIDE_THEME_BACKGROUND_COLORS = Object.freeze({
     lavender: '#FCF3E9',
@@ -245,7 +246,8 @@
       notes: String(source.notes ?? ''),
       layout,
       layoutId,
-      objects: normalizeSlideObjects(source.objects)
+      objects: normalizeSlideObjects(source.objects),
+      transition: SLIDE_TRANSITIONS.includes(source.transition) ? source.transition : 'none'
     };
     if (isValidSlideBackgroundColor(source.backgroundColor)) {
       normalized.backgroundColor = source.backgroundColor.toUpperCase();
@@ -453,6 +455,10 @@
     if (Object.prototype.hasOwnProperty.call(patch, 'body')) slide.body = String(patch.body ?? '');
     if (Object.prototype.hasOwnProperty.call(patch, 'bodySecondary')) slide.bodySecondary = String(patch.bodySecondary ?? '');
     if (Object.prototype.hasOwnProperty.call(patch, 'notes')) slide.notes = String(patch.notes ?? '');
+    if (Object.prototype.hasOwnProperty.call(patch, 'transition')) {
+      if (!SLIDE_TRANSITIONS.includes(patch.transition)) throw new RangeError('The selected slide transition is not supported.');
+      slide.transition = patch.transition;
+    }
     return slide;
   }
 
@@ -580,6 +586,16 @@
     const target = ensurePresentation(presentation);
     assertSlideIndex(target, index);
     return target.slides[index].backgroundColor || SLIDE_THEME_BACKGROUND_COLORS[target.themeId];
+  }
+
+  function setSlideTransition(presentation, index, transition) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (!SLIDE_TRANSITIONS.includes(transition)) {
+      throw new RangeError('The selected slide transition is not supported.');
+    }
+    target.slides[index].transition = transition;
+    return target.slides[index].transition;
   }
 
   function addSlideObject(presentation, slideIndex, definition = {}) {
@@ -889,6 +905,7 @@
     DEFAULT_SLIDE_SIZE,
     SLIDE_THEMES,
     DEFAULT_SLIDE_THEME,
+    SLIDE_TRANSITIONS,
     SLIDE_THEME_BACKGROUND_COLORS,
     ensurePresentation,
     addSlide,
@@ -905,6 +922,7 @@
     setSlideTheme,
     setSlideBackgroundColor,
     getSlideBackgroundColor,
+    setSlideTransition,
     getReadableTextColor,
     SLIDE_OBJECT_TYPES,
     MAX_SLIDE_OBJECTS,
