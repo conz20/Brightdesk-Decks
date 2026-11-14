@@ -1139,6 +1139,107 @@ function createSlideObjectElement(object, editable = false) {
   return element;
 }
 
+
+function renderSlideFormatPane(object) {
+  const pane = document.createElement('aside');
+  pane.className = 'slide-format-pane';
+  pane.setAttribute('aria-label', 'Format Shape pane');
+
+  const header = document.createElement('header');
+  header.className = 'slide-format-pane-header';
+  const title = document.createElement('h3');
+  title.textContent = 'Format Shape';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'slide-format-pane-close';
+  close.textContent = '×';
+  close.title = 'Close Format Shape pane';
+  close.setAttribute('aria-label', 'Close Format Shape pane');
+  close.addEventListener('click', () => selectSlideObject(null));
+  header.append(title, close);
+  pane.append(header);
+
+  const createGroup = (caption, open = false) => {
+    const details = document.createElement('details');
+    details.className = 'slide-format-pane-group';
+    details.open = open;
+    const summary = document.createElement('summary');
+    summary.textContent = caption;
+    details.append(summary);
+    pane.append(details);
+    return details;
+  };
+
+  const addControl = (container, caption, property, type, options = {}) => {
+    const labelElement = document.createElement('label');
+    labelElement.className = 'slide-format-pane-field';
+    const captionElement = document.createElement('span');
+    captionElement.textContent = caption;
+    const input = document.createElement('input');
+    input.type = type;
+    input.setAttribute('aria-label', caption);
+    input.dataset.shapeProperty = property;
+    if (type === 'color') {
+      input.value = object[property] || options.fallback || '#FFFFFF';
+      input.disabled = options.disabled === true;
+    } else {
+      input.value = String(object[property] ?? options.fallback ?? '');
+      if (options.min !== undefined) input.min = String(options.min);
+      if (options.max !== undefined) input.max = String(options.max);
+      if (options.step !== undefined) input.step = String(options.step);
+    }
+    input.addEventListener('change', () => {
+      const value = type === 'number' ? Number(input.value) : input.value;
+      updateSelectedSlideObject({ [property]: value });
+    });
+    labelElement.append(captionElement, input);
+    container.append(labelElement);
+    return input;
+  };
+
+  const fillLine = createGroup('Fill & Line', true);
+  addControl(fillLine, 'Fill colour', 'fill', 'color', {
+    fallback: '#FFFFFF',
+    disabled: object.type === 'text' || object.type === 'line'
+  });
+  addControl(fillLine, 'Outline colour', 'stroke', 'color');
+  addControl(fillLine, 'Outline weight', 'strokeWidth', 'number', {
+    min: 0, max: 12, step: 0.5
+  });
+
+  if (object.type === 'text') {
+    const textGroup = createGroup('Text');
+    addControl(textGroup, 'Text colour', 'textColor', 'color');
+    addControl(textGroup, 'Font size', 'fontSize', 'number', {
+      min: 8, max: 96, step: 1
+    });
+    const boldLabel = document.createElement('label');
+    boldLabel.className = 'slide-format-pane-toggle';
+    const boldInput = document.createElement('input');
+    boldInput.type = 'checkbox';
+    boldInput.checked = object.bold === true;
+    boldInput.setAttribute('aria-label', 'Bold text');
+    boldInput.addEventListener('change', () => updateSelectedSlideObject({ bold: boldInput.checked }));
+    const boldText = document.createElement('span');
+    boldText.textContent = 'Bold text';
+    boldLabel.append(boldInput, boldText);
+    textGroup.append(boldLabel);
+  }
+
+  const size = createGroup('Size & Properties', true);
+  addControl(size, 'Horizontal position (%)', 'x', 'number', { min: 0, max: 100, step: 0.5 });
+  addControl(size, 'Vertical position (%)', 'y', 'number', { min: 0, max: 100, step: 0.5 });
+  addControl(size, 'Width (%)', 'width', 'number', { min: 1, max: 100, step: 0.5 });
+  addControl(size, 'Height (%)', 'height', 'number', { min: 1, max: 100, step: 0.5 });
+  addControl(size, 'Rotation (degrees)', 'rotation', 'number', { min: -360, max: 360, step: 1 });
+
+  const footer = document.createElement('p');
+  footer.className = 'slide-format-pane-note';
+  footer.textContent = 'Changes apply to the selected object and are saved with this presentation.';
+  pane.append(footer);
+  return pane;
+}
+
 function renderSlideObjects(stage, objects, doc = activeDoc()) {
   stage.querySelectorAll('[data-slide-object]').forEach(element => element.remove());
   if (!Array.isArray(objects)) return;
@@ -1547,6 +1648,13 @@ function renderSlides() {
   }
   renderSlideObjects(stage, slide.objects || [], doc);
 
+  const canvasRow = document.createElement('div');
+  canvasRow.className = 'slide-editor-canvas-row';
+  canvasRow.classList.toggle('has-format-pane', Boolean(getSelectedSlideObject(doc)));
+  canvasRow.append(stage);
+  const selectedObject = getSelectedSlideObject(doc);
+  if (selectedObject) canvasRow.append(renderSlideFormatPane(selectedObject));
+
   const notesPanel = document.createElement('section');
   notesPanel.className = 'slide-speaker-notes';
   notesPanel.setAttribute('aria-label', 'Speaker notes');
@@ -1593,7 +1701,7 @@ function renderSlides() {
   });
   controls.append(prev, count, next);
 
-  editorMain.append(stage, notesPanel, controls);
+  editorMain.append(canvasRow, notesPanel, controls);
   shell.append(navigator, editorMain);
   slideWrap.append(shell);
 }
