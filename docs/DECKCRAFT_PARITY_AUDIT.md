@@ -79,7 +79,9 @@ Match the reference product's information architecture and visual density rather
 - [x] Add thumbnail navigation, add/duplicate/delete/reorder, keyboard navigation and a real notes editor.
 - [x] Add named slide sections with New/Rename/Remove, slide reassignment and collapsible groups in Normal View and Slide Sorter.
 - [x] Add hide/unhide slide controls; hidden slides remain editable but are skipped in slide shows and preserved in PowerPoint files.
-- Add title, title-and-content, two-content, section-header, blank and comparison layouts.
+- [x] Add Title, Title and content, Two content and Section header layouts with editable content.
+- Add blank and comparison-specific layouts as later extensions; the current Two content layout covers side-by-side comparisons.
+- [x] Full-screen playback preserves the selected layout, both comparison columns and the active slide theme.
 - [x] Add bounded undo/redo for slide text, speaker notes, layouts, slide creation/duplication/deletion and reordering, with typing grouped by field and device-local history restored across restarts. Object-edit history remains future work when editable objects are introduced.
 - Add tests for migration, selection bounds, reorder, duplicate, delete, one-slide minimum, notes persistence and recovery.
 
