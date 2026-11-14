@@ -190,7 +190,13 @@ function refreshSlideHistoryControls() {
   if (redo) redo.disabled = !history.canRedo();
 }
 function commitSlideChange(doc = activeDoc(), group = null) {
-  getSlideHistory(doc).commit(doc, group);
+  const history = getSlideHistory(doc);
+  history.commit(doc, group);
+  const imageDataByAssetId = new Map(
+    getPicturesFromSlides(doc.slides).filter(object => object.imageAssetId && object.imageData)
+      .map(object => [object.imageAssetId, object.imageData])
+  );
+  history.hydrateImages(imageDataByAssetId);
   refreshSlideHistoryControls();
 }
 function applySlideHistory(direction) {
