@@ -51,10 +51,15 @@ function activeDoc() { return state.docs[state.app]; }
 
 function stripSlidePictureData(value) {
   const output = clone(value);
-  const docs = output?.docs && typeof output.docs === 'object' ? Object.values(output.docs) : [output];
-  for (const doc of docs) {
-    if (!Array.isArray(doc?.slides)) continue;
-    for (const slide of doc.slides) {
+  const collections = [];
+  if (output?.docs && typeof output.docs === 'object') collections.push(...Object.values(output.docs));
+  if (Array.isArray(output?.slides)) collections.push(output);
+  if (Array.isArray(output?.current?.slides)) collections.push(output.current);
+  if (Array.isArray(output?.past)) collections.push(...output.past);
+  if (Array.isArray(output?.future)) collections.push(...output.future);
+  for (const collection of collections) {
+    if (!Array.isArray(collection?.slides)) continue;
+    for (const slide of collection.slides) {
       for (const object of slide?.objects || []) {
         if (object?.type === 'image' && object.imageAssetId) delete object.imageData;
       }
