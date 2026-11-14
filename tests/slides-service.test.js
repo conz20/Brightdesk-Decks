@@ -171,3 +171,14 @@ test('Decks connects thumbnail navigation and per-slide notes to the editor', ()
   assert.match(styles, /\.slide-editor-shell/);
   assert.match(styles, /\.slide-speaker-notes/);
 });
+
+
+test('Decks starts the show with F5 or from the selected slide with Shift+F5', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+  assert.match(app, /function presentSlides\(startFromFirst = false\)/);
+  assert.match(app, /presentSlides\(!event\.shiftKey\)/);
+  assert.match(app, /event\.key !== 'F5'/);
+});
