@@ -34,7 +34,7 @@ const state = {
   todoView: 'my-day', todoQuery: '',
   selectedCell: { row: 0, col: 0 }, update: null, ribbonTab: 'home',
   installedApps: [], setupComplete: false, firstRunSelection: new Set(installableCatalog.map(item => item.id)),
-  slideTheme: 'lavender', focusMode: false, editorZoom: 100, sheetZoom: 100,
+  slideTheme: 'lavender', slideView: 'normal', focusMode: false, editorZoom: 100, sheetZoom: 100,
   languageCatalog: [], installedLanguagePacks: [], spellCheckerLanguages: [], usesNativeMacSpellChecker: false,
   displayLanguage: 'en-AU', proofingLanguage: 'en-AU',
   installedDictionaries: [], dictionaryCatalogue: [], selectedDictionary: localStorage.getItem('brightdesk-selected-dictionary') || ''
@@ -199,15 +199,46 @@ function renderToolbar() {
     if (tab === 'home') {
       const slides = group('slides'); addButton(slides, label('newSlide'), addSlide); addButton(slides, label('duplicate'), duplicateSlide); addButton(slides, label('delete'), deleteSlide);
     } else if (tab === 'insert') {
-      const insert = group('slideContent'); addButton(insert, label('titleSlide'), () => addSlideWithContent('Title', 'Add a subtitle')); addButton(insert, label('textSlide'), () => addSlideWithContent('New section', 'Add your points here'));
+      const insert = group('slideContent');
+      addButton(insert, label('titleSlide'), () => addSlideWithLayout('title', 'Presentation title', 'Add a subtitle'));
+      addButton(insert, label('textSlide'), () => addSlideWithLayout('title-content', 'New section', 'Add your points here'));
+      addButton(insert, 'Two content', () => addSlideWithLayout('two-content', 'Compare the options', 'First column'));
+      addButton(insert, 'Section header', () => addSlideWithLayout('section-header', 'New section', 'Add a short introduction'));
     } else if (tab === 'design') {
       const design = group('themes');
       [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => addButton(design, label, () => setSlideTheme(theme)));
+      const layoutGroup = ribbonGroup(toolbar, 'Layout');
+      const layoutSelect = document.createElement('select');
+      layoutSelect.className = 'slide-layout-select';
+      layoutSelect.setAttribute('aria-label', 'Slide layout');
+      const layoutOptions = [
+        ['title', 'Title slide'],
+        ['title-content', 'Title and content'],
+        ['two-content', 'Two content'],
+        ['section-header', 'Section header']
+      ];
+      layoutOptions.forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        layoutSelect.append(option);
+      });
+      const currentSlide = window.BrightdeskSlidesService.ensurePresentation(activeDoc()).slides[activeDoc().current];
+      layoutSelect.value = currentSlide.layout;
+      layoutSelect.addEventListener('change', () => setSlideLayout(layoutSelect.value));
+      layoutGroup.append(layoutSelect);
     } else if (tab === 'slideShow') {
-      const show = group('startPresentation'); addButton(show, label('fromCurrentSlide'), presentSlides);
+      const show = group('startPresentation');
+      addButton(show, label('fromCurrentSlide'), () => presentSlides(false));
+      addButton(show, 'From first slide', () => presentSlides(true));
     } else {
-      const view = group('zoom'); addButton(view, label('fitSlide'), () => { slideWrap.scrollTop = 0; setStatus('Slide fitted to workspace'); });
+      const view = group('zoom');
+      addButton(view, label('fitSlide'), () => { slideWrap.scrollTop = 0; setStatus('Slide fitted to workspace'); });
       addButton(view, label('slideCount'), () => setStatus(`${activeDoc().slides.length} slides`));
+      const views = ribbonGroup(toolbar, 'Views');
+      addButton(views, state.slideView === 'sorter' ? 'Normal view' : 'Slide Sorter', () => {
+        setSlideView(state.slideView === 'sorter' ? 'normal' : 'sorter');
+      });
     }
   } else if (app === 'notes') {
     if (tab === 'home') {
@@ -263,6 +294,13 @@ function applySheetZoom() { sheetWrap.style.zoom = `${state.sheetZoom}%`; setSta
 function insertNoteText(value) { const input = $('notes-editor'); const start = input.selectionStart, end = input.selectionEnd; input.setRangeText(value, start, end, 'end'); activeDoc().text = input.value; persist(); input.focus(); }
 function addSlideWithContent(title, body) { activeDoc().slides.push({ title, body }); activeDoc().current = activeDoc().slides.length - 1; renderSlides(); renderToolbar(); persist(); }
 function setSlideTheme(theme) { state.slideTheme = theme; renderSlides(); setStatus(`${theme[0].toUpperCase()}${theme.slice(1)} theme selected`); }
+function addSlideWithLayout(layout, title, body) {
+  const slide = window.BrightdeskSlidesService.addSlide(activeDoc(), { title, body, layout });
+  renderSlides();
+  renderToolbar();
+  persist();
+  return slide;
+}
 function setCell(row,col,value) { while (activeDoc().cells.length <= row) activeDoc().cells.push([]); while (activeDoc().cells[row].length <= col) activeDoc().cells[row].push(''); activeDoc().cells[row][col]=value; persist(); }
 function refreshSheetValues() {
   sheetWrap.querySelectorAll('input.grid-cell').forEach(input => {
@@ -288,27 +326,391 @@ function renderSheet() {
     tbody.append(tr);
   }); table.append(tbody); sheetWrap.innerHTML=''; sheetWrap.append(table);
 }
+function renderSlideSorter(doc) {
+  slideWrap.innerHTML = '';
+  const view = document.createElement('section');
+  view.className = 'slide-sorter-view';
+  const header = document.createElement('header');
+  header.className = 'slide-sorter-header';
+  const heading = document.createElement('div');
+  const title = document.createElement('h2');
+  title.textContent = 'Slide Sorter';
+  const description = document.createElement('p');
+  description.textContent = 'Select a slide, change its order, or double-click to edit it.';
+  heading.append(title, description);
+  const count = document.createElement('span');
+  count.className = 'slide-sorter-count';
+  count.textContent = `${doc.slides.length} slides`;
+  header.append(heading, count);
+
+  const grid = document.createElement('div');
+  grid.className = 'slide-sorter-grid';
+  let draggedIndex = -1;
+
+  doc.slides.forEach((slide, index) => {
+    const card = document.createElement('article');
+    card.className = 'slide-sorter-card';
+    card.classList.toggle('active', index === doc.current);
+    card.draggable = true;
+    card.dataset.slideIndex = String(index);
+
+    const select = document.createElement('button');
+    select.type = 'button';
+    select.className = 'slide-sorter-select';
+    select.setAttribute('aria-label', `Select slide ${index + 1}: ${slide.title || 'Untitled slide'}`);
+    select.setAttribute('aria-current', index === doc.current ? 'true' : 'false');
+    const number = document.createElement('span');
+    number.className = 'slide-sorter-number';
+    number.textContent = String(index + 1);
+    const preview = document.createElement('span');
+    preview.className = `slide-sorter-preview theme-${state.slideTheme} layout-${slide.layout}`;
+    const previewTitle = document.createElement('b');
+    previewTitle.textContent = slide.title.trim() || `Slide ${index + 1}`;
+    const previewBody = document.createElement('span');
+    previewBody.textContent = slide.body.trim().slice(0, 120) || 'Add content';
+    preview.append(previewTitle, previewBody);
+    if (slide.layout === 'two-content') {
+      const second = document.createElement('span');
+      second.className = 'slide-sorter-secondary';
+      second.textContent = slide.bodySecondary.trim().slice(0, 90) || 'Second column';
+      preview.append(second);
+    }
+    select.append(number, preview);
+    select.addEventListener('click', () => {
+      window.BrightdeskSlidesService.setCurrentSlide(doc, index);
+      grid.querySelectorAll('.slide-sorter-card').forEach((item, itemIndex) => {
+        const active = itemIndex === index;
+        item.classList.toggle('active', active);
+        item.querySelector('.slide-sorter-select')?.setAttribute('aria-current', String(active));
+      });
+    });
+    select.addEventListener('dblclick', () => setSlideView('normal'));
+
+    const actions = document.createElement('div');
+    actions.className = 'slide-sorter-actions';
+    const earlier = document.createElement('button');
+    earlier.type = 'button';
+    earlier.textContent = 'Move earlier';
+    earlier.disabled = index === 0;
+    earlier.addEventListener('click', () => {
+      window.BrightdeskSlidesService.moveSlide(doc, index, index - 1);
+      renderSlides();
+      persist();
+    });
+    const later = document.createElement('button');
+    later.type = 'button';
+    later.textContent = 'Move later';
+    later.disabled = index === doc.slides.length - 1;
+    later.addEventListener('click', () => {
+      window.BrightdeskSlidesService.moveSlide(doc, index, index + 1);
+      renderSlides();
+      persist();
+    });
+    actions.append(earlier, later);
+    card.append(select, actions);
+
+    card.addEventListener('dragstart', event => {
+      draggedIndex = index;
+      card.classList.add('dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(index));
+      }
+    });
+    card.addEventListener('dragend', () => {
+      draggedIndex = -1;
+      card.classList.remove('dragging');
+      grid.querySelectorAll('.drag-over').forEach(node => node.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', event => {
+      event.preventDefault();
+      if (draggedIndex !== index) card.classList.add('drag-over');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', event => {
+      event.preventDefault();
+      card.classList.remove('drag-over');
+      const source = draggedIndex;
+      if (source < 0 || source === index) return;
+      window.BrightdeskSlidesService.moveSlide(doc, source, index);
+      renderSlides();
+      persist();
+    });
+    grid.append(card);
+  });
+
+  view.append(header, grid);
+  slideWrap.append(view);
+}
+
+function setSlideView(view) {
+  if (!['normal', 'sorter'].includes(view)) return;
+  state.slideView = view;
+  renderSlides();
+  renderToolbar();
+}
+
+function setSlideLayout(layout) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  try {
+    window.BrightdeskSlidesService.setSlideLayout(doc, doc.current, layout);
+  } catch (error) {
+    setStatus(error.message);
+    return;
+  }
+  renderSlides();
+  persist();
+  setStatus('Slide layout updated');
+}
+
 function renderSlides() {
-  const doc=activeDoc(); if(!Array.isArray(doc.slides)||!doc.slides.length)doc.slides=[{title:t('common.newSlide'),body:''}];
-  doc.current=Math.min(Math.max(0,doc.current||0),doc.slides.length-1); const slide=doc.slides[doc.current];
-  slideWrap.innerHTML='';
-  const stage=document.createElement('div');stage.className=`slide-stage theme-${state.slideTheme}`;
-  const title=document.createElement('textarea');title.className='slide-title';title.value=slide.title||'';title.setAttribute('aria-label','Slide title');title.lang=state.proofingLanguage;
-  const body=document.createElement('textarea');body.className='slide-body';body.value=slide.body||'';body.setAttribute('aria-label','Slide text');body.lang=state.proofingLanguage;
-  title.addEventListener('input',()=>{slide.title=title.value;persist();});body.addEventListener('input',()=>{slide.body=body.value;persist();});
-  stage.append(title,body);
-  const controls=document.createElement('div');controls.className='slide-controls';
-  const prev=document.createElement('button');prev.textContent='← Previous';prev.disabled=doc.current===0;prev.onclick=()=>{doc.current--;renderSlides();renderToolbar();};
-  const count=document.createElement('span');count.textContent=`Slide ${doc.current+1} of ${doc.slides.length}`;
-  const next=document.createElement('button');next.textContent='Next →';next.disabled=doc.current===doc.slides.length-1;next.onclick=()=>{doc.current++;renderSlides();renderToolbar();};
-  controls.append(prev,count,next);slideWrap.append(stage,controls);
+  const slidesService = window.BrightdeskSlidesService;
+  const doc = slidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  if (state.slideView === 'sorter') {
+    renderSlideSorter(doc);
+    return;
+  }
+  const slide = doc.slides[doc.current];
+  slideWrap.innerHTML = '';
+
+  const shell = document.createElement('div');
+  shell.className = 'slide-editor-shell';
+
+  const navigator = document.createElement('nav');
+  navigator.className = 'slide-navigator';
+  navigator.setAttribute('aria-label', 'Slide thumbnails');
+
+  const navigatorHeader = document.createElement('div');
+  navigatorHeader.className = 'slide-navigator-header';
+  const navigatorTitle = document.createElement('div');
+  navigatorTitle.className = 'slide-navigator-title';
+  const navigatorHeading = document.createElement('b');
+  navigatorHeading.textContent = 'Slides';
+  const navigatorCount = document.createElement('small');
+  navigatorCount.textContent = String(doc.slides.length);
+  navigatorTitle.append(navigatorHeading, navigatorCount);
+
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'slide-add-button';
+  addButton.textContent = '+';
+  addButton.title = 'Add slide';
+  addButton.setAttribute('aria-label', 'Add slide');
+  addButton.addEventListener('click', addSlide);
+  navigatorHeader.append(navigatorTitle, addButton);
+
+  const thumbnailList = document.createElement('div');
+  thumbnailList.className = 'slide-thumbnail-list';
+  let draggedIndex = -1;
+
+  const updateThumbnailPreview = (index, nextTitle, nextBody, nextSecondary = '') => {
+    const card = thumbnailList.querySelector(`[data-slide-index="${index}"]`);
+    if (!card) return;
+    const titleLabel = card.querySelector('.slide-thumbnail-title');
+    const bodyLabel = card.querySelector('.slide-thumbnail-summary');
+    if (titleLabel) titleLabel.textContent = nextTitle.trim() || `Slide ${index + 1}`;
+    const summary = [nextBody.trim(), nextSecondary.trim()].filter(Boolean).join(' · ');
+    if (bodyLabel) bodyLabel.textContent = summary.slice(0, 88) || 'Add text to this slide';
+  };
+
+  doc.slides.forEach((item, index) => {
+    const card = document.createElement('article');
+    card.className = 'slide-thumbnail-card';
+    card.dataset.slideIndex = String(index);
+    card.draggable = true;
+    card.classList.toggle('active', index === doc.current);
+
+    const select = document.createElement('button');
+    select.type = 'button';
+    select.className = 'slide-thumbnail-select';
+    select.setAttribute('aria-label', `Select slide ${index + 1}: ${item.title || 'Untitled slide'}`);
+    select.setAttribute('aria-current', index === doc.current ? 'true' : 'false');
+    const number = document.createElement('span');
+    number.className = 'slide-thumbnail-number';
+    number.textContent = String(index + 1);
+    const preview = document.createElement('span');
+    preview.className = `slide-thumbnail-preview layout-${item.layout}`;
+    const previewTitle = document.createElement('b');
+    previewTitle.className = 'slide-thumbnail-title';
+    previewTitle.textContent = item.title.trim() || `Slide ${index + 1}`;
+    const previewBody = document.createElement('span');
+    previewBody.className = 'slide-thumbnail-summary';
+    const previewSummary = [item.body.trim(), item.bodySecondary.trim()].filter(Boolean).join(' · ');
+    previewBody.textContent = previewSummary.slice(0, 88) || 'Add text to this slide';
+    preview.append(previewTitle, previewBody);
+    select.append(number, preview);
+    select.addEventListener('click', () => {
+      slidesService.setCurrentSlide(doc, index);
+      renderSlides();
+      renderToolbar();
+    });
+
+    const order = document.createElement('div');
+    order.className = 'slide-thumbnail-order';
+    const moveEarlier = document.createElement('button');
+    moveEarlier.type = 'button';
+    moveEarlier.textContent = '↑';
+    moveEarlier.title = 'Move slide earlier';
+    moveEarlier.setAttribute('aria-label', `Move slide ${index + 1} earlier`);
+    moveEarlier.disabled = index === 0;
+    moveEarlier.addEventListener('click', () => {
+      slidesService.moveSlide(doc, index, index - 1);
+      renderSlides();
+      persist();
+    });
+    const moveLater = document.createElement('button');
+    moveLater.type = 'button';
+    moveLater.textContent = '↓';
+    moveLater.title = 'Move slide later';
+    moveLater.setAttribute('aria-label', `Move slide ${index + 1} later`);
+    moveLater.disabled = index === doc.slides.length - 1;
+    moveLater.addEventListener('click', () => {
+      slidesService.moveSlide(doc, index, index + 1);
+      renderSlides();
+      persist();
+    });
+    order.append(moveEarlier, moveLater);
+    card.append(select, order);
+
+    card.addEventListener('dragstart', event => {
+      draggedIndex = index;
+      card.classList.add('dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(index));
+      }
+    });
+    card.addEventListener('dragend', () => {
+      draggedIndex = -1;
+      card.classList.remove('dragging');
+      thumbnailList.querySelectorAll('.drag-over').forEach(node => node.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', event => {
+      event.preventDefault();
+      if (draggedIndex !== index) card.classList.add('drag-over');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', event => {
+      event.preventDefault();
+      card.classList.remove('drag-over');
+      const source = draggedIndex;
+      if (source < 0 || source === index) return;
+      slidesService.moveSlide(doc, source, index);
+      renderSlides();
+      persist();
+    });
+
+    thumbnailList.append(card);
+  });
+
+  navigator.append(navigatorHeader, thumbnailList);
+
+  const editorMain = document.createElement('section');
+  editorMain.className = 'slide-editor-main';
+  editorMain.setAttribute('aria-label', 'Slide editor');
+
+  const stage = document.createElement('div');
+  stage.className = `slide-stage theme-${state.slideTheme} layout-${slide.layout}`;
+
+  const title = document.createElement('textarea');
+  title.className = 'slide-title';
+  title.value = slide.title || '';
+  title.setAttribute('aria-label', 'Slide title');
+  title.lang = state.proofingLanguage;
+
+  const body = document.createElement('textarea');
+  body.className = 'slide-body slide-body-primary';
+  body.value = slide.body || '';
+  body.setAttribute('aria-label', 'Slide text');
+  body.lang = state.proofingLanguage;
+
+  let secondary = null;
+  const updatePrimary = () => {
+    slidesService.updateSlide(doc, doc.current, { body: body.value });
+    updateThumbnailPreview(doc.current, title.value, body.value, secondary?.value || '');
+    persist();
+  };
+  title.addEventListener('input', () => {
+    slidesService.updateSlide(doc, doc.current, { title: title.value });
+    updateThumbnailPreview(doc.current, title.value, body.value, secondary?.value || '');
+    persist();
+  });
+  body.addEventListener('input', updatePrimary);
+
+  if (slide.layout === 'two-content') {
+    const columns = document.createElement('div');
+    columns.className = 'slide-content-columns';
+    secondary = document.createElement('textarea');
+    secondary.className = 'slide-body slide-body-secondary';
+    secondary.value = slide.bodySecondary || '';
+    secondary.setAttribute('aria-label', 'Second content column');
+    secondary.lang = state.proofingLanguage;
+    secondary.addEventListener('input', () => {
+      slidesService.updateSlide(doc, doc.current, { bodySecondary: secondary.value });
+      updateThumbnailPreview(doc.current, title.value, body.value, secondary.value);
+      persist();
+    });
+    columns.append(body, secondary);
+    stage.append(title, columns);
+  } else {
+    stage.append(title, body);
+  }
+
+  const notesPanel = document.createElement('section');
+  notesPanel.className = 'slide-speaker-notes';
+  notesPanel.setAttribute('aria-label', 'Speaker notes');
+  const notesHeading = document.createElement('label');
+  notesHeading.className = 'slide-speaker-notes-heading';
+  notesHeading.textContent = 'Speaker notes';
+  const notes = document.createElement('textarea');
+  notes.className = 'slide-speaker-notes-editor';
+  notes.value = slide.notes || '';
+  notes.placeholder = 'Add notes for this slide…';
+  notes.setAttribute('aria-label', 'Speaker notes for current slide');
+  notes.lang = state.proofingLanguage;
+  notes.addEventListener('input', () => {
+    slidesService.updateSlide(doc, doc.current, { notes: notes.value });
+    persist();
+  });
+  notesHeading.append(notes);
+  notesPanel.append(notesHeading);
+
+  const controls = document.createElement('div');
+  controls.className = 'slide-controls';
+  const prev = document.createElement('button');
+  prev.type = 'button';
+  prev.textContent = '← Previous';
+  prev.disabled = doc.current === 0;
+  prev.addEventListener('click', () => {
+    slidesService.setCurrentSlide(doc, doc.current - 1);
+    renderSlides();
+    renderToolbar();
+  });
+  const count = document.createElement('span');
+  count.textContent = `Slide ${doc.current + 1} of ${doc.slides.length}`;
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.textContent = 'Next →';
+  next.disabled = doc.current === doc.slides.length - 1;
+  next.addEventListener('click', () => {
+    slidesService.setCurrentSlide(doc, doc.current + 1);
+    renderSlides();
+    renderToolbar();
+  });
+  controls.append(prev, count, next);
+
+  editorMain.append(stage, notesPanel, controls);
+  shell.append(navigator, editorMain);
+  slideWrap.append(shell);
 }
 function addSlide(){activeDoc().slides.push({title:`Slide ${activeDoc().slides.length+1}`,body:''});activeDoc().current=activeDoc().slides.length-1;renderSlides();renderToolbar();persist();}
 function duplicateSlide(){const d=activeDoc(),copy=clone(d.slides[d.current]);d.slides.splice(d.current+1,0,copy);d.current++;renderSlides();renderToolbar();persist();}
 function deleteSlide(){const d=activeDoc();if(d.slides.length===1){alert('A presentation needs at least one slide.');return;}d.slides.splice(d.current,1);d.current=Math.max(0,d.current-1);renderSlides();renderToolbar();persist();}
-function presentSlides() {
+function presentSlides(startFromFirst = false) {
   const d = activeDoc();
-  let i = d.current;
+  let i = startFromFirst ? 0 : d.current;
   const overlay = document.createElement('div');
   overlay.className = 'presentation-overlay bd-motion-overlay';
   overlay.dataset.state = 'closed';
@@ -911,6 +1313,11 @@ async function openFile(){try{const data=await window.brightdesk.openFile();if(!
 async function saveProject(){try{const result=await window.brightdesk.saveProject({title:$('doc-title').value,docs:state.docs});if(!result?.canceled)setStatus('Project saved');}catch(error){alert(`Could not save project: ${error.message}`);}}
 function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
+document.addEventListener('keydown', event => {
+  if (state.app !== 'slides' || state.view !== 'workspace' || event.key !== 'F5' || document.querySelector('.presentation-overlay')) return;
+  event.preventDefault();
+  presentSlides(!event.shiftKey);
+});
 document.querySelectorAll('.nav[data-app]').forEach(btn=>btn.addEventListener('click',()=>setApp(btn.dataset.app)));
 $('manage-apps').addEventListener('click',()=>{if (launchAppId) return; state.view='manager';render();});
 $('manage-languages').addEventListener('click',openLanguageManager);
