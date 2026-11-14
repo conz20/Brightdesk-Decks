@@ -53,7 +53,7 @@ These are configured build targets, not confirmation that a package has passed i
 - Navigate slides from the left thumbnail rail; reorder them by dragging or with the accessible move-earlier and move-later controls.
 - Use Slide Sorter from the View ribbon to see and rearrange the full presentation.
 - Undo and redo slide edits with toolbar controls or Ctrl/Cmd+Z, Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z. Consecutive typing in the same field is grouped into a single undo step. The bounded history is saved separately on this device and restored when Decks is reopened; importing a different presentation clears the previous deck's history.
-- Add, duplicate and delete slides.
+- Add, duplicate and delete slides. Hide or unhide slides from the Slide Show ribbon; hidden slides stay editable but are skipped during presentation playback and remain hidden in PowerPoint export.
 - Add speaker notes to each slide. Notes are saved with the local Brightdesk project and included when exporting to PowerPoint.
 - Choose from the included basic slide themes.
 - Start presentation mode from the first slide with F5 or from the selected slide with Shift+F5; use the arrow keys to move and Escape to exit.
