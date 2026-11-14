@@ -14,7 +14,7 @@
   const backgroundPattern = /^#[0-9A-F]{6}$/i;
   const supportedTransitions = new Set(['none', 'fade', 'push', 'wipe']);
   const supportedObjects = new Set(['text', 'rectangle', 'ellipse', 'line', 'image']);
-  const imageDataPattern = /^data:image\\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+  const imageDataPattern = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
   let lastRenderedSlideId = null;
   let activeTransitionClass = '';
 
