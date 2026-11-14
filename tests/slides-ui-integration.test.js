@@ -25,6 +25,8 @@ test('Decks Design ribbon provides an accessible per-slide colour picker and res
   assert.match(translations, /common\.backgroundColour/);
   assert.match(translations, /common\.resetBackground/);
   assert.match(css, /\.slide-background-colour:focus-visible/);
+  assert.match(css, /\.slide-stage\.has-custom-background \.slide-title::placeholder/);
+  assert.match(css, /color:currentColor!important/);
 });
 
 test('Decks renders custom backgrounds and readable text in editor, sorter and presenter', () => {
@@ -32,6 +34,7 @@ test('Decks renders custom backgrounds and readable text in editor, sorter and p
   const service = read('src/slides-service.js');
   assert.match(service, /function getReadableTextColor/);
   assert.match(app, /stage\.style\.backgroundColor = slide\.backgroundColor \|\| ''/);
+  assert.match(app, /stage\.classList\.toggle\('has-custom-background', Boolean\(slide\.backgroundColor\)\)/);
   assert.match(app, /body\.style\.backgroundColor = slide\.backgroundColor \|\| ''/);
   assert.match(app, /second\.style\.backgroundColor = slide\.backgroundColor \|\| ''/);
   assert.match(app, /preview\.style\.backgroundColor = slide\.backgroundColor \|\| ''/);
