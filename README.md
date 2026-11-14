@@ -49,6 +49,7 @@ These are configured build targets, not confirmation that a package has passed i
 
 - Create a presentation and edit slide titles and content.
 - Choose from four slide layouts: Title slide, Title and content, Two content and Section header.
+- Set the presentation size to Widescreen (16:9) or Standard (4:3); the selected size is saved with the presentation and included in PowerPoint export.
 - Navigate slides from the left thumbnail rail; reorder them by dragging or with the accessible move-earlier and move-later controls.
 - Use Slide Sorter from the View ribbon to see and rearrange the full presentation.
 - Undo and redo slide edits with toolbar controls or Ctrl/Cmd+Z, Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z. Consecutive typing in the same field is grouped into a single undo step. The bounded history is saved separately on this device and restored when Decks is reopened; importing a different presentation clears the previous deck's history.
@@ -58,7 +59,7 @@ These are configured build targets, not confirmation that a package has passed i
 - Start presentation mode from the first slide with F5 or from the selected slide with Shift+F5; use the arrow keys to move and Escape to exit.
 - Import and export supported PowerPoint files; unsupported advanced objects and formatting may not be preserved.
 
-**Known boundaries:** Existing speaker notes are not yet imported from PowerPoint files. Slide masters, custom layout editing, sections, shapes, pictures, charts, tables, transitions, embedded media, animations and full PowerPoint round-trip fidelity are not promised. The new workspace still requires genuine running-build visual review and native Windows, macOS and Linux verification before it can be described as release-ready.
+**Known boundaries:** Custom slide dimensions and nonstandard aspect ratios are not yet offered as editable size presets. Existing speaker notes are not yet imported from PowerPoint files. Slide masters, custom layout editing, sections, shapes, pictures, charts, tables, transitions, embedded media, animations and full PowerPoint round-trip fidelity are not promised. The new workspace still requires genuine running-build visual review and native Windows, macOS and Linux verification before it can be described as release-ready.
 ## Desktop installers
 
 | Platform | Installer |
