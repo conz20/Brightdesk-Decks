@@ -1445,3 +1445,48 @@
 .slide-background-picker{display:inline-flex;align-items:center;gap:6px;padding:0 5px;color:#73768a;font-size:11px;white-space:nowrap}
 .slide-background-colour{width:30px;height:25px;padding:1px;border:1px solid #dedfe9;border-radius:6px;background:#fff;cursor:pointer}
 .slide-background-colour:focus-visible{outline:2px solid #7771e6;outline-offset:2px}
+
+/* Brightdesk Decks: layout-specific placeholders. */
+.slide-editor-main .slide-title::placeholder,
+.slide-editor-main .slide-body::placeholder{
+  color:#8b94a3;
+  opacity:1;
+}
+.slide-editor-main .slide-stage.theme-midnight .slide-title::placeholder,
+.slide-editor-main .slide-stage.theme-midnight .slide-body::placeholder{
+  color:#aebbd0;
+  opacity:1;
+}
+.slide-editor-main .slide-stage.theme-paper .slide-title::placeholder,
+.slide-editor-main .slide-stage.theme-paper .slide-body::placeholder{
+  color:#8994a3;
+  opacity:1;
+}
+.slide-editor-main .slide-stage.layout-title .slide-title::placeholder{
+  color:#a17b50;
+}
+.slide-editor-main .slide-stage.layout-title .slide-body::placeholder{
+  color:#a17b50;
+}
+.slide-editor-main .slide-stage.layout-section-header .slide-title::placeholder{
+  color:#ad814b;
+}
+.slide-editor-main .slide-stage.layout-section-header .slide-body::placeholder{
+  color:#8792a1;
+}
+.slide-editor-main .slide-stage.layout-two-content .slide-content-columns .slide-body::placeholder{
+  color:#8491a2;
+}
+.slide-editor-main .slide-stage.theme-midnight.layout-title .slide-title::placeholder,
+.slide-editor-main .slide-stage.theme-midnight.layout-title .slide-body::placeholder{
+  color:#d3bb98;
+}
+.slide-editor-main .slide-stage.theme-midnight.layout-section-header .slide-title::placeholder{
+  color:#e0b978;
+}
+.slide-editor-main .slide-stage.theme-midnight.layout-section-header .slide-body::placeholder{
+  color:#aebbd0;
+}
+.slide-editor-main .slide-stage.theme-midnight.layout-two-content .slide-content-columns .slide-body::placeholder{
+  color:#9fadc2;
+}
