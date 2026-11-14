@@ -1359,6 +1359,11 @@ test('Decks hydrates picture data across current, undo and redo history snapshot
   history.commit(presentation);
 
   assert.equal(history.hydrateImages(new Map([[imageAssetId, imageData]])), 2);
+  const persistedHistory = history.exportState();
+  assert.equal(persistedHistory.current.slides[0].objects[0].imageData, undefined);
+  assert.equal(persistedHistory.past[0].slides[0].objects[0].imageData, undefined);
+  assert.equal(persistedHistory.current.slides[0].objects[0].imageAssetId, imageAssetId);
+  assert.equal(persistedHistory.past[0].slides[0].objects[0].imageAssetId, imageAssetId);
   assert.equal(history.undo(presentation), true);
   assert.equal(presentation.slides[0].objects[0].imageData, imageData);
   assert.equal(history.redo(presentation), true);
