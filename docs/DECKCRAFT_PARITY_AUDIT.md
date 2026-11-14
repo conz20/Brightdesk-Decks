@@ -74,7 +74,7 @@ Match the reference product's information architecture and visual density rather
 
 ### P0 — Editing foundation
 - [x] Add named section membership, Widescreen/Standard slide size and section metadata to local presentation documents.
-- [ ] Add stable slide IDs, layout IDs, hidden-slide state and theme references.
+- Add stable slide IDs, layout IDs and theme references. Hidden-slide state is implemented on the presentation review branch, including PowerPoint import/export.
 - Migrate existing `{ title, body }` slides without data loss; retain compatibility with existing local JSON documents and PPTX import/export.
 - [x] Add thumbnail navigation, add/duplicate/delete/reorder, keyboard navigation and a real notes editor.
 - [x] Add named slide sections with New/Rename/Remove, slide reassignment and collapsible groups in Normal View and Slide Sorter.
@@ -88,7 +88,8 @@ Match the reference product's information architecture and visual density rather
 - Add local picture insertion, crop, alt text, alignment, grouping and formatting.
 - [x] Add Widescreen (16:9) and Standard (4:3) slide-size controls, saved in the presentation and preserved by PowerPoint import/export. Custom dimensions, theme presets and background controls remain future work.
 - Add a sample presentation built from original Brightdesk content and artwork.
-- Add slide sorter and outline views.
+- [x] Add Slide Sorter with accessible slide selection and reorder controls.
+- [x] Add editable Outline View for slide titles and content, including the second comparison column, hidden-slide marking and a route back to Normal View.
 
 ### P2 — Present and share
 - Add F5/Shift+F5 start behaviour, complete navigation keys and Escape.
