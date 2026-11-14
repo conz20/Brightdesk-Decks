@@ -8,6 +8,7 @@ const MAX_SHEET_CELLS = 250_000;
 const MAX_SLIDES = 2_000;
 const KNOWN_APP_IDS = new Set(appCatalog.map(app => app.id));
 const EXCLUDED_APP_IDS = new Set(['teams', 'outlook', 'onedrive']);
+const SUPPORTED_SLIDE_LAYOUTS = new Set(['title', 'title-content', 'two-content', 'section-header']);
 
 /*
  * Load format-specific libraries only when the corresponding format is used.
@@ -56,10 +57,21 @@ function validateProject(project) {
         if (
           !isPlainObject(slide) ||
           (slide.title !== undefined && typeof slide.title !== 'string') ||
-          (slide.body !== undefined && typeof slide.body !== 'string') ||
+          (slide.body !== undefined && (
+            typeof slide.body !== 'string' ||
+            Buffer.byteLength(slide.body, 'utf8') > MAX_DOCUMENT_TEXT_BYTES
+          )) ||
+          (slide.bodySecondary !== undefined && (
+            typeof slide.bodySecondary !== 'string' ||
+            Buffer.byteLength(slide.bodySecondary, 'utf8') > MAX_DOCUMENT_TEXT_BYTES
+          )) ||
           (slide.notes !== undefined && (
             typeof slide.notes !== 'string' ||
             Buffer.byteLength(slide.notes, 'utf8') > MAX_DOCUMENT_TEXT_BYTES
+          )) ||
+          (slide.layout !== undefined && (
+            typeof slide.layout !== 'string' ||
+            !SUPPORTED_SLIDE_LAYOUTS.has(slide.layout)
           ))
         ) {
           throw new Error('The Brightdesk Decks presentation contains an invalid slide.');
@@ -218,9 +230,58 @@ async function exportOfficeFile(payload, filePath) {
     const PptxGenJS = require('pptxgenjs');
     const pptx = new PptxGenJS(); pptx.layout = 'LAYOUT_WIDE'; pptx.author = 'Brightdesk'; pptx.subject = 'Brightdesk presentation';
     for (const data of (payload.slides || [])) {
-      const slide = pptx.addSlide(); slide.background = { color: 'F6F5FF' };
-      slide.addText(data.title || '', { x: 0.8, y: 1.1, w: 11, h: 1.2, fontFace: 'Aptos Display', fontSize: 30, bold: true, color: '38356F' });
-      slide.addText(data.body || '', { x: 0.85, y: 2.65, w: 10.8, h: 3.7, fontFace: 'Aptos', fontSize: 20, color: '55566B', breakLine: false, valign: 'top' });
+      const slide = pptx.addSlide();
+      const layout = SUPPORTED_SLIDE_LAYOUTS.has(data.layout) ? data.layout : 'title-content';
+      slide.background = { color: layout === 'title' ? 'FCF3E9' : 'FFFFFF' };
+      const titleStyle = {
+        x: 0.72, y: 0.48, w: 11.9, h: 0.9,
+        fontFace: 'Aptos Display', fontSize: 30, bold: true,
+        color: '26364D', margin: 0.04, breakLine: false
+      };
+      if (layout === 'title') {
+        slide.addText(data.title || '', {
+          ...titleStyle, x: 1.1, y: 2.0, w: 11.1, h: 1.5,
+          fontSize: 38, align: 'center', valign: 'mid'
+        });
+        if (data.body) slide.addText(data.body, {
+          x: 1.4, y: 3.75, w: 10.5, h: 0.9,
+          fontFace: 'Aptos', fontSize: 22, color: '68758A',
+          align: 'center', valign: 'mid', margin: 0.04
+        });
+      } else if (layout === 'section-header') {
+        slide.addText(data.title || '', {
+          ...titleStyle, x: 0.95, y: 2.1, w: 11.0, h: 1.4,
+          fontSize: 36, color: '9A5E20', valign: 'mid'
+        });
+        if (data.body) slide.addText(data.body, {
+          x: 1.0, y: 3.65, w: 10.5, h: 1.0,
+          fontFace: 'Aptos', fontSize: 21, color: '68758A',
+          valign: 'top', margin: 0.04
+        });
+      } else if (layout === 'two-content') {
+        slide.addText(data.title || '', titleStyle);
+        slide.addShape(pptx.ShapeType.line, {
+          x: 6.65, y: 1.7, w: 0, h: 4.9,
+          line: { color: 'E5E8EE', width: 1 }
+        });
+        slide.addText(data.body || '', {
+          x: 0.8, y: 1.7, w: 5.45, h: 4.9,
+          fontFace: 'Aptos', fontSize: 20, color: '4A5A70',
+          valign: 'top', margin: 0.08, breakLine: false
+        });
+        slide.addText(data.bodySecondary || '', {
+          x: 6.95, y: 1.7, w: 5.45, h: 4.9,
+          fontFace: 'Aptos', fontSize: 20, color: '4A5A70',
+          valign: 'top', margin: 0.08, breakLine: false
+        });
+      } else {
+        slide.addText(data.title || '', titleStyle);
+        slide.addText(data.body || '', {
+          x: 0.85, y: 1.7, w: 11.7, h: 4.9,
+          fontFace: 'Aptos', fontSize: 20, color: '4A5A70',
+          breakLine: false, valign: 'top', margin: 0.08
+        });
+      }
       if (typeof data.notes === 'string' && data.notes.trim()) slide.addNotes(data.notes);
     }
     await pptx.writeFile({ fileName: filePath }); return;
