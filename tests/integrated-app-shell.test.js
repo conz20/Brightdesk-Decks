@@ -86,3 +86,17 @@ test('Presenter View keeps speaker notes in the presenter console and sends only
   assert.match(app, /presenterNotes\.textContent = snapshot\.currentSlide\.notes/);
   assert.match(app, /updatePresenter\(createAudienceState\(\)\)/);
 });
+
+
+test('Decks editor applies layout-specific placeholders and offers a non-destructive layout reset', () => {
+  assert.match(app, /getSlideLayoutDefinition\(slide\.layout\)/);
+  assert.match(app, /title\.placeholder = layoutDefinition\.titlePlaceholder/);
+  assert.match(app, /body\.placeholder = layoutDefinition\.bodyPlaceholder/);
+  assert.match(app, /secondary\.placeholder = layoutDefinition\.secondaryBodyPlaceholder/);
+  assert.match(app, /addButton\(layoutGroup, 'Reset Layout', resetCurrentSlideLayout\)/);
+  assert.match(app, /function resetCurrentSlideLayout\(\)/);
+  assert.match(app, /window\.BrightdeskSlidesService\.resetSlideLayout/);
+  assert.match(app, /Existing slide text and speaker notes were kept/);
+  assert.match(app, /getSlideLayoutDefinition\(slide\.layout\)/);
+  assert.doesNotMatch(app, /addSlideWithLayout\('title', 'Presentation title', 'Add a subtitle'\)/);
+});
