@@ -78,6 +78,7 @@ Match the reference product's information architecture and visual density rather
 - Migrate existing `{ title, body }` slides without data loss; retain compatibility with existing local JSON documents and PPTX import/export.
 - [x] Add thumbnail navigation, add/duplicate/delete/reorder, keyboard navigation and a real notes editor.
 - [x] Add named slide sections with New/Rename/Remove, slide reassignment and collapsible groups in Normal View and Slide Sorter.
+- [x] Add hide/unhide slide controls; hidden slides remain editable but are skipped in slide shows and preserved in PowerPoint files.
 - Add title, title-and-content, two-content, section-header, blank and comparison layouts.
 - [x] Add bounded undo/redo for slide text, speaker notes, layouts, slide creation/duplication/deletion and reordering, with typing grouped by field and device-local history restored across restarts. Object-edit history remains future work when editable objects are introduced.
 - Add tests for migration, selection bounds, reorder, duplicate, delete, one-slide minimum, notes persistence and recovery.
@@ -147,10 +148,11 @@ The first practical presentation-editor milestone is now represented by [Brightd
 - Widescreen (16:9) and Standard (4:3) slide sizes, shown in the canvas, thumbnails, Slide Sorter and presentation mode.
 - Slide size is saved in local projects, restored in undo/redo, and preserved through supported PowerPoint import/export.
 - Named sections are saved in local Brightdesk project files, included in undo/redo, and shown as collapsible groups in both editing views. PowerPoint section import/export remains unsupported.
+- Hidden slides stay editable, are marked in the navigator and Slide Sorter, are skipped during presentation playback, and are preserved in supported PowerPoint import/export.
 - Speaker notes and supported layout positioning included in PowerPoint export.
 - F5 / Shift+F5 presentation shortcuts while preserving the current motion-aware presentation overlay.
 - Bounded undo/redo for slide content, speaker notes, layouts and slide structure, including grouped typing and keyboard/toolbar controls. History is also saved on this device and restored when Decks is reopened; importing another presentation clears the previous history.
-- File validation for notes, layouts, secondary content, supported slide sizes and section membership.
+- File validation for notes, layouts, secondary content, supported slide sizes and section membership, and boolean hidden-slide state.
 
 Legacy slides migrate in memory to the Title and content layout while preserving their title/body text. PowerPoint speaker-note import remains open.
 
