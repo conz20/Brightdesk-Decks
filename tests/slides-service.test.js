@@ -786,6 +786,10 @@ test('Decks provides an editable Outline View for titles and slide content', () 
   assert.match(app, /state\.slideView === 'outline'/);
   assert.match(app, /slide-outline-title/);
   assert.match(app, /slide-outline-body/);
+  assert.match(app, /slide-outline-body-secondary/);
+  assert.match(app, /hiddenBadge\.textContent = 'Hidden'/);
+  assert.match(app, /getSlideHistory\(doc\)\.sync\(doc\)/);
+  assert.match(app, /commitSlideChange\(doc, `slide:\$\{index\}:title`\)/);
   assert.match(app, /setCurrentSlide\(doc, index\)/);
   assert.match(app, /Outline View/);
   assert.match(styles, /\.slide-outline-list/);
