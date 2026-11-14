@@ -407,3 +407,40 @@ test('Decks preserves redo history when reopening after an undo', () => {
   assert.equal(secondSession.redo(reopened), true);
   assert.equal(reopened.slides[0].title, 'Two');
 });
+
+
+test('Decks breaks a grouped typing sequence when the user changes slides', () => {
+  const { createHistory } = require('../src/slides-service');
+  const presentation = {
+    slides: [
+      { title: '', body: '', notes: '' },
+      { title: '', body: '', notes: '' }
+    ],
+    current: 0
+  };
+  const history = createHistory(presentation);
+
+  updateSlide(presentation, 0, { title: 'First' });
+  history.commit(presentation, 'slide:0:title', 1000);
+  setCurrentSlide(presentation, 1);
+  history.sync(presentation);
+  updateSlide(presentation, 1, { title: 'Second' });
+  history.commit(presentation, 'slide:1:title', 1050);
+
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.slides[0].title, 'First');
+  assert.equal(presentation.slides[1].title, '');
+});
+
+test('Decks reads, writes and clears device-local slide history separately from documents', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+  assert.match(app, /brightdesk-decks-history-v1/);
+  assert.match(app, /localStorage\.getItem\(SLIDE_HISTORY_STORAGE_KEY\)/);
+  assert.match(app, /localStorage\.setItem\(SLIDE_HISTORY_STORAGE_KEY/);
+  assert.match(app, /localStorage\.removeItem\(SLIDE_HISTORY_STORAGE_KEY\)/);
+  assert.match(app, /createHistory\(doc, \{ state: savedState \}\)/);
+  assert.match(app, /clearSavedSlideHistory\(\)/);
+});
