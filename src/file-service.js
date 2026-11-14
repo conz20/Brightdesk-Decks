@@ -20,6 +20,7 @@ const SLIDE_LAYOUT_ID_BY_NAME = Object.freeze({
 const SUPPORTED_SLIDE_SIZES = new Set(['widescreen', 'standard']);
 const SUPPORTED_SLIDE_THEMES = new Set(['lavender', 'midnight', 'paper']);
 const SLIDE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
+const SLIDE_BACKGROUND_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
 
 /*
  * Load format-specific libraries only when the corresponding format is used.
@@ -169,6 +170,10 @@ function validateProject(project) {
             typeof slide.layoutId !== 'string' ||
             !SUPPORTED_SLIDE_LAYOUT_IDS.has(slide.layoutId) ||
             (slide.layout !== undefined && SLIDE_LAYOUT_ID_BY_NAME[slide.layout] !== slide.layoutId)
+          )) ||
+          (slide.backgroundColor !== undefined && (
+            typeof slide.backgroundColor !== 'string' ||
+            !SLIDE_BACKGROUND_COLOR_PATTERN.test(slide.backgroundColor)
           ))
         ) {
           throw new Error('The Brightdesk Decks presentation contains an invalid slide.');
@@ -477,6 +482,28 @@ async function readPptxThemeMetadata(zip) {
   return SUPPORTED_SLIDE_THEMES.has(themeId) ? themeId : 'lavender';
 }
 
+function getReadablePptxTextColor(backgroundColor) {
+  if (typeof backgroundColor !== 'string' || !SLIDE_BACKGROUND_COLOR_PATTERN.test(backgroundColor)) {
+    return null;
+  }
+  const hex = backgroundColor.slice(1);
+  const channels = [0, 2, 4].map(offset => {
+    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  return luminance < 0.179 ? 'FFFFFF' : '111827';
+}
+
+function readPptxSlideSolidBackground(xml) {
+  const backgroundMatch = String(xml || '').match(/<(?:[A-Za-z_][\\w.-]*:)?bg\\b[^>]*>([\\s\\S]*?)<\\/(?:[A-Za-z_][\\w.-]*:)?bg\\s*>/i);
+  if (!backgroundMatch) return null;
+  const fillMatch = backgroundMatch[1].match(/<(?:[A-Za-z_][\\w.-]*:)?solidFill\\b[^>]*>([\\s\\S]*?)<\\/(?:[A-Za-z_][\\w.-]*:)?solidFill\\s*>/i);
+  if (!fillMatch) return null;
+  const colorMatch = fillMatch[1].match(/<(?:[A-Za-z_][\\w.-]*:)?srgbClr\\b[^>]*\\bval=["']([0-9A-F]{6})["']/i);
+  return colorMatch ? '#' + colorMatch[1].toUpperCase() : null;
+}
+
 async function openOfficeFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const stat = await fs.stat(filePath);
@@ -540,6 +567,7 @@ async function openOfficeFile(filePath) {
     let totalNotesBytes = 0;
     for (const name of names) {
       const xml = await zip.files[name].async('string');
+      const backgroundColor = readPptxSlideSolidBackground(xml);
       const hidden = /<(?:[A-Za-z0-9_]+:)?sld\b[^>]*\bshow=["'](?:0|false)["']/i.test(xml);
       const texts = collectXmlText(parser.parse(xml)).filter(Boolean);
       const notesPart = await findNotesSlidePart(zip, name, relationshipParser);
@@ -556,6 +584,7 @@ async function openOfficeFile(filePath) {
       }
       slides.push({
         ...(hidden ? { hidden: true } : {}),
+        ...(backgroundColor ? { backgroundColor } : {}),
         title: texts[0] || `Slide ${slides.length + 1}`,
         body: texts.slice(1).join('\n'),
         notes
@@ -646,11 +675,15 @@ async function exportOfficeFile(payload, filePath) {
       const slide = pptx.addSlide();
       if (data.hidden === true) slide.hidden = true;
       const layout = SUPPORTED_SLIDE_LAYOUTS.has(data.layout) ? data.layout : 'title-content';
-      slide.background = { color: layout === 'title' ? theme.background : theme.surface };
+      const backgroundColor = typeof data.backgroundColor === 'string' && SLIDE_BACKGROUND_COLOR_PATTERN.test(data.backgroundColor)
+        ? data.backgroundColor.toUpperCase()
+        : null;
+      const customTextColor = backgroundColor ? getReadablePptxTextColor(backgroundColor) : null;
+      slide.background = { color: backgroundColor ? backgroundColor.slice(1) : (layout === 'title' ? theme.background : theme.surface) };
       const titleStyle = {
         x: x(0.72), y: 0.48, w: w(11.9), h: 0.9,
         fontFace: 'Aptos Display', fontSize: 30, bold: true,
-        color: theme.title, margin: 0.04, breakLine: false
+        color: customTextColor || theme.title, margin: 0.04, breakLine: false
       };
       if (layout === 'title') {
         slide.addText(data.title || '', {
@@ -659,13 +692,13 @@ async function exportOfficeFile(payload, filePath) {
         });
         if (data.body) slide.addText(data.body, {
           x: x(1.4), y: 3.75, w: w(10.5), h: 0.9,
-          fontFace: 'Aptos', fontSize: 22, color: theme.body,
+          fontFace: 'Aptos', fontSize: 22, color: customTextColor || theme.body,
           align: 'center', valign: 'mid', margin: 0.04
         });
       } else if (layout === 'section-header') {
         slide.addText(data.title || '', {
           ...titleStyle, x: x(0.95), y: 2.1, w: w(11.0), h: 1.4,
-          fontSize: 36, color: theme.accent, valign: 'mid'
+          fontSize: 36, color: customTextColor || theme.accent, valign: 'mid'
         });
         if (data.body) slide.addText(data.body, {
           x: x(1.0), y: 3.65, w: w(10.5), h: 1.0,
@@ -676,7 +709,7 @@ async function exportOfficeFile(payload, filePath) {
         slide.addText(data.title || '', titleStyle);
         slide.addShape(pptx.ShapeType.line, {
           x: x(6.65), y: 1.7, w: w(0), h: 4.9,
-          line: { color: theme.divider, width: 1 }
+          line: { color: customTextColor || theme.divider, width: 1 }
         });
         slide.addText(data.body || '', {
           x: x(0.8), y: 1.7, w: w(5.45), h: 4.9,
