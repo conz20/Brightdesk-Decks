@@ -197,7 +197,11 @@ function renderToolbar() {
     if (tab === 'home') {
       const slides = group('slides'); addButton(slides, label('newSlide'), addSlide); addButton(slides, label('duplicate'), duplicateSlide); addButton(slides, label('delete'), deleteSlide);
     } else if (tab === 'insert') {
-      const insert = group('slideContent'); addButton(insert, label('titleSlide'), () => addSlideWithContent('Title', 'Add a subtitle')); addButton(insert, label('textSlide'), () => addSlideWithContent('New section', 'Add your points here'));
+      const insert = group('slideContent');
+      addButton(insert, label('titleSlide'), () => addSlideWithLayout('title', 'Presentation title', 'Add a subtitle'));
+      addButton(insert, label('textSlide'), () => addSlideWithLayout('title-content', 'New section', 'Add your points here'));
+      addButton(insert, 'Two content', () => addSlideWithLayout('two-content', 'Compare the options', 'First column'));
+      addButton(insert, 'Section header', () => addSlideWithLayout('section-header', 'New section', 'Add a short introduction'));
     } else if (tab === 'design') {
       const design = group('themes');
       [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => addButton(design, label, () => setSlideTheme(theme)));
@@ -617,6 +621,7 @@ function renderSlides() {
   body.setAttribute('aria-label', 'Slide text');
   body.lang = state.proofingLanguage;
 
+  let secondary = null;
   const updatePrimary = () => {
     slidesService.updateSlide(doc, doc.current, { body: body.value });
     updateThumbnailPreview(doc.current, title.value, body.value, secondary?.value || '');
@@ -632,7 +637,7 @@ function renderSlides() {
   if (slide.layout === 'two-content') {
     const columns = document.createElement('div');
     columns.className = 'slide-content-columns';
-    const secondary = document.createElement('textarea');
+    secondary = document.createElement('textarea');
     secondary.className = 'slide-body slide-body-secondary';
     secondary.value = slide.bodySecondary || '';
     secondary.setAttribute('aria-label', 'Second content column');
