@@ -19,6 +19,7 @@ const SLIDE_LAYOUT_ID_BY_NAME = Object.freeze({
 });
 const SUPPORTED_SLIDE_SIZES = new Set(['widescreen', 'standard']);
 const SUPPORTED_SLIDE_THEMES = new Set(['lavender', 'midnight', 'paper']);
+const SUPPORTED_SLIDE_TRANSITIONS = new Set(['none', 'fade', 'push', 'wipe']);
 const SLIDE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 const SLIDE_BACKGROUND_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
 const SUPPORTED_SLIDE_OBJECT_TYPES = new Set(['text', 'rectangle', 'ellipse', 'line']);
@@ -155,6 +156,7 @@ function validateProject(project) {
             slideIds.has(slide.id)
           )) ||
           (slide.hidden !== undefined && typeof slide.hidden !== 'boolean') ||
+          (slide.transition !== undefined && !SUPPORTED_SLIDE_TRANSITIONS.has(slide.transition)) ||
           (slide.title !== undefined && typeof slide.title !== 'string') ||
           (slide.body !== undefined && (
             typeof slide.body !== 'string' ||
@@ -615,6 +617,69 @@ function readPptxSlideSolidBackground(xml) {
   return colorMatch ? '#' + colorMatch[1].toUpperCase() : null;
 }
 
+function readPptxSlideTransition(xml) {
+  const transitionElement = String(xml || '').match(
+    /<(?:[A-Za-z_][\\w.-]*:)?transition\\b[^>]*>([\\s\\S]*?)<\\/(?:[A-Za-z_][\\w.-]*:)?transition\\s*>/i
+  );
+  if (!transitionElement) return 'none';
+  const child = transitionElement[1].match(/<(?:[A-Za-z_][\\w.-]*:)?(fade|push|wipe)\\b/i);
+  const transition = child?.[1]?.toLowerCase() || 'none';
+  return SUPPORTED_SLIDE_TRANSITIONS.has(transition) ? transition : 'none';
+}
+
+async function writePptxSlideTransitions(filePath, transitions) {
+  const JSZip = require('jszip');
+  const { XMLParser } = require('fast-xml-parser');
+  const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+  const relationshipParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  const slideParts = await getPptxSlidePartsInPresentationOrder(archive, relationshipParser);
+  if (slideParts.length !== transitions.length) {
+    throw new Error('The generated PowerPoint slide order does not match its transition data.');
+  }
+
+  const transitionMarkup = {
+    fade: prefix => `<${prefix}transition spd="med"><${prefix}fade/></${prefix}transition>`,
+    push: prefix => `<${prefix}transition spd="med"><${prefix}push dir="l"/></${prefix}transition>`,
+    wipe: prefix => `<${prefix}transition spd="med"><${prefix}wipe dir="l"/></${prefix}transition>`
+  };
+
+  for (let index = 0; index < slideParts.length; index++) {
+    const transition = SUPPORTED_SLIDE_TRANSITIONS.has(transitions[index])
+      ? transitions[index]
+      : 'none';
+    if (transition === 'none') continue;
+    const slideFile = archive.file(slideParts[index]);
+    if (!slideFile) throw new Error('The generated PowerPoint slide is missing its XML part.');
+    let xml = await slideFile.async('string');
+    const closingSlide = xml.match(/<\\/([A-Za-z_][\\w.-]*:)?sld\\s*>/i);
+    if (!closingSlide) throw new Error('The generated PowerPoint slide XML is malformed.');
+    const prefix = closingSlide[1] || '';
+    const escapedPrefix = prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\function findFirstXmlNode(value, key) {');
+    const existingTransition = new RegExp(
+      `<${escapedPrefix}transition\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/${escapedPrefix}transition\\s*>)`,
+      'gi'
+    );
+    xml = xml.replace(existingTransition, '');
+    const currentClosing = xml.match(/<\\/([A-Za-z_][\\w.-]*:)?sld\\s*>/i);
+    if (!currentClosing || currentClosing[1] !== prefix) {
+      throw new Error('The generated PowerPoint slide closing tag changed unexpectedly.');
+    }
+    xml = xml.replace(currentClosing[0], transitionMarkup[transition](prefix) + currentClosing[0]);
+    archive.file(slideParts[index], xml);
+  }
+
+  const output = await archive.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  await fs.writeFile(filePath, output);
+}
+
 function findFirstXmlNode(value, key) {
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -825,6 +890,7 @@ async function openOfficeFile(filePath) {
         ...(hidden ? { hidden: true } : {}),
         ...(backgroundColor ? { backgroundColor } : {}),
         ...(importedObjects.objects.length ? { objects: importedObjects.objects } : {}),
+        transition: readPptxSlideTransition(xml),
         title: texts[0] || `Slide ${slides.length + 1}`,
         body: texts.slice(1).join('\n'),
         notes
@@ -1028,6 +1094,9 @@ async function exportOfficeFile(payload, filePath) {
     }
     await pptx.writeFile({ fileName: filePath });
     await writePptxThemeMetadata(filePath, themeId);
+    await writePptxSlideTransitions(filePath, (payload.slides || []).map(slide =>
+      SUPPORTED_SLIDE_TRANSITIONS.has(slide.transition) ? slide.transition : 'none'
+    ));
     return;
   }
   if (kind === 'pages' && ext === '.html') { await fs.writeFile(filePath, payload.html || '', 'utf8'); return; }
