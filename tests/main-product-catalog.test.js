@@ -258,6 +258,8 @@ test('Decks stores picture bytes in its private device data folder with guarded 
   assert.match(main, /ipcMain\.handle\(['"]slides:picture:store['"][\s\S]*?senderIsMain\(event\)/);
   assert.match(main, /ipcMain\.handle\(['"]slides:picture:load['"][\s\S]*?senderIsMain\(event\)/);
   assert.match(main, /ipcMain\.handle\(['"]slides:picture:prune['"][\s\S]*?senderIsMain\(event\)/);
+  assert.match(main, /return prepareProjectSlidePictures\\(imported\\)/);
+  assert.match(main, /return prepareProjectSlidePictures\\(opened\\)/);
   assert.match(preload, /storeSlidePicture:/);
   assert.match(preload, /loadSlidePicture:/);
   assert.match(preload, /pruneSlidePictures:/);
