@@ -152,3 +152,22 @@ test('Decks rejects invalid slide indexes instead of mutating another slide', ()
   assert.throws(() => moveSlide(presentation, 0, 1), RangeError);
   assert.throws(() => setCurrentSlide(presentation, -1), RangeError);
 });
+
+
+test('Decks connects thumbnail navigation and per-slide notes to the editor', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'src', 'index.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
+
+  assert.match(app, /slide-thumbnail-card/);
+  assert.match(app, /slidesService\.moveSlide\(doc,/);
+  assert.match(app, /slide-speaker-notes-editor/);
+  assert.match(app, /updateSlide\(doc, doc\.current, \{ notes: notes\.value \}\)/);
+  assert.match(html, /id="slide-wrap"/);
+  assert.match(html, /src="slides-service\.js"/);
+  assert.match(styles, /\.slide-editor-shell/);
+  assert.match(styles, /\.slide-speaker-notes/);
+});
