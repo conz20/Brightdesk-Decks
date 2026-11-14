@@ -486,3 +486,59 @@ test('PPTX import ignores external speaker-notes relationships without following
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk project validation accepts optional stable slide IDs and rejects malformed or duplicate IDs', () => {
+  assert.doesNotThrow(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Legacy slide', body: '' }] } }
+  }));
+  assert.doesNotThrow(() => validateProject({
+    docs: {
+      slides: {
+        slides: [
+          { id: 'slide-opening', title: 'Opening', body: '' },
+          { id: 'slide-agenda', title: 'Agenda', body: '' }
+        ]
+      }
+    }
+  }));
+  assert.throws(() => validateProject({
+    docs: {
+      slides: {
+        slides: [
+          { id: 'slide-same', title: 'One', body: '' },
+          { id: 'slide-same', title: 'Two', body: '' }
+        ]
+      }
+    }
+  }), /invalid slide/);
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ id: 'not a safe ID', title: 'Bad', body: '' }] } }
+  }), /invalid slide/);
+});
+
+test('Brightdesk project export and import preserve stable slide IDs', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-stable-slide-ids-'));
+  const filePath = path.join(directory, 'stable-slide-ids.bdesk');
+  const expectedIds = ['slide-opening', 'slide-agenda'];
+  const project = {
+    title: 'Stable identities',
+    docs: {
+      slides: {
+        title: 'Stable identities',
+        slides: [
+          { id: expectedIds[0], title: 'Opening', body: 'Welcome' },
+          { id: expectedIds[1], title: 'Agenda', body: 'Plan' }
+        ],
+        current: 0
+      }
+    }
+  };
+  try {
+    await exportOfficeFile({ project }, filePath);
+    const reopened = await openOfficeFile(filePath);
+    assert.deepEqual(reopened.docs.slides.slides.map(slide => slide.id), expectedIds);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
