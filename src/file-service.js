@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { TextDecoder } = require('node:util');
 const appCatalog = require('./app-catalog');
+const { inspectSlideImageDataUrl } = require('./slide-image-service');
 
 const MAX_PROJECT_BYTES = 50 * 1024 * 1024;
 const MAX_DOCUMENT_TEXT_BYTES = 10 * 1024 * 1024;
@@ -22,7 +23,8 @@ const SUPPORTED_SLIDE_THEMES = new Set(['lavender', 'midnight', 'paper']);
 const SUPPORTED_SLIDE_TRANSITIONS = new Set(['none', 'fade', 'push', 'wipe']);
 const SLIDE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 const SLIDE_BACKGROUND_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
-const SUPPORTED_SLIDE_OBJECT_TYPES = new Set(['text', 'rectangle', 'ellipse', 'line']);
+const SUPPORTED_SLIDE_OBJECT_TYPES = new Set(['text', 'rectangle', 'ellipse', 'line', 'image']);
+const MAX_SLIDE_IMAGE_BYTES_PER_SLIDE = 15 * 1024 * 1024;
 const SLIDE_OBJECT_ID_PATTERN = /^object-[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 const MAX_SLIDE_OBJECTS_PER_SLIDE = 1_000;
 const MAX_SLIDE_OBJECT_TEXT_LENGTH = 10_000;
@@ -192,12 +194,26 @@ function validateProject(project) {
         }
         if (slide.objects !== undefined) {
           const objectIds = new Set();
+          let slideImageBytes = 0;
           for (const object of slide.objects) {
+            const imageInfo = object?.type === 'image' ? inspectSlideImageDataUrl(object.imageData) : null;
+            const validImage = object?.type === 'image'
+              ? Boolean(
+                imageInfo &&
+                typeof object.imageName === 'string' &&
+                object.imageName.trim().length > 0 &&
+                object.imageName.length <= 255 &&
+                Number.isInteger(object.imageWidth) && object.imageWidth >= 1 && object.imageWidth <= 20000 &&
+                Number.isInteger(object.imageHeight) && object.imageHeight >= 1 && object.imageHeight <= 20000 &&
+                object.imageWidth * object.imageHeight <= 40000000
+              )
+              : !['imageData', 'imageName', 'imageWidth', 'imageHeight'].some(key => object && Object.prototype.hasOwnProperty.call(object, key));
             const validObject = isPlainObject(object)
               && typeof object.id === 'string'
               && SLIDE_OBJECT_ID_PATTERN.test(object.id)
               && !objectIds.has(object.id)
               && SUPPORTED_SLIDE_OBJECT_TYPES.has(object.type)
+              && validImage
               && Number.isFinite(object.x) && object.x >= 0
               && Number.isFinite(object.y) && object.y >= 0
               && Number.isFinite(object.width) && object.width > 0
@@ -214,6 +230,12 @@ function validateProject(project) {
               && (object.bold === undefined || typeof object.bold === 'boolean')
               && (object.rotation === undefined || (Number.isFinite(object.rotation) && object.rotation >= -360 && object.rotation <= 360));
             if (!validObject) throw new Error('The Brightdesk Decks presentation contains an invalid slide object.');
+            if (imageInfo) {
+              slideImageBytes += imageInfo.byteLength;
+              if (slideImageBytes > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
+                throw new Error('A Brightdesk Decks slide cannot contain more than 15 MB of embedded pictures.');
+              }
+            }
             objectIds.add(object.id);
           }
         }
@@ -1050,8 +1072,47 @@ async function exportOfficeFile(payload, filePath) {
         });
       }
       const slideObjects = Array.isArray(data.objects) ? data.objects : [];
+      let slideImageBytes = 0;
       for (const object of slideObjects) {
         if (!isPlainObject(object) || !SUPPORTED_SLIDE_OBJECT_TYPES.has(object.type)) continue;
+        if (object.type === 'image') {
+          const imageInfo = inspectSlideImageDataUrl(object.imageData);
+          if (
+            !imageInfo ||
+            typeof object.imageName !== 'string' ||
+            !object.imageName.trim() ||
+            object.imageName.length > 255 ||
+            !Number.isInteger(object.imageWidth) || object.imageWidth < 1 || object.imageWidth > 20000 ||
+            !Number.isInteger(object.imageHeight) || object.imageHeight < 1 || object.imageHeight > 20000 ||
+            object.imageWidth * object.imageHeight > 40000000
+          ) {
+            throw new Error('This presentation contains an invalid embedded picture.');
+          }
+          slideImageBytes += imageInfo.byteLength;
+          if (slideImageBytes > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
+            throw new Error('A slide cannot contain more than 15 MB of embedded pictures.');
+          }
+          const frameX = x(13.333333 * object.x / 100);
+          const frameY = 7.5 * object.y / 100;
+          const frameW = w(13.333333 * object.width / 100);
+          const frameH = 7.5 * object.height / 100;
+          const sourceRatio = object.imageWidth / object.imageHeight;
+          const frameRatio = frameW / frameH;
+          let imageW = frameW;
+          let imageH = frameH;
+          if (sourceRatio > frameRatio) imageH = imageW / sourceRatio;
+          else imageW = imageH * sourceRatio;
+          slide.addImage({
+            data: object.imageData,
+            x: frameX + (frameW - imageW) / 2,
+            y: frameY + (frameH - imageH) / 2,
+            w: imageW,
+            h: imageH,
+            altText: object.imageName,
+            objectName: 'Brightdesk image ' + String(object.id || 'object-unknown')
+          });
+          continue;
+        }
         const objectX = x(13.333333 * object.x / 100);
         const objectY = 7.5 * object.y / 100;
         const objectW = w(13.333333 * object.width / 100);
