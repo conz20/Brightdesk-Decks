@@ -274,7 +274,7 @@ function collectXmlText(value, output = []) {
   if (Array.isArray(value)) value.forEach(item => collectXmlText(item, output));
   else if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value)) {
-      if (key === 'a:t' || key === 't') {
+      if (key === 't' || key.endsWith(':t')) {
         if (Array.isArray(child)) child.forEach(v => output.push(String(v)));
         else if (child !== undefined && typeof child !== 'object') output.push(String(child));
       } else collectXmlText(child, output);
@@ -324,6 +324,80 @@ async function findNotesSlidePart(zip, slidePart, relationshipParser) {
     String(item?.['@_Type'] || '').endsWith('/notesSlide')
   );
   return resolveNotesSlideTarget(slidePart, notesRelationship);
+}
+
+
+function resolvePresentationSlideTarget(relationship) {
+  if (!relationship || String(relationship['@_TargetMode'] || '').toLowerCase() === 'external') return null;
+  if (!String(relationship['@_Type'] || '').endsWith('/slide')) return null;
+
+  let target = String(relationship['@_Target'] || '').trim();
+  if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[?#]/.test(target)) return null;
+  try {
+    target = decodeURIComponent(target);
+  } catch {
+    return null;
+  }
+
+  target = target.replace(/\\/g, '/');
+  if (target.split('/').some(segment => segment === '..')) return null;
+  const resolved = target.startsWith('/')
+    ? path.posix.normalize(target.replace(/^\/+/, ''))
+    : path.posix.normalize(path.posix.join('ppt', target));
+  if (!resolved.startsWith('ppt/slides/') || resolved.endsWith('/')) return null;
+  return resolved;
+}
+
+async function getPptxSlidePartsInPresentationOrder(zip, relationshipParser) {
+  const presentationFile = zip.file('ppt/presentation.xml');
+  const relationshipsFile = zip.file('ppt/_rels/presentation.xml.rels');
+  if (!presentationFile || !relationshipsFile) {
+    throw new Error('The PowerPoint presentation is missing its slide-order metadata.');
+  }
+
+  const presentationXml = await presentationFile.async('string');
+  const slideList = presentationXml.match(
+    /<(?:[A-Za-z_][\w.-]*:)?sldIdLst\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?sldIdLst\s*>/i
+  );
+  if (!slideList) {
+    throw new Error('The PowerPoint presentation has an invalid slide-order list.');
+  }
+
+  const slideReferences = [...slideList[1].matchAll(/<(?:[A-Za-z_][\w.-]*:)?sldId\b([^>]*)\/?\s*>/gi)];
+  if (!slideReferences.length) {
+    throw new Error('The PowerPoint presentation does not contain any slides.');
+  }
+
+  let parsedRelationships;
+  try {
+    parsedRelationships = relationshipParser.parse(await relationshipsFile.async('string'));
+  } catch {
+    throw new Error('The PowerPoint presentation relationships are invalid.');
+  }
+  const relationships = asArray(parsedRelationships.Relationships?.Relationship);
+  const relationshipById = new Map();
+  for (const relationship of relationships) {
+    const id = String(relationship?.['@_Id'] || '');
+    if (!id || relationshipById.has(id)) {
+      throw new Error('The PowerPoint presentation contains invalid slide relationships.');
+    }
+    relationshipById.set(id, relationship);
+  }
+
+  const seenParts = new Set();
+  return slideReferences.map(reference => {
+    const relationshipId = reference[1].match(/(?:^|\s)[A-Za-z_][\w.-]*:id\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!relationshipId) {
+      throw new Error('The PowerPoint presentation contains a slide without a valid relationship.');
+    }
+    const relationship = relationshipById.get(relationshipId);
+    const part = resolvePresentationSlideTarget(relationship);
+    if (!part || !zip.file(part) || seenParts.has(part)) {
+      throw new Error('The PowerPoint presentation contains an invalid or external slide relationship.');
+    }
+    seenParts.add(part);
+    return part;
+  });
 }
 
 async function readNotesSlideText(zip, notesPart, notesParser) {
@@ -555,14 +629,13 @@ async function openOfficeFile(filePath) {
         }
       }
     }
-    const slideEntries = Object.values(zip.files).filter(entry => /^ppt\/slides\/slide\d+\.xml$/.test(entry.name));
-    const totalSlideBytes = slideEntries.reduce((total, entry) => total + (entry._data?.uncompressedSize || 0), 0);
-    if (totalSlideBytes > 50 * 1024 * 1024) throw new Error('The presentation contains too much uncompressed slide XML to import safely.');
-    const names = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a,b) => Number(a.match(/slide(\d+)/)[1]) - Number(b.match(/slide(\d+)/)[1]));
-    assertPresentationSlideLimit(names.length);
     const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: false });
     const relationshipParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', removeNSPrefix: true });
     const notesParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', removeNSPrefix: true });
+    const names = await getPptxSlidePartsInPresentationOrder(zip, relationshipParser);
+    assertPresentationSlideLimit(names.length);
+    const totalSlideBytes = names.reduce((total, name) => total + (zip.file(name)?._data?.uncompressedSize || 0), 0);
+    if (totalSlideBytes > 50 * 1024 * 1024) throw new Error('The presentation contains too much uncompressed slide XML to import safely.');
     const slides = [];
     let totalNotesBytes = 0;
     for (const name of names) {
