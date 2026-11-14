@@ -65,3 +65,12 @@ test('Presenter View shows private speaker notes, the next visible slide and ela
   assert.match(styles, /\.presenter-overlay/);
   assert.match(styles, /\.presenter-workspace/);
 });
+
+
+test('Presenter View sends the current visible slide to its separate audience display', () => {
+  assert.match(app, /window\.brightdesk\.startPresenter/);
+  assert.match(app, /window\.brightdesk\.updatePresenter/);
+  assert.match(app, /window\.brightdesk\.endPresenter/);
+  assert.match(app, /presenterDisplayStatus/);
+  assert.match(app, /audience display/);
+});
