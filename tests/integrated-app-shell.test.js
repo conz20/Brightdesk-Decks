@@ -74,3 +74,12 @@ test('Presenter View sends the current visible slide to its separate audience di
   assert.match(app, /presenterDisplayStatus/);
   assert.match(app, /audience display/);
 });
+
+
+test('Presenter View keeps speaker notes in the presenter console and sends only slide content to the audience', () => {
+  const audienceState = app.match(/const createAudienceState = \(\) => \{[\\s\\S]*?\\n  \};/);
+  assert.ok(audienceState, 'audience state builder exists');
+  assert.doesNotMatch(audienceState[0], /notes/i);
+  assert.match(app, /presenterNotes\.textContent = snapshot\.currentSlide\.notes/);
+  assert.match(app, /updatePresenter\(createAudienceState\(\)\)/);
+});
