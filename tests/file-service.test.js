@@ -936,3 +936,35 @@ test('Brightdesk project export and import preserve structured slide objects and
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('PPTX export keeps text boxes and basic vector shapes editable as native slide objects', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-slide-objects-'));
+  const filePath = path.join(directory, 'native-slide-objects.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      themeId: 'paper',
+      slides: [{
+        title: 'Native objects',
+        body: 'Body text',
+        objects: [
+          { id: 'object-rectangle', type: 'rectangle', x: 10, y: 20, width: 25, height: 30, fill: '#F3EBDD', stroke: '#26364D', strokeWidth: 2, text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0 },
+          { id: 'object-ellipse', type: 'ellipse', x: 45, y: 20, width: 18, height: 18, fill: '#DCEBFA', stroke: '#26364D', strokeWidth: 1, text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0 },
+          { id: 'object-line', type: 'line', x: 12, y: 62, width: 42, height: 1, fill: null, stroke: '#9A5E20', strokeWidth: 2, text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0 },
+          { id: 'object-text', type: 'text', x: 20, y: 75, width: 55, height: 12, fill: null, stroke: null, strokeWidth: 0, text: 'Quarterly results', fontSize: 26, textColor: '#202B3B', bold: true, rotation: 0 }
+        ]
+      }]
+    }, filePath);
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const xml = await archive.file('ppt/slides/slide1.xml')?.async('string');
+    assert.match(xml || '', /F3EBDD/);
+    assert.match(xml || '', /DCEBFA/);
+    assert.match(xml || '', /9A5E20/);
+    assert.match(xml || '', /Quarterly results/);
+    assert.match(xml || '', /<p:sp>/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
