@@ -48,3 +48,20 @@ test('Decks delegates slide editing and lifecycle to its dedicated model service
     'window.BrightdeskSlidesService.setCurrentSlide'
   ]) assert.ok(app.includes(expression),expression+' is wired into the editor');
 });
+
+
+test('Presenter View shows private speaker notes, the next visible slide and elapsed time', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
+
+  assert.match(app, /function presentWithPresenterView/);
+  assert.match(app, /getPresenterSnapshot\(d, position\)/);
+  assert.match(app, /presenter-speaker-notes/);
+  assert.match(app, /presenter-next-slide/);
+  assert.match(app, /presenter-elapsed/);
+  assert.match(styles, /\.presenter-overlay/);
+  assert.match(styles, /\.presenter-workspace/);
+});
