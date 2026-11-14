@@ -95,6 +95,30 @@ function validateProject(project) {
         }
       }
     }
+    if (appId === 'slides' && doc.sections !== undefined) {
+      if (!Array.isArray(doc.sections)) throw new Error('The Brightdesk Decks presentation has an invalid section collection.');
+      const sectionIds = new Set();
+      for (const section of doc.sections) {
+        if (
+          !isPlainObject(section) ||
+          typeof section.id !== 'string' ||
+          !section.id.trim() ||
+          section.id.length > 100 ||
+          typeof section.name !== 'string' ||
+          !section.name.trim() ||
+          section.name.length > 80 ||
+          sectionIds.has(section.id)
+        ) {
+          throw new Error('The Brightdesk Decks presentation contains an invalid section.');
+        }
+        sectionIds.add(section.id);
+      }
+      if (Array.isArray(doc.slides) && doc.slides.some(slide =>
+        slide && slide.sectionId !== undefined && !sectionIds.has(slide.sectionId)
+      )) {
+        throw new Error('The Brightdesk Decks presentation refers to an unknown section.');
+      }
+    }
     if (appId === 'slides' && doc.slideSize !== undefined && !SUPPORTED_SLIDE_SIZES.has(doc.slideSize)) {
       throw new Error('The Brightdesk Decks presentation has an invalid slide size.');
     }
