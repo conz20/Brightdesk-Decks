@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('brightdesk', {
   version: process.env.npm_package_version || '0.1.0',
   getVersion: () => ipcRenderer.invoke('app:version'),
   openFile: () => ipcRenderer.invoke('file:open'),
+  reuseSlides: () => ipcRenderer.invoke('slides:reuse'),
   exportFile: (payload) => ipcRenderer.invoke('file:export', payload),
   saveProject: (project) => ipcRenderer.invoke('project:save', project),
   loadProject: () => ipcRenderer.invoke('project:open'),
