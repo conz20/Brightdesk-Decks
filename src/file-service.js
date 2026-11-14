@@ -53,7 +53,15 @@ function validateProject(project) {
     if (appId === 'slides' && doc.slides !== undefined) {
       if (!Array.isArray(doc.slides) || doc.slides.length > MAX_SLIDES) throw new Error('The Brightdesk Decks presentation has an invalid slide collection.');
       for (const slide of doc.slides) {
-        if (!isPlainObject(slide) || (slide.title !== undefined && typeof slide.title !== 'string') || (slide.body !== undefined && typeof slide.body !== 'string')) {
+        if (
+          !isPlainObject(slide) ||
+          (slide.title !== undefined && typeof slide.title !== 'string') ||
+          (slide.body !== undefined && typeof slide.body !== 'string') ||
+          (slide.notes !== undefined && (
+            typeof slide.notes !== 'string' ||
+            Buffer.byteLength(slide.notes, 'utf8') > MAX_DOCUMENT_TEXT_BYTES
+          ))
+        ) {
           throw new Error('The Brightdesk Decks presentation contains an invalid slide.');
         }
       }
@@ -213,6 +221,7 @@ async function exportOfficeFile(payload, filePath) {
       const slide = pptx.addSlide(); slide.background = { color: 'F6F5FF' };
       slide.addText(data.title || '', { x: 0.8, y: 1.1, w: 11, h: 1.2, fontFace: 'Aptos Display', fontSize: 30, bold: true, color: '38356F' });
       slide.addText(data.body || '', { x: 0.85, y: 2.65, w: 10.8, h: 3.7, fontFace: 'Aptos', fontSize: 20, color: '55566B', breakLine: false, valign: 'top' });
+      if (typeof data.notes === 'string' && data.notes.trim()) slide.addNotes(data.notes);
     }
     await pptx.writeFile({ fileName: filePath }); return;
   }
