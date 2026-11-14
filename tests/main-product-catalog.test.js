@@ -104,7 +104,12 @@ test('Audience renderer keeps both comparison columns and safely draws slide obj
       backgroundColor: '#202B3B',
       objects: [
         { type: 'rectangle', x: 10, y: 20, width: 30, height: 25, fill: '#F3EBDD', stroke: '#26364D', strokeWidth: 2, text: 'Diagram block' },
-        { type: 'text', x: 48, y: 24, width: 25, height: 12, text: 'Plain text object', textColor: '#26364D', fontSize: 24 }
+        { type: 'text', x: 48, y: 24, width: 25, height: 12, text: 'Plain text object', textColor: '#26364D', fontSize: 24 },
+        {
+          type: 'image', x: 18, y: 50, width: 30, height: 24,
+          imageData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+          imageName: 'team-photo.png', imageWidth: 1600, imageHeight: 900
+        }
       ]
     },
     themeId: 'midnight',
@@ -121,6 +126,10 @@ test('Audience renderer keeps both comparison columns and safely draws slide obj
   assert.equal(objectLayer.children[0].textContent, 'Diagram block');
   assert.equal(objectLayer.children[0].style.left, '10%');
   assert.equal(objectLayer.children[1].textContent, 'Plain text object');
+  assert.equal(objectLayer.children.length, 3);
+  assert.equal(objectLayer.children[2].children[0].src.startsWith('data:image/png;base64,'), true);
+  assert.equal(objectLayer.children[2].children[0].alt, 'team-photo.png');
+  assert.equal(objectLayer.children[2].children[0].draggable, false);
 
   render({
     slide: { title: '<img src=x onerror=alert(1)>', body: 'Ordinary content', bodySecondary: 'Unused', layout: 'title-content', objects: [] },
