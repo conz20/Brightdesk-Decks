@@ -1038,9 +1038,31 @@ function deleteSlide() {
   renderToolbar();
   persist();
 }
+function toggleSlideHidden() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const slide = doc.slides[doc.current];
+  try {
+    window.BrightdeskSlidesService.setSlideHidden(doc, doc.current, slide.hidden !== true);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(slide.hidden ? 'Slide hidden from the slide show' : 'Slide will appear in the slide show');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
 function presentSlides(startFromFirst = false) {
-  const d = activeDoc();
-  let i = startFromFirst ? 0 : d.current;
+  const d = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const visibleSlides = window.BrightdeskSlidesService.getVisibleSlideIndices(d);
+  if (visibleSlides.length === 0) {
+    setStatus('This presentation has no visible slides to show');
+    return;
+  }
+  let position = startFromFirst ? 0 : visibleSlides.findIndex(index => index >= d.current);
+  if (position < 0) position = visibleSlides.length - 1;
+  const currentSlideIndex = () => visibleSlides[position];
   const overlay = document.createElement('div');
   overlay.className = 'presentation-overlay bd-motion-overlay';
   overlay.dataset.state = 'closed';
@@ -1057,8 +1079,9 @@ function presentSlides(startFromFirst = false) {
   document.body.append(overlay);
 
   const draw = () => {
-    title.textContent = d.slides[i].title;
-    body.textContent = d.slides[i].body;
+    const currentSlide = d.slides[currentSlideIndex()];
+    title.textContent = currentSlide.title;
+    body.textContent = currentSlide.body;
   };
 
   let closing = false;
@@ -1089,10 +1112,10 @@ function presentSlides(startFromFirst = false) {
     if (event.key === 'Escape') {
       close();
     } else if (event.key === 'ArrowRight') {
-      i = Math.min(d.slides.length - 1, i + 1);
+      position = Math.min(visibleSlides.length - 1, position + 1);
       draw();
     } else if (event.key === 'ArrowLeft') {
-      i = Math.max(0, i - 1);
+      position = Math.max(0, position - 1);
       draw();
     }
   };
@@ -1102,7 +1125,7 @@ function presentSlides(startFromFirst = false) {
   });
   overlay.addEventListener('click', () => {
     if (closing || overlay.dataset.state !== 'open') return;
-    i = Math.min(d.slides.length - 1, i + 1);
+    position = Math.min(visibleSlides.length - 1, position + 1);
     draw();
   });
   document.addEventListener('keydown', key);
