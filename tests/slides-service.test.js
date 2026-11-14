@@ -10,7 +10,8 @@ const {
   updateSlide,
   moveSlide,
   setSlideLayout,
-  setCurrentSlide
+  setCurrentSlide,
+  getPresenterSnapshot
 } = require('../src/slides-service');
 
 function withoutSlideId(slide) {
@@ -937,4 +938,33 @@ test('Decks preserves stable slide IDs when reordering the presentation', () => 
 
   assert.deepEqual(presentation.slides.map(slide => slide.id), ['slide-one', 'slide-three', 'slide-two']);
   assert.equal(presentation.slides[presentation.current].id, 'slide-two');
+});
+
+
+test('Decks presenter snapshot pairs the current slide with the next visible slide and its notes', () => {
+  const presentation = ensurePresentation({
+    slides: [
+      { title: 'Opening', notes: 'Pause for the welcome.' },
+      { title: 'Hidden detail', notes: 'Never show this slide.', hidden: true },
+      { title: 'Compare options', body: 'Option A', bodySecondary: 'Option B', notes: 'Explain the difference.', layout: 'two-content' },
+      { title: 'Close', notes: 'Thank everyone.' }
+    ],
+    current: 0
+  });
+
+  const opening = getPresenterSnapshot(presentation, 0);
+  assert.equal(opening.visiblePosition, 0);
+  assert.equal(opening.visibleCount, 3);
+  assert.equal(opening.currentIndex, 0);
+  assert.equal(opening.currentSlide.notes, 'Pause for the welcome.');
+  assert.equal(opening.nextIndex, 2);
+  assert.equal(opening.nextSlide.title, 'Compare options');
+  assert.equal(opening.nextSlide.bodySecondary, 'Option B');
+  assert.notEqual(opening.currentSlide, presentation.slides[0]);
+
+  const closing = getPresenterSnapshot(presentation, 2);
+  assert.equal(closing.currentSlide.title, 'Close');
+  assert.equal(closing.nextSlide, null);
+  assert.equal(closing.nextIndex, null);
+  assert.throws(() => getPresenterSnapshot(presentation, 3), RangeError);
 });
