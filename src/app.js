@@ -279,15 +279,7 @@ function renderToolbar() {
       const redo = addButton(editing, label('redo'), redoSlideEdit);
       redo.dataset.slideRedo = 'true';
       redo.disabled = !history.canRedo();
-    } else if (tab === 'insert') {
-      const insert = group('slideContent');
-      addButton(insert, label('titleSlide'), () => addSlideWithLayout('title', 'Presentation title', 'Add a subtitle'));
-      addButton(insert, label('textSlide'), () => addSlideWithLayout('title-content', 'New section', 'Add your points here'));
-      addButton(insert, 'Two content', () => addSlideWithLayout('two-content', 'Compare the options', 'First column'));
-      addButton(insert, 'Section header', () => addSlideWithLayout('section-header', 'New section', 'Add a short introduction'));
-    } else if (tab === 'design') {
-      const design = group('themes');
-      [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => addButton(design, label, () => setSlideTheme(theme)));
+
       const layoutGroup = ribbonGroup(toolbar, 'Layout');
       const layoutSelect = document.createElement('select');
       layoutSelect.className = 'slide-layout-select';
@@ -308,6 +300,15 @@ function renderToolbar() {
       layoutSelect.value = currentSlide.layout;
       layoutSelect.addEventListener('change', () => setSlideLayout(layoutSelect.value));
       layoutGroup.append(layoutSelect);
+    } else if (tab === 'insert') {
+      const insert = group('slideContent');
+      addButton(insert, label('titleSlide'), () => addSlideWithLayout('title', 'Presentation title', 'Add a subtitle'));
+      addButton(insert, label('textSlide'), () => addSlideWithLayout('title-content', 'New section', 'Add your points here'));
+      addButton(insert, 'Two content', () => addSlideWithLayout('two-content', 'Compare the options', 'First column'));
+      addButton(insert, 'Section header', () => addSlideWithLayout('section-header', 'New section', 'Add a short introduction'));
+    } else if (tab === 'design') {
+      const design = group('themes');
+      [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => addButton(design, label, () => setSlideTheme(theme)));
 
       const sizeGroup = ribbonGroup(toolbar, 'Slide Size');
       const sizeSelect = document.createElement('select');
@@ -1475,6 +1476,11 @@ function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] |
 document.addEventListener('keydown', event => {
   if (state.app !== 'slides' || state.view !== 'workspace' || document.querySelector('.presentation-overlay')) return;
   const modifier = event.ctrlKey || event.metaKey;
+  if (modifier && event.shiftKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault();
+    addSlide();
+    return;
+  }
   if (modifier && event.key.toLowerCase() === 'z') {
     event.preventDefault();
     if (event.shiftKey) redoSlideEdit();
