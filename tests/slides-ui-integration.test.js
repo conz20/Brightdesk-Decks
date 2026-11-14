@@ -188,3 +188,18 @@ test('Decks shows a contextual Format Shape pane beside the selected slide', () 
   assert.match(styles, /\.slide-format-pane/);
   assert.match(styles, /\.slide-editor-canvas-row/);
 });
+
+
+test('Decks Format Shape pane provides accessible stacking-order controls', () => {
+  const app = read('src/app.js');
+  const styles = read('src/styles.css');
+
+  assert.match(app, /function reorderSelectedSlideObject\(action\)/);
+  assert.match(app, /createGroup\('Arrange'\)/);
+  assert.match(app, /Bring to Front/);
+  assert.match(app, /Bring Forward/);
+  assert.match(app, /Send Backward/);
+  assert.match(app, /Send to Back/);
+  assert.match(app, /data-layer-action/);
+  assert.match(styles, /\.slide-format-pane-actions/);
+});
