@@ -381,3 +381,10 @@ test('Brightdesk project validation rejects malformed or duplicate slide section
     }
   }), /unknown section/);
 });
+
+
+test('Brightdesk project validation rejects slide membership without a matching section', () => {
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Slide', sectionId: 'missing' }] } }
+  }), /unknown section/);
+});
