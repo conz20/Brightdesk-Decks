@@ -20,12 +20,14 @@ This product follows the [Brightdesk visual and interaction standard](https://gi
 ## Current first-use workflows
 
 - Create a presentation and edit slide titles and body text.
+- Navigate slides from the left thumbnail rail; reorder by dragging or using the accessible move-earlier and move-later controls.
 - Add, duplicate and delete slides.
+- Add speaker notes to each slide. Notes are saved with the local Brightdesk project and included when exporting to PowerPoint.
 - Choose from the included basic slide themes.
 - Start presentation mode from the current deck.
 - Import and export supported PowerPoint files; unsupported advanced objects and formatting may not be preserved.
 
-**Known boundaries:** Decks is an early slide-editor foundation. Advanced layouts, transitions, embedded media, animation and full PowerPoint round-trip fidelity are not promised.
+**Known boundaries:** Decks is an early slide-editor foundation. Existing speaker notes are not yet imported from PowerPoint files. Advanced layouts, slide masters, sections, transitions, embedded media, animation and full PowerPoint round-trip fidelity are not promised. The new thumbnail and notes workspace still requires a genuine running-build visual review on Windows, macOS and Linux before it can be described as visually verified.
 ## Desktop installers
 
 | Platform | Installer |
