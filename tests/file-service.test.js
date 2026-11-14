@@ -924,7 +924,7 @@ test('Brightdesk projects accept only bounded embedded PNG, JPEG or WebP picture
     x: 10, y: 15, width: 40, height: 30,
     fill: null, stroke: null, strokeWidth: 0,
     text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0,
-    imageData, imageName: 'team-photo.png', imageWidth: 1600, imageHeight: 900
+    imageData, imageName: 'team-photo.png', imageWidth: 1, imageHeight: 1
   };
   const project = {
     docs: { slides: { slides: [{ title: 'Pictures', body: '', objects: [picture] }] } }
@@ -937,6 +937,7 @@ test('Brightdesk projects accept only bounded embedded PNG, JPEG or WebP picture
     { ...picture, imageData: 'data:image/png;base64,AAAA' },
     { ...picture, imageWidth: 0 },
     { ...picture, imageHeight: 50000 },
+    { ...picture, imageWidth: 2 },
     { ...picture, imageName: 'x'.repeat(256) }
   ];
   for (const invalid of invalidPictures) {
@@ -961,7 +962,7 @@ test('Brightdesk project files preserve an embedded picture without an external 
     x: 10, y: 15, width: 40, height: 30,
     fill: null, stroke: null, strokeWidth: 0,
     text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0,
-    imageData, imageName: 'team-photo.png', imageWidth: 1600, imageHeight: 900
+    imageData, imageName: 'team-photo.png', imageWidth: 1, imageHeight: 1
   };
   try {
     await exportOfficeFile({
@@ -1083,7 +1084,7 @@ test('Decks exports embedded slide pictures as real PowerPoint picture objects',
           id: 'object-picture',
           type: 'image',
           x: 10, y: 15, width: 40, height: 30,
-          imageData, imageName: 'team-photo.png', imageWidth: 1600, imageHeight: 900,
+          imageData, imageName: 'team-photo.png', imageWidth: 1, imageHeight: 1,
           fill: null, stroke: null, strokeWidth: 0,
           text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0
         }]
