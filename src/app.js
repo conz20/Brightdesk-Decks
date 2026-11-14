@@ -1267,19 +1267,41 @@ function renderSlideFormatPane(object) {
   addControl(size, 'Height (%)', 'height', 'number', { min: 1, max: 100, step: 0.5 });
   addControl(size, 'Rotation (degrees)', 'rotation', 'number', { min: -360, max: 360, step: 1 });
 
-  const arrange = createGroup('Arrange');
-  const actions = document.createElement('div');
-  actions.className = 'slide-format-pane-actions';
-  const actionDefinitions = [
-    { action: 'front', label: 'Bring to Front', unavailable: objectIndex => objectIndex === objectCount - 1 },
-    { action: 'forward', label: 'Bring Forward', unavailable: objectIndex => objectIndex === objectCount - 1 },
-    { action: 'backward', label: 'Send Backward', unavailable: objectIndex => objectIndex === 0 },
-    { action: 'back', label: 'Send to Back', unavailable: objectIndex => objectIndex === 0 }
-  ];
   const currentDoc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
   const currentObjects = window.BrightdeskSlidesService.getSlideObjects(currentDoc, currentDoc.current);
   const objectIndex = currentObjects.findIndex(item => item.id === object.id);
   const objectCount = currentObjects.length;
+
+  const selection = createGroup('Selection', true);
+  const selectionList = document.createElement('div');
+  selectionList.className = 'slide-format-pane-selection';
+  selectionList.setAttribute('role', 'group');
+  selectionList.setAttribute('aria-label', 'Objects on this slide');
+  const objectLabels = { text: 'Text box', rectangle: 'Rectangle', ellipse: 'Ellipse', line: 'Line' };
+  const typeCounts = new Map();
+  currentObjects.slice().reverse().forEach(item => {
+    const typeCount = (typeCounts.get(item.type) || 0) + 1;
+    typeCounts.set(item.type, typeCount);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'slide-format-pane-selection-item';
+    button.textContent = `${objectLabels[item.type] || 'Object'} ${typeCount}`;
+    button.dataset.selectObject = item.id;
+    button.setAttribute('aria-pressed', String(item.id === object.id));
+    button.addEventListener('click', () => selectSlideObject(item.id));
+    selectionList.append(button);
+  });
+  selection.append(selectionList);
+
+  const arrange = createGroup('Arrange');
+  const actions = document.createElement('div');
+  actions.className = 'slide-format-pane-actions';
+  const actionDefinitions = [
+    { action: 'front', label: 'Bring to Front', unavailable: index => index === objectCount - 1 },
+    { action: 'forward', label: 'Bring Forward', unavailable: index => index === objectCount - 1 },
+    { action: 'backward', label: 'Send Backward', unavailable: index => index === 0 },
+    { action: 'back', label: 'Send to Back', unavailable: index => index === 0 }
+  ];
   actionDefinitions.forEach(({ action, label, unavailable }) => {
     const button = document.createElement('button');
     button.type = 'button';
