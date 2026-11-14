@@ -73,7 +73,7 @@ test('Presenter View sends the current visible slide to its separate audience di
   assert.match(app, /window\.brightdesk\.endPresenter/);
   assert.match(app, /presenterDisplayStatus/);
   assert.match(app, /onPresenterDisplayLost/);
-  assert.match(app, /second display was disconnected/i);
+  assert.match(app, /audience output closed or was disconnected/i);
   assert.match(app, /audience display/);
 });
 
