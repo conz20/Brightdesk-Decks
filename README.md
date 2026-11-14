@@ -59,7 +59,7 @@ These are configured build targets, not confirmation that a package has passed i
 - Start presentation mode from the first slide with F5 or from the selected slide with Shift+F5; use the arrow keys to move and Escape to exit.
 - Import and export supported PowerPoint files; unsupported advanced objects and formatting may not be preserved.
 
-**Known boundaries:** Custom slide dimensions and nonstandard aspect ratios are not yet offered as editable size presets. Existing speaker notes are not yet imported from PowerPoint files. Slide masters, custom layout editing, sections, shapes, pictures, charts, tables, transitions, embedded media, animations and full PowerPoint round-trip fidelity are not promised. The new workspace still requires genuine running-build visual review and native Windows, macOS and Linux verification before it can be described as release-ready.
+**Known boundaries:** Custom slide dimensions and nonstandard aspect ratios are not yet supported; PowerPoint files outside the two supported ratios currently import as Widescreen. Existing speaker notes are not yet imported from PowerPoint files. Slide masters, custom layout editing, sections, shapes, pictures, charts, tables, transitions, embedded media, animations and full PowerPoint round-trip fidelity are not promised. The new workspace still requires genuine running-build visual review and native Windows, macOS and Linux verification before it can be described as release-ready.
 ## Desktop installers
 
 | Platform | Installer |
