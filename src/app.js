@@ -34,7 +34,7 @@ const state = {
   todoView: 'my-day', todoQuery: '',
   selectedCell: { row: 0, col: 0 }, update: null, ribbonTab: 'home',
   installedApps: [], setupComplete: false, firstRunSelection: new Set(installableCatalog.map(item => item.id)),
-  slideView: 'normal', collapsedSlideSections: new Set(), focusMode: false, editorZoom: 100, sheetZoom: 100,
+  slideView: 'normal', collapsedSlideSections: new Set(), selectedSlideObjectId: null, focusMode: false, editorZoom: 100, sheetZoom: 100,
   languageCatalog: [], installedLanguagePacks: [], spellCheckerLanguages: [], usesNativeMacSpellChecker: false,
   displayLanguage: 'en-AU', proofingLanguage: 'en-AU',
   installedDictionaries: [], dictionaryCatalogue: [], selectedDictionary: localStorage.getItem('brightdesk-selected-dictionary') || ''
@@ -177,7 +177,7 @@ function colIndex(label) { return window.BrightdeskFormula.columnIndex(label); }
 const ribbonTabs = {
   pages: ['home', 'insert', 'layout', 'review', 'view'],
   sheets: ['home', 'insert', 'formulas', 'data', 'view'],
-  slides: ['home', 'insert', 'design', 'slideShow', 'view'],
+  slides: ['home', 'insert', 'draw', 'design', 'slideShow', 'view'],
   notes: ['home', 'insert', 'view']
 };
 function ribbonGroup(toolbar, label) {
@@ -186,9 +186,17 @@ function ribbonGroup(toolbar, label) {
   const caption = document.createElement('span'); caption.className = 'ribbon-group-label'; caption.textContent = label;
   group.append(commands, caption); toolbar.append(group); return commands;
 }
+function getSelectedSlideObject(doc = activeDoc()) {
+  if (state.app !== 'slides' || !state.selectedSlideObjectId) return null;
+  const presentation = window.BrightdeskSlidesService.ensurePresentation(doc);
+  return presentation.slides[presentation.current]?.objects?.find(object => object.id === state.selectedSlideObjectId) || null;
+}
 function renderRibbonTabs() {
   const tabs = $('ribbon-tabs'); tabs.innerHTML = '';
-  (ribbonTabs[state.app] || ['home']).forEach(tabKey => {
+  const tabKeys = [...(ribbonTabs[state.app] || ['home'])];
+  if (state.app === 'slides' && getSelectedSlideObject()) tabKeys.push('shapeFormat');
+  if (state.app === 'slides' && state.ribbonTab === 'shapeFormat' && !tabKeys.includes('shapeFormat')) state.ribbonTab = 'draw';
+  tabKeys.forEach(tabKey => {
     const tab = t(`ribbon.${tabKey}`);
     const button = document.createElement('button'); button.className = 'ribbon-tab'; button.textContent = tab;
     button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(state.ribbonTab === tabKey));
@@ -333,6 +341,81 @@ function renderToolbar() {
       addButton(insert, label('textSlide'), () => addSlideWithLayout('title-content'));
       addButton(insert, 'Two content', () => addSlideWithLayout('two-content'));
       addButton(insert, 'Section header', () => addSlideWithLayout('section-header'));
+    } else if (tab === 'draw') {
+      const shapes = ribbonGroup(toolbar, 'Insert shapes');
+      addButton(shapes, 'Text box', () => insertSlideObject('text'));
+      addButton(shapes, 'Rectangle', () => insertSlideObject('rectangle'));
+      addButton(shapes, 'Ellipse', () => insertSlideObject('ellipse'));
+      addButton(shapes, 'Line', () => insertSlideObject('line'));
+      const selection = ribbonGroup(toolbar, 'Selection');
+      const selected = getSelectedSlideObject();
+      const remove = addButton(selection, 'Delete selected', deleteSelectedSlideObject);
+      remove.disabled = !selected;
+      const clear = addButton(selection, 'Deselect', () => selectSlideObject(null));
+      clear.disabled = !selected;
+      const count = document.createElement('span');
+      count.className = 'slide-object-count';
+      const current = window.BrightdeskSlidesService.ensurePresentation(activeDoc()).slides[activeDoc().current];
+      count.textContent = `${current.objects?.length || 0} objects`;
+      selection.append(count);
+    } else if (tab === 'shapeFormat') {
+      const object = getSelectedSlideObject();
+      if (!object) {
+        state.ribbonTab = 'draw';
+        renderToolbar();
+        return;
+      }
+      const addColourPicker = (caption, className, value, disabled, patchKey) => {
+        const labelElement = document.createElement('label');
+        labelElement.className = 'slide-format-control';
+        const captionElement = document.createElement('span');
+        captionElement.textContent = caption;
+        const input = document.createElement('input');
+        input.type = 'color';
+        input.className = className;
+        input.value = value || '#FFFFFF';
+        input.disabled = Boolean(disabled);
+        input.setAttribute('aria-label', caption);
+        input.addEventListener('change', () => updateSelectedSlideObject({ [patchKey]: input.value }));
+        labelElement.append(captionElement, input);
+        return labelElement;
+      };
+      const fillGroup = ribbonGroup(toolbar, 'Fill');
+      fillGroup.append(addColourPicker('Fill colour', 'slide-object-fill', object.fill, object.type === 'text' || object.type === 'line', 'fill'));
+      const outlineGroup = ribbonGroup(toolbar, 'Outline');
+      outlineGroup.append(addColourPicker('Outline colour', 'slide-object-outline', object.stroke, false, 'stroke'));
+      const widthLabel = document.createElement('label');
+      widthLabel.className = 'slide-format-control';
+      widthLabel.textContent = 'Weight';
+      const widthInput = document.createElement('input');
+      widthInput.type = 'number';
+      widthInput.min = '0';
+      widthInput.max = '12';
+      widthInput.step = '0.5';
+      widthInput.value = String(object.strokeWidth);
+      widthInput.setAttribute('aria-label', 'Outline weight');
+      widthInput.addEventListener('change', () => updateSelectedSlideObject({ strokeWidth: Number(widthInput.value) }));
+      widthLabel.append(widthInput);
+      outlineGroup.append(widthLabel);
+      const textGroup = ribbonGroup(toolbar, 'Text');
+      textGroup.append(addColourPicker('Text colour', 'slide-object-text-colour', object.textColor, object.type !== 'text', 'textColor'));
+      const fontSizeLabel = document.createElement('label');
+      fontSizeLabel.className = 'slide-format-control';
+      fontSizeLabel.textContent = 'Size';
+      const fontSizeInput = document.createElement('input');
+      fontSizeInput.type = 'number';
+      fontSizeInput.min = '8';
+      fontSizeInput.max = '96';
+      fontSizeInput.value = String(object.fontSize);
+      fontSizeInput.disabled = object.type !== 'text';
+      fontSizeInput.setAttribute('aria-label', 'Text size');
+      fontSizeInput.addEventListener('change', () => updateSelectedSlideObject({ fontSize: Number(fontSizeInput.value) }));
+      fontSizeLabel.append(fontSizeInput);
+      textGroup.append(fontSizeLabel);
+      const boldButton = addButton(textGroup, object.bold ? 'Bold on' : 'Bold off', () => updateSelectedSlideObject({ bold: !object.bold }));
+      boldButton.disabled = object.type !== 'text';
+      const deleteGroup = ribbonGroup(toolbar, 'Object');
+      addButton(deleteGroup, 'Delete object', deleteSelectedSlideObject);
     } else if (tab === 'design') {
       const design = group('themes');
       const presentation = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
@@ -823,6 +906,208 @@ function renderSlideSorter(doc) {
   slideWrap.append(view);
 }
 
+
+function insertSlideObject(type) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  const definitions = {
+    text: { type: 'text', x: 28, y: 34, width: 38, height: 16, text: 'Add your text', fill: null, stroke: '#9A5E20', strokeWidth: 1, fontSize: 24, textColor: '#26364D', bold: false },
+    rectangle: { type: 'rectangle', x: 18, y: 32, width: 22, height: 22, fill: '#F3EBDD', stroke: '#9A5E20', strokeWidth: 2 },
+    ellipse: { type: 'ellipse', x: 48, y: 32, width: 22, height: 22, fill: '#DCE6F3', stroke: '#4E6687', strokeWidth: 2 },
+    line: { type: 'line', x: 20, y: 70, width: 54, height: 1, fill: null, stroke: '#26364D', strokeWidth: 2 }
+  };
+  if (!definitions[type]) return;
+  try {
+    const object = window.BrightdeskSlidesService.addSlideObject(doc, doc.current, definitions[type]);
+    state.selectedSlideObjectId = object.id;
+    state.ribbonTab = 'shapeFormat';
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`${type === 'text' ? 'Text box' : type[0].toUpperCase() + type.slice(1)} added`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function selectSlideObject(objectId) {
+  state.selectedSlideObjectId = objectId || null;
+  const selected = Boolean(objectId);
+  if (selected) state.ribbonTab = 'shapeFormat';
+  else if (state.ribbonTab === 'shapeFormat') state.ribbonTab = 'draw';
+  slideWrap.querySelectorAll('[data-slide-object]').forEach(element => {
+    const active = element.dataset.slideObject === state.selectedSlideObjectId;
+    element.classList.toggle('slide-object-selected', active);
+    element.setAttribute('aria-pressed', String(active));
+  });
+  renderToolbar();
+}
+
+function updateSelectedSlideObject(patch) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  if (!state.selectedSlideObjectId) return;
+  try {
+    window.BrightdeskSlidesService.updateSlideObject(doc, doc.current, state.selectedSlideObjectId, patch);
+    commitSlideChange(doc);
+    persist();
+    renderSlides();
+    renderToolbar();
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function deleteSelectedSlideObject() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  if (!state.selectedSlideObjectId) return;
+  const deleted = window.BrightdeskSlidesService.deleteSlideObject(doc, doc.current, state.selectedSlideObjectId);
+  if (!deleted) return;
+  state.selectedSlideObjectId = null;
+  state.ribbonTab = 'draw';
+  commitSlideChange(doc);
+  renderSlides();
+  renderToolbar();
+  persist();
+  setStatus('Slide object deleted');
+}
+
+function createSlideObjectElement(object, editable = false) {
+  const element = document.createElement('div');
+  element.className = `slide-object slide-object-${object.type}`;
+  element.dataset.slideObject = object.id;
+  element.setAttribute('role', 'group');
+  element.setAttribute('aria-label', `${object.type} object`);
+  element.tabIndex = 0;
+  element.style.left = `${object.x}%`;
+  element.style.top = `${object.y}%`;
+  element.style.width = `${object.width}%`;
+  element.style.height = object.type === 'line' ? '0' : `${object.height}%`;
+  element.style.transform = object.rotation ? `rotate(${object.rotation}deg)` : '';
+  element.style.backgroundColor = object.fill || 'transparent';
+  element.style.color = object.textColor || '#26364D';
+  element.style.border = object.stroke
+    ? `${Math.max(0, object.strokeWidth)}px solid ${object.stroke}`
+    : 'none';
+  if (object.type === 'ellipse') element.style.borderRadius = '50%';
+  if (object.type === 'line') {
+    element.style.backgroundColor = 'transparent';
+    element.style.border = '0';
+    element.style.borderTop = `${Math.max(1, object.strokeWidth)}px solid ${object.stroke || '#26364D'}`;
+  }
+  if (object.type === 'text') {
+    element.contentEditable = editable ? 'true' : 'false';
+    element.spellcheck = true;
+    element.style.fontSize = `${object.fontSize}px`;
+    element.style.fontWeight = object.bold ? '700' : '400';
+    element.textContent = object.text || '';
+    element.setAttribute('aria-label', 'Editable text box');
+  } else if (object.text) {
+    element.textContent = object.text;
+  }
+
+  if (editable) {
+    if (object.type === 'text') {
+      element.addEventListener('input', () => {
+        const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+        window.BrightdeskSlidesService.updateSlideObject(doc, doc.current, object.id, { text: element.textContent || '' });
+        commitSlideChange(doc, `slide-object:${object.id}:text`);
+        persist();
+      });
+    }
+    element.addEventListener('click', event => {
+      event.stopPropagation();
+      selectSlideObject(object.id);
+    });
+
+    const moveHandle = document.createElement('button');
+    moveHandle.type = 'button';
+    moveHandle.className = 'slide-object-drag-handle';
+    moveHandle.textContent = '⋮⋮';
+    moveHandle.title = 'Move object';
+    moveHandle.setAttribute('aria-label', 'Move object');
+    const resizeHandle = document.createElement('button');
+    resizeHandle.type = 'button';
+    resizeHandle.className = 'slide-object-resize-handle';
+    resizeHandle.textContent = '◢';
+    resizeHandle.title = 'Resize object';
+    resizeHandle.setAttribute('aria-label', 'Resize object');
+
+    const startGesture = (event, mode, handle) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectSlideObject(object.id);
+      const stage = element.parentElement;
+      const bounds = stage.getBoundingClientRect();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const original = { x: object.x, y: object.y, width: object.width, height: object.height };
+      const next = { ...original };
+      const apply = () => {
+        element.style.left = `${next.x}%`;
+        element.style.top = `${next.y}%`;
+        element.style.width = `${next.width}%`;
+        element.style.height = object.type === 'line' ? '0' : `${next.height}%`;
+      };
+      const onMove = moveEvent => {
+        const deltaX = (moveEvent.clientX - startX) / Math.max(1, bounds.width) * 100;
+        const deltaY = (moveEvent.clientY - startY) / Math.max(1, bounds.height) * 100;
+        if (mode === 'move') {
+          next.x = Math.max(0, Math.min(100 - original.width, original.x + deltaX));
+          next.y = Math.max(0, Math.min(100 - original.height, original.y + deltaY));
+        } else {
+          next.width = Math.max(3, Math.min(100 - original.x, original.width + deltaX));
+          next.height = Math.max(3, Math.min(100 - original.y, original.height + deltaY));
+        }
+        apply();
+      };
+      const onEnd = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onEnd);
+        window.removeEventListener('pointercancel', onEnd);
+        const changed = Math.abs(next.x - original.x) > 0.01
+          || Math.abs(next.y - original.y) > 0.01
+          || Math.abs(next.width - original.width) > 0.01
+          || Math.abs(next.height - original.height) > 0.01;
+        if (!changed) return;
+        const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+        window.BrightdeskSlidesService.updateSlideObject(doc, doc.current, object.id, next);
+        commitSlideChange(doc);
+        persist();
+        renderSlides();
+        renderToolbar();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onEnd, { once: true });
+      window.addEventListener('pointercancel', onEnd, { once: true });
+      handle.setPointerCapture?.(event.pointerId);
+    };
+    moveHandle.addEventListener('pointerdown', event => startGesture(event, 'move', moveHandle));
+    resizeHandle.addEventListener('pointerdown', event => startGesture(event, 'resize', resizeHandle));
+    element.append(moveHandle, resizeHandle);
+  }
+  return element;
+}
+
+function renderSlideObjects(stage, objects, doc = activeDoc()) {
+  stage.querySelectorAll('[data-slide-object]').forEach(element => element.remove());
+  if (!Array.isArray(objects)) return;
+  objects.forEach(object => {
+    const element = createSlideObjectElement(object, true);
+    element.classList.toggle('slide-object-selected', object.id === state.selectedSlideObjectId);
+    element.setAttribute('aria-pressed', String(object.id === state.selectedSlideObjectId));
+    stage.append(element);
+  });
+  stage.addEventListener('click', event => {
+    if (event.target === stage) selectSlideObject(null);
+  }, { once: true });
+}
+
+function renderPresentationObjects(container, objects) {
+  container.replaceChildren();
+  if (!Array.isArray(objects)) return;
+  objects.forEach(object => container.append(createSlideObjectElement(object, false)));
+}
+
 function setSlideView(view) {
   if (!['normal', 'sorter', 'outline'].includes(view)) return;
   state.slideView = view;
@@ -955,6 +1240,7 @@ function renderSlides() {
     return;
   }
   const slide = doc.slides[doc.current];
+  if (state.selectedSlideObjectId && !slide.objects?.some(object => object.id === state.selectedSlideObjectId)) state.selectedSlideObjectId = null;
   slideWrap.innerHTML = '';
 
   const shell = document.createElement('div');
@@ -1200,6 +1486,7 @@ function renderSlides() {
   } else {
     stage.append(title, body);
   }
+  renderSlideObjects(stage, slide.objects || [], doc);
 
   const notesPanel = document.createElement('section');
   notesPanel.className = 'slide-speaker-notes';
@@ -1329,9 +1616,11 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   secondaryBody.className = 'presentation-body-secondary';
   columns.append(body, secondaryBody);
   content.append(columns);
+  const objectLayer = document.createElement('div');
+  objectLayer.className = 'presentation-object-layer';
   const footer = document.createElement('div');
   footer.className = 'presentation-footer';
-  slide.append(title, content, footer);
+  slide.append(title, content, objectLayer, footer);
 
   const presenterToolbar = document.createElement('header');
   presenterToolbar.className = 'presenter-toolbar';
@@ -1399,7 +1688,9 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   nextPreviewSecondary.className = 'presentation-body-secondary';
   nextPreviewColumns.append(nextPreviewBody, nextPreviewSecondary);
   nextPreviewContent.append(nextPreviewColumns);
-  nextPreview.append(nextPreviewTitle, nextPreviewContent);
+  const nextPreviewObjectLayer = document.createElement('div');
+  nextPreviewObjectLayer.className = 'presentation-object-layer presenter-preview-object-layer';
+  nextPreview.append(nextPreviewTitle, nextPreviewContent, nextPreviewObjectLayer);
   const noNextSlide = document.createElement('p');
   noNextSlide.className = 'presenter-no-next';
   noNextSlide.textContent = 'You are on the last visible slide.';
@@ -1534,6 +1825,7 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
     secondaryBody.style.backgroundColor = currentSlide.backgroundColor || '';
     title.textContent = currentSlide.title || '';
     body.textContent = currentSlide.body || '';
+    renderPresentationObjects(objectLayer, currentSlide.objects || []);
     secondaryBody.textContent = currentSlide.bodySecondary || '';
     secondaryBody.hidden = currentSlide.layout !== 'two-content';
     slide.hidden = presenterMode ? false : pickerOpen;
@@ -1571,11 +1863,13 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
         nextPreviewSecondary.style.backgroundColor = snapshot.nextSlide.backgroundColor || '';
         nextPreviewTitle.textContent = snapshot.nextSlide.title || '';
         nextPreviewBody.textContent = snapshot.nextSlide.body || '';
+        renderPresentationObjects(nextPreviewObjectLayer, snapshot.nextSlide.objects || []);
         nextPreviewSecondary.textContent = snapshot.nextSlide.bodySecondary || '';
         nextPreviewSecondary.hidden = snapshot.nextSlide.layout !== 'two-content';
       } else {
         nextPreview.hidden = true;
         noNextSlide.hidden = false;
+        nextPreviewObjectLayer.replaceChildren();
       }
     }
     if (presenterMode && audienceDisplayActive && window.brightdesk?.updatePresenter) {
