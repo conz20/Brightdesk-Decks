@@ -14,8 +14,11 @@
   const DEFAULT_LAYOUT = 'title-content';
   const SLIDE_SIZES = Object.freeze(['widescreen', 'standard']);
   const DEFAULT_SLIDE_SIZE = 'widescreen';
+  const SLIDE_THEMES = Object.freeze(['lavender', 'midnight', 'paper']);
+  const DEFAULT_SLIDE_THEME = 'lavender';
   const MAX_SECTION_NAME_LENGTH = 80;
   let sectionSequence = 0;
+  let slideSequence = 0;
 
   function assertPresentation(presentation) {
     if (!presentation || typeof presentation !== 'object' || Array.isArray(presentation)) {
@@ -29,7 +32,7 @@
     do {
       const random = typeof root.crypto?.randomUUID === 'function'
         ? root.crypto.randomUUID()
-        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${(++sectionSequence).toString(36)}`;
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${(++slideSequence).toString(36)}`;
       id = `slide-${random}`;
     } while (usedIds.has(id));
     usedIds.add(id);
@@ -118,6 +121,7 @@
   function ensurePresentation(presentation, firstSlideTitle = 'Slide 1') {
     const target = assertPresentation(presentation);
     target.slideSize = SLIDE_SIZES.includes(target.slideSize) ? target.slideSize : DEFAULT_SLIDE_SIZE;
+    target.themeId = SLIDE_THEMES.includes(target.themeId) ? target.themeId : DEFAULT_SLIDE_THEME;
     const usedIds = new Set();
     if (!Array.isArray(target.slides) || target.slides.length === 0) {
       target.slides = [normalizeSlide({
@@ -278,6 +282,15 @@
     return target.slideSize;
   }
 
+  function setSlideTheme(presentation, themeId) {
+    const target = ensurePresentation(presentation);
+    if (!SLIDE_THEMES.includes(themeId)) {
+      throw new RangeError('The selected presentation theme is not supported.');
+    }
+    target.themeId = themeId;
+    return target.themeId;
+  }
+
   function createSection(presentation, name, startIndex) {
     const target = ensurePresentation(presentation);
     const start = startIndex === undefined ? target.current : startIndex;
@@ -344,7 +357,8 @@
       slides: copySlide(presentation.slides),
       sections: presentation.sections.map(section => ({ ...section })),
       current: presentation.current,
-      slideSize: presentation.slideSize
+      slideSize: presentation.slideSize,
+      themeId: presentation.themeId
     };
   }
 
@@ -357,6 +371,7 @@
     presentation.sections = snapshot.sections.map(section => ({ ...section }));
     presentation.current = snapshot.current;
     presentation.slideSize = snapshot.slideSize;
+    presentation.themeId = SLIDE_THEMES.includes(snapshot.themeId) ? snapshot.themeId : DEFAULT_SLIDE_THEME;
     return presentation;
   }
 
@@ -381,7 +396,8 @@
         slides: copySlide(snapshot.slides),
         sections: Array.isArray(snapshot.sections) ? snapshot.sections.map(section => ({ ...section })) : [],
         current: snapshot.current,
-        slideSize: snapshot.slideSize
+        slideSize: snapshot.slideSize,
+        themeId: snapshot.themeId
       });
       return cloneSnapshot(normalized);
     }
@@ -390,8 +406,8 @@
       if (!saved || typeof saved !== 'object' || saved.version !== 1) return;
       const savedCurrent = normalizeSnapshot(saved.current);
       if (!savedCurrent || !snapshotEquals(
-        { slides: savedCurrent.slides, sections: savedCurrent.sections, slideSize: savedCurrent.slideSize },
-        { slides: current.slides, sections: current.sections, slideSize: current.slideSize }
+        { slides: savedCurrent.slides, sections: savedCurrent.sections, slideSize: savedCurrent.slideSize, themeId: savedCurrent.themeId },
+        { slides: current.slides, sections: current.sections, slideSize: current.slideSize, themeId: current.themeId }
       )) return;
 
       const savedPast = Array.isArray(saved.past) ? saved.past.map(normalizeSnapshot) : null;
@@ -464,6 +480,7 @@
     function sync(nextPresentation) {
       const nextTarget = ensurePresentation(nextPresentation);
       current.current = nextTarget.current;
+      current.themeId = nextTarget.themeId;
       lastGroup = null;
       lastAt = 0;
     }
@@ -486,7 +503,8 @@
           slides: copySlide(snapshot.slides),
           sections: snapshot.sections.map(section => ({ ...section })),
           current: snapshot.current,
-          slideSize: snapshot.slideSize
+          slideSize: snapshot.slideSize,
+          themeId: snapshot.themeId
         })),
         future: future.map(snapshot => ({
           slides: copySlide(snapshot.slides),
@@ -515,6 +533,8 @@
     DEFAULT_LAYOUT,
     SLIDE_SIZES,
     DEFAULT_SLIDE_SIZE,
+    SLIDE_THEMES,
+    DEFAULT_SLIDE_THEME,
     ensurePresentation,
     addSlide,
     duplicateSlide,
@@ -524,6 +544,7 @@
     moveSlide,
     setCurrentSlide,
     setSlideSize,
+    setSlideTheme,
     setSlideHidden,
     getVisibleSlideIndices,
     getVisibleSlidePosition,
