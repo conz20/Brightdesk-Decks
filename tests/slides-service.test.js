@@ -11,7 +11,8 @@ const {
   moveSlide,
   setSlideLayout,
   setCurrentSlide,
-  getPresenterSnapshot
+  getPresenterSnapshot,
+  createHistory
 } = require('../src/slides-service');
 
 function withoutSlideId(slide) {
@@ -967,4 +968,48 @@ test('Decks presenter snapshot pairs the current slide with the next visible sli
   assert.equal(closing.nextSlide, null);
   assert.equal(closing.nextIndex, null);
   assert.throws(() => getPresenterSnapshot(presentation, 3), RangeError);
+});
+
+
+test('Decks keeps stable slide IDs through undo and redo of duplication and reordering', () => {
+  const presentation = ensurePresentation({
+    slides: [
+      { id: 'slide-opening', title: 'Opening', body: '' },
+      { id: 'slide-agenda', title: 'Agenda', body: '' }
+    ],
+    current: 0
+  });
+  const history = createHistory(presentation);
+  const originalIds = presentation.slides.map(slide => slide.id);
+
+  const duplicate = duplicateSlide(presentation, 0);
+  const duplicateId = duplicate.id;
+  history.commit(presentation);
+
+  assert.notEqual(duplicateId, originalIds[0]);
+  assert.deepEqual(presentation.slides.map(slide => slide.id), [
+    originalIds[0], duplicateId, originalIds[1]
+  ]);
+
+  assert.equal(history.undo(presentation), true);
+  assert.deepEqual(presentation.slides.map(slide => slide.id), originalIds);
+
+  assert.equal(history.redo(presentation), true);
+  assert.deepEqual(presentation.slides.map(slide => slide.id), [
+    originalIds[0], duplicateId, originalIds[1]
+  ]);
+
+  moveSlide(presentation, 0, 2);
+  history.commit(presentation);
+  assert.deepEqual(presentation.slides.map(slide => slide.id), [
+    duplicateId, originalIds[1], originalIds[0]
+  ]);
+  assert.equal(history.undo(presentation), true);
+  assert.deepEqual(presentation.slides.map(slide => slide.id), [
+    originalIds[0], duplicateId, originalIds[1]
+  ]);
+  assert.equal(history.redo(presentation), true);
+  assert.deepEqual(presentation.slides.map(slide => slide.id), [
+    duplicateId, originalIds[1], originalIds[0]
+  ]);
 });
