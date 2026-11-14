@@ -38,12 +38,13 @@ test('product centre uses approved Brightdesk desktop wording',()=>{
 
 
 test('Decks delegates slide editing and lifecycle to its dedicated model service',()=>{
+  assert.match(app,/const slidesService = window\.BrightdeskSlidesService/);
   for(const expression of [
-    'BrightdeskSlidesService.ensurePresentation',
-    'BrightdeskSlidesService.updateSlide',
-    'BrightdeskSlidesService.addSlide',
-    'BrightdeskSlidesService.duplicateSlide',
-    'BrightdeskSlidesService.deleteSlide',
-    'BrightdeskSlidesService.setCurrentSlide'
+    'slidesService.ensurePresentation',
+    'slidesService.updateSlide',
+    'window.BrightdeskSlidesService.addSlide',
+    'window.BrightdeskSlidesService.duplicateSlide',
+    'window.BrightdeskSlidesService.deleteSlide',
+    'window.BrightdeskSlidesService.setCurrentSlide'
   ]) assert.ok(app.includes(expression),expression+' is wired into the editor');
 });
