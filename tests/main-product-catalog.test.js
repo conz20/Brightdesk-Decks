@@ -160,3 +160,61 @@ test('Decks forwards only bounded slide-object data to the separate audience ren
   assert.match(renderer, /textContent/);
   assert.doesNotMatch(renderer, /innerHTML/);
 });
+
+
+test('Decks audience output applies slide transitions once per slide and respects the safe allow-list', () => {
+  const root = path.join(__dirname, '..');
+  const main = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+  const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+  const renderer = fs.readFileSync(path.join(root, 'src', 'presentation-window.js'), 'utf8');
+  assert.match(main, /supportedPresenterTransitions = new Set\(\['none', 'fade', 'push', 'wipe'\]\)/);
+  assert.match(main, /supportedPresenterTransitions\.has\(slide\.transition\)/);
+  assert.match(app, /transition: currentSlide\.transition \|\| 'none'/);
+
+  class Element {
+    constructor() {
+      this.className = '';
+      this.textContent = '';
+      this.hidden = false;
+      this.style = {};
+      this.children = [];
+      this.offsetWidth = 100;
+    }
+    append(child) { this.children.push(child); }
+    replaceChildren(...children) { this.children = children; }
+  }
+  const objectLayer = new Element();
+  const slideSurface = new Element();
+  const elements = Object.fromEntries(
+    ['presentation-root', 'audience-title', 'audience-body', 'audience-columns', 'audience-body-secondary']
+      .map(id => [id, new Element()])
+  );
+  elements['presentation-root'].querySelector = selector => ({
+    '.audience-slide': slideSurface,
+    '.audience-object-layer': objectLayer
+  })[selector] || null;
+  let render;
+  const window = {
+    matchMedia() { return { matches: false }; },
+    brightdeskPresentation: {
+      onPresentationUpdate(callback) { render = callback; }
+    }
+  };
+  const document = {
+    getElementById(id) { return elements[id]; },
+    createElement() { return new Element(); }
+  };
+
+  vm.runInNewContext(renderer, { window, document });
+  render({ slide: { id: 'slide-one', title: 'First', body: '', layout: 'title-content', transition: 'fade' }, themeId: 'paper', slideSize: 'widescreen' });
+  assert.ok(elements['presentation-root'].className.includes('audience-transition-fade'));
+
+  render({ slide: { id: 'slide-one', title: 'First updated', body: '', layout: 'title-content', transition: 'fade' }, themeId: 'paper', slideSize: 'widescreen' });
+  assert.ok(elements['presentation-root'].className.includes('audience-transition-fade'));
+
+  render({ slide: { id: 'slide-two', title: 'Second', body: '', layout: 'title-content', transition: 'none' }, themeId: 'paper', slideSize: 'widescreen' });
+  assert.equal(elements['presentation-root'].className.includes('audience-transition-'), false);
+
+  render({ slide: { id: 'slide-three', title: 'Third', body: '', layout: 'title-content', transition: 'morph' }, themeId: 'paper', slideSize: 'widescreen' });
+  assert.equal(elements['presentation-root'].className.includes('audience-transition-'), false);
+});
