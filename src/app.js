@@ -1059,12 +1059,14 @@ async function insertSlidePicture() {
   try {
     const picture = await window.brightdesk.openSlidePicture();
     if (!picture) return;
+    const imageAssetId = await window.brightdesk.storeSlidePicture(picture.imageData);
     const object = window.BrightdeskSlidesService.addSlideObject(doc, doc.current, {
       type: 'image',
       x: 20, y: 22, width: 42, height: 32,
       fill: null, stroke: null, strokeWidth: 0,
       text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0,
       imageData: picture.imageData,
+      imageAssetId,
       imageName: picture.imageName,
       imageWidth: picture.imageWidth,
       imageHeight: picture.imageHeight
@@ -3019,7 +3021,19 @@ function importProject(data){
   state.app=kind; state.ribbonTab='home';
 }
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
-async function openFile(){try{const data=await window.brightdesk.openFile();if(!data)return;importProject(data);persist();render();setStatus('File opened');}catch(error){alert(`Could not open file: ${error.message}`);}}
+async function openFile() {
+  try {
+    const data = await window.brightdesk.openFile();
+    if (!data) return;
+    importProject(data);
+    const pictures = await hydrateSavedSlidePictures(state.docs.slides);
+    persist();
+    render();
+    setStatus(pictures.missing ? 'File opened. Some saved pictures could not be loaded.' : 'File opened');
+  } catch (error) {
+    alert(`Could not open file: ${error.message}`);
+  }
+}
 async function saveProject(){try{const result=await window.brightdesk.saveProject({title:$('doc-title').value,docs:state.docs});if(!result?.canceled)setStatus('Project saved');}catch(error){alert(`Could not save project: ${error.message}`);}}
 function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
@@ -3112,6 +3126,14 @@ window.brightdesk.onUpdateState?.(updateState => {
 });
 loadLocal();$('platform').textContent=`Brightdesk desktop · ${window.brightdesk.platform}`;
 (async()=>{
+  try {
+    const pictures = await hydrateSavedSlidePictures(state.docs.slides);
+    persist();
+    if (pictures.missing) setStatus('Some saved pictures could not be loaded.');
+  } catch (error) {
+    console.warn('Saved slide pictures could not be restored.', error);
+    setStatus('Some saved pictures could not be loaded.');
+  }
   try {
     const version = await window.brightdesk.getVersion();
     if (version) { $('version-label').textContent = `Version ${version}`; $('footer-version').textContent = `Brightdesk ${version}`; }
