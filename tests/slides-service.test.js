@@ -758,3 +758,18 @@ test('Decks exposes Hide Slide and hidden-state markers in the editor views', ()
   assert.match(app, /getVisibleSlideIndices/);
   assert.match(app, /slide-hidden-indicator/);
 });
+
+
+test('Decks slide show supports standard previous, next, first and last slide keys', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+  for (const key of ['ArrowRight', 'ArrowDown', 'PageDown', 'Enter', ' ', 'ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace', 'Home', 'End']) {
+    assert.ok(app.includes(`'${key}'`), `slide show handles ${key || 'Space'}`);
+  }
+  assert.match(app, /key\.toLowerCase\(\) === 'n'/);
+  assert.match(app, /key\.toLowerCase\(\) === 'p'/);
+  assert.match(app, /position = 0/);
+  assert.match(app, /position = visibleSlides\.length - 1/);
+});
