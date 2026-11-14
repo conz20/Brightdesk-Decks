@@ -1054,3 +1054,71 @@ test('Decks includes theme selection in undo, redo and saved history', () => {
   assert.equal(savedState.current.themeId, 'midnight');
   assert.ok(savedState.past.every(snapshot => typeof snapshot.themeId === 'string'));
 });
+
+
+test('Decks migrates legacy layout names to stable layout IDs and preserves them', () => {
+  const presentation = ensurePresentation({
+    slides: [
+      { title: 'Welcome', body: 'Intro' },
+      { title: 'Comparison', body: 'A', bodySecondary: 'B', layout: 'two-content' },
+      { title: 'Break', body: 'Section', layout: 'section-header' }
+    ]
+  });
+  const ids = presentation.slides.map(slide => slide.layoutId);
+
+  assert.deepEqual(ids, [
+    'layout-title-content',
+    'layout-two-content',
+    'layout-section-header'
+  ]);
+  ensurePresentation(presentation);
+  assert.deepEqual(presentation.slides.map(slide => slide.layoutId), ids);
+});
+
+test('Decks uses a valid layout ID to migrate a slide when its legacy layout name is missing', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Comparison', body: 'A', bodySecondary: 'B', layoutId: 'layout-two-content' }]
+  });
+
+  assert.equal(presentation.slides[0].layout, 'two-content');
+  assert.equal(presentation.slides[0].layoutId, 'layout-two-content');
+});
+
+test('Decks keeps legacy layout appearance when a stored layout ID is missing or inconsistent', () => {
+  const presentation = ensurePresentation({
+    slides: [
+      { title: 'Comparison', body: 'A', bodySecondary: 'B', layout: 'two-content' },
+      { title: 'Section', body: 'Text', layout: 'section-header', layoutId: 'layout-title' }
+    ]
+  });
+
+  assert.equal(presentation.slides[0].layoutId, 'layout-two-content');
+  assert.equal(presentation.slides[1].layout, 'section-header');
+  assert.equal(presentation.slides[1].layoutId, 'layout-section-header');
+});
+
+test('Decks changes layout and canonical layout ID together without losing content', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Compare', body: 'First', bodySecondary: 'Second', notes: 'Explain both sides.' }]
+  });
+
+  setSlideLayout(presentation, 0, 'two-content');
+
+  assert.equal(presentation.slides[0].layout, 'two-content');
+  assert.equal(presentation.slides[0].layoutId, 'layout-two-content');
+  assert.equal(presentation.slides[0].title, 'Compare');
+  assert.equal(presentation.slides[0].body, 'First');
+  assert.equal(presentation.slides[0].bodySecondary, 'Second');
+  assert.equal(presentation.slides[0].notes, 'Explain both sides.');
+});
+
+test('Decks duplicates a slide while preserving its layout ID', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Comparison', body: 'Left', bodySecondary: 'Right', layout: 'two-content' }]
+  });
+  const original = presentation.slides[0];
+  const duplicate = duplicateSlide(presentation, 0);
+
+  assert.equal(duplicate.layoutId, original.layoutId);
+  assert.notEqual(duplicate.id, original.id);
+});
