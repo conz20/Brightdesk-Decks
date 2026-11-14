@@ -547,14 +547,14 @@ async function exportOfficeFile(payload, filePath) {
         });
         slide.addText(data.bodySecondary || '', {
           x: x(6.95), y: 1.7, w: w(5.45), h: 4.9,
-          fontFace: 'Aptos', fontSize: 20, color: '4A5A70',
+          fontFace: 'Aptos', fontSize: 20, color: theme.body,
           valign: 'top', margin: 0.08, breakLine: false
         });
       } else {
         slide.addText(data.title || '', titleStyle);
         slide.addText(data.body || '', {
           x: x(0.85), y: 1.7, w: w(11.7), h: 4.9,
-          fontFace: 'Aptos', fontSize: 20, color: '4A5A70',
+          fontFace: 'Aptos', fontSize: 20, color: theme.body,
           breakLine: false, valign: 'top', margin: 0.08
         });
       }
