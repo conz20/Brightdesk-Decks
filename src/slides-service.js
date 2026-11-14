@@ -30,8 +30,8 @@
   function createSlideId(usedIds = new Set()) {
     let id;
     do {
-      const random = typeof root.crypto?.randomUUID === 'function'
-        ? root.crypto.randomUUID()
+      const random = typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
         : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${(++slideSequence).toString(36)}`;
       id = `slide-${random}`;
     } while (usedIds.has(id));
