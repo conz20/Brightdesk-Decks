@@ -1079,6 +1079,12 @@ async function exportOfficeFile(payload, filePath) {
           const imageInfo = inspectSlideImageDataUrl(object.imageData);
           if (
             !imageInfo ||
+            !Number.isFinite(object.x) || object.x < 0 ||
+            !Number.isFinite(object.y) || object.y < 0 ||
+            !Number.isFinite(object.width) || object.width <= 0 || object.width > 100 ||
+            !Number.isFinite(object.height) || object.height <= 0 || object.height > 100 ||
+            object.x + object.width > 100 || object.y + object.height > 100 ||
+            !Number.isFinite(object.rotation) || object.rotation < -360 || object.rotation > 360 ||
             typeof object.imageName !== 'string' ||
             !object.imageName.trim() ||
             object.imageName.length > 255 ||
@@ -1109,7 +1115,8 @@ async function exportOfficeFile(payload, filePath) {
             w: imageW,
             h: imageH,
             altText: object.imageName,
-            objectName: 'Brightdesk image ' + String(object.id || 'object-unknown')
+            objectName: 'Brightdesk image ' + String(object.id || 'object-unknown'),
+            rotate: object.rotation
           });
           continue;
         }
