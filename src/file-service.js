@@ -994,7 +994,7 @@ async function exportOfficeFile(payload, filePath) {
           if (object.stroke && object.strokeWidth > 0) {
             textOptions.line = { color: String(object.stroke).replace(/^#/, ''), width: object.strokeWidth };
           } else {
-            textOptions.line = { type: 'none' };
+            textOptions.line = { color: 'FFFFFF', transparency: 100 };
           }
           slide.addText(typeof object.text === 'string' ? object.text : '', textOptions);
           continue;
@@ -1017,7 +1017,7 @@ async function exportOfficeFile(payload, filePath) {
             : { type: 'solid', color: String(object.fill || '#F3EBDD').replace(/^#/, '') },
           line: object.stroke && object.strokeWidth > 0
             ? { color: String(object.stroke).replace(/^#/, ''), width: object.strokeWidth }
-            : { type: 'none' }
+            : { color: 'FFFFFF', transparency: 100 }
         });
       }
       if (typeof data.notes === 'string' && data.notes.trim()) slide.addNotes(data.notes);
