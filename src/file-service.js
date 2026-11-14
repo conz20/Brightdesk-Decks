@@ -11,6 +11,7 @@ const KNOWN_APP_IDS = new Set(appCatalog.map(app => app.id));
 const EXCLUDED_APP_IDS = new Set(['teams', 'outlook', 'onedrive']);
 const SUPPORTED_SLIDE_LAYOUTS = new Set(['title', 'title-content', 'two-content', 'section-header']);
 const SUPPORTED_SLIDE_SIZES = new Set(['widescreen', 'standard']);
+const SLIDE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 
 /*
  * Load format-specific libraries only when the corresponding format is used.
@@ -126,9 +127,15 @@ function validateProject(project) {
     }
     if (appId === 'slides' && doc.slides !== undefined) {
       if (!Array.isArray(doc.slides) || doc.slides.length > MAX_SLIDES) throw new Error('The Brightdesk Decks presentation has an invalid slide collection.');
+      const slideIds = new Set();
       for (const slide of doc.slides) {
         if (
           !isPlainObject(slide) ||
+          (slide.id !== undefined && (
+            typeof slide.id !== 'string' ||
+            !SLIDE_ID_PATTERN.test(slide.id) ||
+            slideIds.has(slide.id)
+          )) ||
           (slide.hidden !== undefined && typeof slide.hidden !== 'boolean') ||
           (slide.title !== undefined && typeof slide.title !== 'string') ||
           (slide.body !== undefined && (
@@ -150,6 +157,7 @@ function validateProject(project) {
         ) {
           throw new Error('The Brightdesk Decks presentation contains an invalid slide.');
         }
+        if (slide.id !== undefined) slideIds.add(slide.id);
       }
       if (doc.current !== undefined && (!Number.isInteger(doc.current) || doc.current < 0 || (doc.slides.length && doc.current >= doc.slides.length))) {
         throw new Error('The Brightdesk Decks presentation has an invalid selected slide.');
