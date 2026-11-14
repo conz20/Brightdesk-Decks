@@ -12,6 +12,8 @@
     'section-header'
   ]);
   const DEFAULT_LAYOUT = 'title-content';
+  const SLIDE_SIZES = Object.freeze(['widescreen', 'standard']);
+  const DEFAULT_SLIDE_SIZE = 'widescreen';
 
   function assertPresentation(presentation) {
     if (!presentation || typeof presentation !== 'object' || Array.isArray(presentation)) {
@@ -35,6 +37,7 @@
 
   function ensurePresentation(presentation, firstSlideTitle = 'Slide 1') {
     const target = assertPresentation(presentation);
+    target.slideSize = SLIDE_SIZES.includes(target.slideSize) ? target.slideSize : DEFAULT_SLIDE_SIZE;
     if (!Array.isArray(target.slides) || target.slides.length === 0) {
       target.slides = [{
         title: String(firstSlideTitle),
@@ -130,6 +133,15 @@
     return moved;
   }
 
+  function setSlideSize(presentation, slideSize) {
+    const target = ensurePresentation(presentation);
+    if (!SLIDE_SIZES.includes(slideSize)) {
+      throw new RangeError('The selected presentation slide size is not supported.');
+    }
+    target.slideSize = slideSize;
+    return target.slideSize;
+  }
+
   function setCurrentSlide(presentation, index) {
     const target = ensurePresentation(presentation);
     assertSlideIndex(target, index);
@@ -140,7 +152,8 @@
   function cloneSnapshot(presentation) {
     return {
       slides: copySlide(presentation.slides),
-      current: presentation.current
+      current: presentation.current,
+      slideSize: presentation.slideSize
     };
   }
 
@@ -151,6 +164,7 @@
   function restoreSnapshot(presentation, snapshot) {
     presentation.slides = copySlide(snapshot.slides);
     presentation.current = snapshot.current;
+    presentation.slideSize = snapshot.slideSize;
     return presentation;
   }
 
@@ -173,7 +187,8 @@
       }
       const normalized = ensurePresentation({
         slides: copySlide(snapshot.slides),
-        current: snapshot.current
+        current: snapshot.current,
+        slideSize: snapshot.slideSize
       });
       return cloneSnapshot(normalized);
     }
@@ -181,7 +196,10 @@
     function restoreSavedState(saved) {
       if (!saved || typeof saved !== 'object' || saved.version !== 1) return;
       const savedCurrent = normalizeSnapshot(saved.current);
-      if (!savedCurrent || !snapshotEquals(savedCurrent.slides, current.slides)) return;
+      if (!savedCurrent || !snapshotEquals(
+        { slides: savedCurrent.slides, slideSize: savedCurrent.slideSize },
+        { slides: current.slides, slideSize: current.slideSize }
+      )) return;
 
       const savedPast = Array.isArray(saved.past) ? saved.past.map(normalizeSnapshot) : null;
       const savedFuture = Array.isArray(saved.future) ? saved.future.map(normalizeSnapshot) : null;
@@ -273,11 +291,13 @@
         current: cloneSnapshot(current),
         past: past.map(snapshot => ({
           slides: copySlide(snapshot.slides),
-          current: snapshot.current
+          current: snapshot.current,
+          slideSize: snapshot.slideSize
         })),
         future: future.map(snapshot => ({
           slides: copySlide(snapshot.slides),
-          current: snapshot.current
+          current: snapshot.current,
+          slideSize: snapshot.slideSize
         }))
       };
     }
@@ -298,6 +318,8 @@
   return {
     SLIDE_LAYOUTS,
     DEFAULT_LAYOUT,
+    SLIDE_SIZES,
+    DEFAULT_SLIDE_SIZE,
     ensurePresentation,
     addSlide,
     duplicateSlide,
@@ -306,6 +328,7 @@
     setSlideLayout,
     moveSlide,
     setCurrentSlide,
+    setSlideSize,
     createHistory
   };
 });
