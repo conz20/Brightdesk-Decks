@@ -839,6 +839,61 @@ async function exportOfficeFile(payload, filePath) {
           breakLine: false, valign: 'top', margin: 0.08
         });
       }
+      const slideObjects = Array.isArray(data.objects) ? data.objects : [];
+      for (const object of slideObjects) {
+        if (!isPlainObject(object) || !SUPPORTED_SLIDE_OBJECT_TYPES.has(object.type)) continue;
+        const objectX = x(13.333333 * object.x / 100);
+        const objectY = 7.5 * object.y / 100;
+        const objectW = w(13.333333 * object.width / 100);
+        const objectH = 7.5 * object.height / 100;
+        const rotation = Number.isFinite(object.rotation) ? object.rotation : 0;
+        const objectName = 'Brightdesk ' + String(object.id || object.type);
+        if (object.type === 'text') {
+          const textOptions = {
+            x: objectX,
+            y: objectY,
+            w: objectW,
+            h: objectH,
+            fontFace: 'Aptos',
+            fontSize: Number.isFinite(object.fontSize) ? object.fontSize : 20,
+            color: backgroundColor ? customTextColor : String(object.textColor || theme.body).replace(/^#/, ''),
+            bold: object.bold === true,
+            margin: 0.04,
+            valign: 'mid',
+            breakLine: false,
+            rotate: rotation,
+            objectName
+          };
+          if (object.fill) textOptions.fill = { color: String(object.fill).replace(/^#/, '') };
+          if (object.stroke && object.strokeWidth > 0) {
+            textOptions.line = { color: String(object.stroke).replace(/^#/, ''), width: object.strokeWidth };
+          } else {
+            textOptions.line = { type: 'none' };
+          }
+          slide.addText(typeof object.text === 'string' ? object.text : '', textOptions);
+          continue;
+        }
+
+        const shapeType = object.type === 'rectangle'
+          ? pptx.ShapeType.rect
+          : object.type === 'ellipse'
+            ? pptx.ShapeType.ellipse
+            : pptx.ShapeType.line;
+        slide.addShape(shapeType, {
+          x: objectX,
+          y: objectY,
+          w: objectW,
+          h: objectH,
+          rotate: rotation,
+          objectName,
+          fill: object.type === 'line' || object.fill === null
+            ? { color: 'FFFFFF', transparency: 100 }
+            : { type: 'solid', color: String(object.fill || '#F3EBDD').replace(/^#/, '') },
+          line: object.stroke && object.strokeWidth > 0
+            ? { color: String(object.stroke).replace(/^#/, ''), width: object.strokeWidth }
+            : { type: 'none' }
+        });
+      }
       if (typeof data.notes === 'string' && data.notes.trim()) slide.addNotes(data.notes);
     }
     await pptx.writeFile({ fileName: filePath });
