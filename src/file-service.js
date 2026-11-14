@@ -619,10 +619,10 @@ function readPptxSlideSolidBackground(xml) {
 
 function readPptxSlideTransition(xml) {
   const transitionElement = String(xml || '').match(
-    /<(?:[A-Za-z_][\\w.-]*:)?transition\\b[^>]*>([\\s\\S]*?)<\\/(?:[A-Za-z_][\\w.-]*:)?transition\\s*>/i
+    /<(?:[\w.-]+:)?transition\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?transition\s*>/i
   );
   if (!transitionElement) return 'none';
-  const child = transitionElement[1].match(/<(?:[A-Za-z_][\\w.-]*:)?(fade|push|wipe)\\b/i);
+  const child = transitionElement[1].match(/<(?:[\w.-]+:)?(fade|push|wipe)\b/i);
   const transition = child?.[1]?.toLowerCase() || 'none';
   return SUPPORTED_SLIDE_TRANSITIONS.has(transition) ? transition : 'none';
 }
@@ -642,9 +642,9 @@ async function writePptxSlideTransitions(filePath, transitions) {
   }
 
   const transitionMarkup = {
-    fade: prefix => `<${prefix}transition spd="med"><${prefix}fade/></${prefix}transition>`,
-    push: prefix => `<${prefix}transition spd="med"><${prefix}push dir="l"/></${prefix}transition>`,
-    wipe: prefix => `<${prefix}transition spd="med"><${prefix}wipe dir="l"/></${prefix}transition>`
+    fade: '<p:transition spd="med"><p:fade/></p:transition>',
+    push: '<p:transition spd="med"><p:push dir="l"/></p:transition>',
+    wipe: '<p:transition spd="med"><p:wipe dir="l"/></p:transition>'
   };
 
   for (let index = 0; index < slideParts.length; index++) {
@@ -654,11 +654,25 @@ async function writePptxSlideTransitions(filePath, transitions) {
     if (transition === 'none') continue;
     const slideFile = archive.file(slideParts[index]);
     if (!slideFile) throw new Error('The generated PowerPoint slide is missing its XML part.');
-    let xml = await slideFile.async('string');
-    const closingSlide = xml.match(/<\\/([A-Za-z_][\\w.-]*:)?sld\\s*>/i);
-    if (!closingSlide) throw new Error('The generated PowerPoint slide XML is malformed.');
-    const prefix = closingSlide[1] || '';
-    const escapedPrefix = prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\function findFirstXmlNode(value, key) {');
+    const xml = await slideFile.async('string');
+    const closingTag = '</p:sld>';
+    const closingIndex = xml.lastIndexOf(closingTag);
+    if (closingIndex < 0) throw new Error('The generated PowerPoint slide XML is malformed.');
+    const updatedXml = xml.slice(0, closingIndex)
+      + transitionMarkup[transition]
+      + xml.slice(closingIndex);
+    archive.file(slideParts[index], updatedXml);
+  }
+
+  const output = await archive.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  await fs.writeFile(filePath, output);
+}
+
+function findFirstXmlNode(value, key) {');
     const existingTransition = new RegExp(
       `<${escapedPrefix}transition\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/${escapedPrefix}transition\\s*>)`,
       'gi'
