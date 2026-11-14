@@ -174,3 +174,12 @@ body{background:#171729;font-family:"Aptos","Segoe UI",Arial,sans-serif}
 .audience-object-ellipse{border-radius:50%}
 .audience-object-line{min-height:0!important}
 .audience-object-text{align-items:flex-start;justify-content:flex-start;padding:5px;background:transparent}
+
+/* Audience output mirrors the transition selected for each slide. */
+.audience-transition-fade .audience-slide{animation:bd-audience-fade 420ms ease-out both}
+.audience-transition-push .audience-slide{animation:bd-audience-push 460ms cubic-bezier(.2,.75,.25,1) both}
+.audience-transition-wipe .audience-slide{animation:bd-audience-wipe 480ms ease-out both}
+@keyframes bd-audience-fade{from{opacity:0}to{opacity:1}}
+@keyframes bd-audience-push{from{opacity:.45;transform:translateX(5%)}to{opacity:1;transform:translateX(0)}}
+@keyframes bd-audience-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@media(prefers-reduced-motion:reduce){.audience-transition-fade .audience-slide,.audience-transition-push .audience-slide,.audience-transition-wipe .audience-slide{animation:none!important}}
