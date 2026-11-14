@@ -1139,6 +1139,7 @@ function renderSlides() {
 
   const stage = document.createElement('div');
   stage.className = `slide-stage theme-${doc.themeId} layout-${slide.layout} size-${doc.slideSize}`;
+  stage.classList.toggle('has-custom-background', Boolean(slide.backgroundColor));
   const slideTextColor = slide.backgroundColor
     ? window.BrightdeskSlidesService.getReadableTextColor(slide.backgroundColor)
     : '';
