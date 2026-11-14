@@ -339,6 +339,102 @@ async function readNotesSlideText(zip, notesPart, notesParser) {
   return notes;
 }
 
+const PPTX_CUSTOM_PROPERTIES_RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties';
+const PPTX_CUSTOM_PROPERTIES_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.custom-properties+xml';
+
+async function writePptxThemeMetadata(filePath, themeId) {
+  const JSZip = require('jszip');
+  const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+  const relationshipsPath = '_rels/.rels';
+  const contentTypesPath = '[Content_Types].xml';
+  const relationshipsFile = archive.file(relationshipsPath);
+  const contentTypesFile = archive.file(contentTypesPath);
+  if (!relationshipsFile || !contentTypesFile) {
+    throw new Error('The PowerPoint package is missing required metadata files.');
+  }
+
+  let relationshipsXml = await relationshipsFile.async('string');
+  const hasThemeProperties = new RegExp(
+    '<Relationship\\b(?=[^>]*\\bType=["\\']' + PPTX_CUSTOM_PROPERTIES_RELATIONSHIP + '["\\'])',
+    'i'
+  ).test(relationshipsXml);
+  if (!hasThemeProperties) {
+    const ids = [...relationshipsXml.matchAll(/\\bId=["']rId(\\d+)["']/g)].map(match => Number(match[1]));
+    const nextId = Math.max(0, ...ids) + 1;
+    const relationship = '<Relationship Id="rId' + nextId + '" Type="' +
+      PPTX_CUSTOM_PROPERTIES_RELATIONSHIP + '" Target="docProps/custom.xml"/>';
+    if (!relationshipsXml.includes('</Relationships>')) {
+      throw new Error('The PowerPoint package relationships are malformed.');
+    }
+    relationshipsXml = relationshipsXml.replace('</Relationships>', relationship + '</Relationships>');
+    archive.file(relationshipsPath, relationshipsXml);
+  }
+
+  let contentTypesXml = await contentTypesFile.async('string');
+  if (!contentTypesXml.includes('PartName="/docProps/custom.xml"')) {
+    const override = '<Override PartName="/docProps/custom.xml" ContentType="' +
+      PPTX_CUSTOM_PROPERTIES_CONTENT_TYPE + '"/>';
+    if (!contentTypesXml.includes('</Types>')) {
+      throw new Error('The PowerPoint content-type manifest is malformed.');
+    }
+    contentTypesXml = contentTypesXml.replace('</Types>', override + '</Types>');
+    archive.file(contentTypesPath, contentTypesXml);
+  }
+
+  const customProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" ' +
+    'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+    '<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="BrightdeskTheme">' +
+    '<vt:lpwstr>' + themeId + '</vt:lpwstr></property></Properties>';
+  archive.file('docProps/custom.xml', customProperties);
+  await fs.writeFile(filePath, await archive.generateAsync({ type: 'nodebuffer' }));
+}
+
+async function readPptxThemeMetadata(zip) {
+  const relationshipsFile = zip.file('_rels/.rels');
+  if (!relationshipsFile) return 'lavender';
+  const relationshipParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  let relationships;
+  try {
+    relationships = relationshipParser.parse(await relationshipsFile.async('string'));
+  } catch {
+    return 'lavender';
+  }
+  const entries = asArray(relationships.Relationships?.Relationship);
+  const relation = entries.find(item =>
+    String(item?.['@_Type'] || '') === PPTX_CUSTOM_PROPERTIES_RELATIONSHIP &&
+    item?.['@_TargetMode'] !== 'External'
+  );
+  if (!relation) return 'lavender';
+
+  let target = String(relation['@_Target'] || '').trim();
+  if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[?#]/.test(target)) return 'lavender';
+  try {
+    target = decodeURIComponent(target);
+  } catch {
+    return 'lavender';
+  }
+  const partName = path.posix.normalize(target.replace(/^\\/+/, ''));
+  if (partName !== 'docProps/custom.xml') return 'lavender';
+
+  const customFile = zip.file(partName);
+  if (!customFile || (customFile._data?.uncompressedSize || 0) > 64 * 1024) return 'lavender';
+  let parsed;
+  try {
+    parsed = relationshipParser.parse(await customFile.async('string'));
+  } catch {
+    return 'lavender';
+  }
+  const properties = asArray(parsed.Properties?.property);
+  const themeProperty = properties.find(item => item?.['@_name'] === 'BrightdeskTheme');
+  const themeId = typeof themeProperty?.lpwstr === 'string' ? themeProperty.lpwstr.trim() : '';
+  return SUPPORTED_SLIDE_THEMES.has(themeId) ? themeId : 'lavender';
+}
+
 async function openOfficeFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const stat = await fs.stat(filePath);
@@ -423,7 +519,7 @@ async function openOfficeFile(filePath) {
         notes
       });
     }
-    return { kind: 'slides', title: path.basename(filePath, ext), slideSize, slides: slides.length ? slides : [{ title: 'Imported presentation', body: '' }] };
+    return { kind: 'slides', title: path.basename(filePath, ext), slideSize, themeId: await readPptxThemeMetadata(zip), slides: slides.length ? slides : [{ title: 'Imported presentation', body: '' }] };
   }
   if (ext === '.txt' || ext === '.md' || ext === '.html') {
     assertDocumentTextLimit(buffer.byteLength);
@@ -560,7 +656,9 @@ async function exportOfficeFile(payload, filePath) {
       }
       if (typeof data.notes === 'string' && data.notes.trim()) slide.addNotes(data.notes);
     }
-    await pptx.writeFile({ fileName: filePath }); return;
+    await pptx.writeFile({ fileName: filePath });
+    await writePptxThemeMetadata(filePath, themeId);
+    return;
   }
   if (kind === 'pages' && ext === '.html') { await fs.writeFile(filePath, payload.html || '', 'utf8'); return; }
   if (kind === 'notes' && (ext === '.md' || ext === '.txt')) { await fs.writeFile(filePath, payload.text || '', 'utf8'); return; }
