@@ -39,7 +39,9 @@
     if (slideSurface) slideSurface.style.backgroundColor = backgroundColor;
     title.style.color = textColor;
     body.style.color = textColor;
+    body.style.backgroundColor = backgroundColor;
     secondaryBody.style.color = textColor;
+    secondaryBody.style.backgroundColor = backgroundColor;
     title.textContent = typeof slide.title === 'string' ? slide.title : '';
     body.textContent = typeof slide.body === 'string' ? slide.body : '';
     secondaryBody.textContent = typeof slide.bodySecondary === 'string' ? slide.bodySecondary : '';
