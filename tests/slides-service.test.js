@@ -9,6 +9,7 @@ const {
   deleteSlide,
   updateSlide,
   moveSlide,
+  setSlideLayout,
   setCurrentSlide
 } = require('../src/slides-service');
 
