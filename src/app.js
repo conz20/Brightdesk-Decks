@@ -539,6 +539,12 @@ function renderSlideSorter(doc) {
       preview.append(second);
     }
     select.append(number, preview);
+    if (slide.hidden) {
+      const hiddenBadge = document.createElement('span');
+      hiddenBadge.className = 'slide-hidden-indicator';
+      hiddenBadge.textContent = 'Hidden';
+      select.append(hiddenBadge);
+    }
     select.addEventListener('click', () => {
       window.BrightdeskSlidesService.setCurrentSlide(doc, index);
       getSlideHistory(doc).sync(doc);
@@ -824,6 +830,12 @@ function renderSlides() {
     previewBody.textContent = previewSummary.slice(0, 88) || 'Add text to this slide';
     preview.append(previewTitle, previewBody);
     select.append(number, preview);
+    if (item.hidden) {
+      const hiddenBadge = document.createElement('span');
+      hiddenBadge.className = 'slide-hidden-indicator';
+      hiddenBadge.textContent = 'Hidden';
+      select.append(hiddenBadge);
+    }
     select.addEventListener('click', () => {
       slidesService.setCurrentSlide(doc, index);
       getSlideHistory(doc).sync(doc);
