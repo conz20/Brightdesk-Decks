@@ -388,3 +388,41 @@ test('Brightdesk project validation rejects slide membership without a matching 
     docs: { slides: { slides: [{ title: 'Slide', sectionId: 'missing' }] } }
   }), /unknown section/);
 });
+
+
+test('Brightdesk project validation accepts boolean hidden slide state and rejects other values', () => {
+  assert.doesNotThrow(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Hidden', body: '', hidden: true }], current: 0 } }
+  }));
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Bad hidden state', body: '', hidden: 'yes' }], current: 0 } }
+  }), /invalid slide/);
+});
+
+test('PPTX export and import preserve hidden slide state', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-hidden-'));
+  const filePath = path.join(directory, 'hidden-slides.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [
+        { title: 'Visible slide', body: 'Audience sees this' },
+        { title: 'Hidden slide', body: 'Keep this in the deck', hidden: true }
+      ]
+    }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const visibleXml = await archive.file('ppt/slides/slide1.xml')?.async('string');
+    const hiddenXml = await archive.file('ppt/slides/slide2.xml')?.async('string');
+    assert.doesNotMatch(visibleXml || '', /\bshow=["'](?:0|false)["']/i);
+    assert.match(hiddenXml || '', /\bshow=["'](?:0|false)["']/i);
+
+    const reopened = await openOfficeFile(filePath);
+    assert.equal(reopened.slides[0].hidden, undefined);
+    assert.equal(reopened.slides[1].hidden, true);
+    assert.equal(reopened.slides[1].body, 'Keep this in the deck');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
