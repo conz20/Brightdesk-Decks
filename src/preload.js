@@ -23,5 +23,8 @@ contextBridge.exposeInMainWorld('brightdesk', {
   setProofingLanguage: (code) => ipcRenderer.invoke('languages:set-proofing', code),
   listDictionaries: () => ipcRenderer.invoke('dictionaries:list'),
   listDictionaryCatalogue: () => ipcRenderer.invoke('dictionaries:catalog'),
-  checkSpelling: (payload) => ipcRenderer.invoke('dictionaries:check', payload)
+  checkSpelling: (payload) => ipcRenderer.invoke('dictionaries:check', payload),
+  startPresenter: (payload) => ipcRenderer.invoke('presentation:start', payload),
+  updatePresenter: (payload) => ipcRenderer.send('presentation:update', payload),
+  endPresenter: () => ipcRenderer.invoke('presentation:end')
 });
