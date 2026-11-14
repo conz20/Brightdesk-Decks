@@ -1490,3 +1490,11 @@
 .slide-editor-main .slide-stage.theme-midnight.layout-two-content .slide-content-columns .slide-body::placeholder{
   color:#9fadc2;
 }
+
+
+.slide-editor-main .slide-stage.has-custom-background .slide-title::placeholder,
+.slide-editor-main .slide-stage.has-custom-background .slide-body::placeholder{
+  color:currentColor!important;
+  opacity:1;
+  font-style:italic;
+}
