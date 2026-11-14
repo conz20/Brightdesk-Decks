@@ -72,6 +72,12 @@ function assertSlidePictureDimensions(imageInfo) {
 async function storeSlidePictureAsset(imageData) {
   const imageInfo = inspectSlideImageDataUrl(imageData);
   assertSlidePictureDimensions(imageInfo);
+  const decodedImage = nativeImage.createFromBuffer(imageInfo.buffer);
+  if (decodedImage.isEmpty()) throw new Error('Brightdesk could not decode this picture.');
+  const decodedDimensions = decodedImage.getSize();
+  if (decodedDimensions.width !== imageInfo.width || decodedDimensions.height !== imageInfo.height) {
+    throw new Error('Brightdesk could not verify this picture’s dimensions.');
+  }
   const extension = imageInfo.mimeType === 'image/jpeg'
     ? 'jpg'
     : imageInfo.mimeType === 'image/webp' ? 'webp' : 'png';
