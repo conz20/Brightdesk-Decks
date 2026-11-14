@@ -83,6 +83,19 @@ function getHistorySnapshots(historyState) {
   ].filter(Boolean);
 }
 
+function collectLocalSlidePictureAssetIds() {
+  const assetIds = new Set();
+  const history = slideHistories.get(state.docs.slides);
+  const pictureGroups = [getPicturesFromSlides(state.docs.slides?.slides)];
+  if (history) {
+    pictureGroups.push(...getHistorySnapshots(history.exportState()).map(snapshot => getPicturesFromSlides(snapshot.slides)));
+  }
+  pictureGroups.flat().forEach(object => {
+    if (typeof object.imageAssetId === 'string') assetIds.add(object.imageAssetId);
+  });
+  return [...assetIds];
+}
+
 async function hydrateSavedSlidePictures(doc = state.docs.slides) {
   if (!doc || !Array.isArray(doc.slides)) return { loaded: 0, missing: 0 };
   const history = getSlideHistory(doc);
@@ -198,6 +211,9 @@ function persist() {
   try {
     commonJsonStorage.writeJsonValue(localStorage, 'brightdesk-docs-v3', stripSlidePictureData(state.docs));
     writeSavedSlideHistory(state.docs.slides);
+    window.brightdesk.pruneSlidePictures(collectLocalSlidePictureAssetIds()).catch(error => {
+      console.warn('Unused local slide pictures could not be cleaned up.', error);
+    });
     setStatus('Saved on this device');
   } catch (error) {
     setStatus('Could not save locally');
