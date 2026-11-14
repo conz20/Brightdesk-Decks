@@ -40,12 +40,46 @@ const state = {
   installedDictionaries: [], dictionaryCatalogue: [], selectedDictionary: localStorage.getItem('brightdesk-selected-dictionary') || ''
 };
 const editor = $('editor'), sheetWrap = $('sheet-wrap'), slideWrap = $('slide-wrap'), notesWrap = $('notes-wrap');
+const slideHistories = new WeakMap();
 const pageLayout = window.BrightdeskPageLayout;
 const commonJsonStorage = window.BrightdeskCommonLibs;
 if (!commonJsonStorage) throw new Error('Brightdesk common storage helper was not loaded.');
 
 function clone(value) { return commonJsonStorage.cloneJsonValue(value); }
 function activeDoc() { return state.docs[state.app]; }
+function getSlideHistory(doc = activeDoc()) {
+  let history = slideHistories.get(doc);
+  if (!history) {
+    history = window.BrightdeskSlidesService.createHistory(doc);
+    slideHistories.set(doc, history);
+  }
+  return history;
+}
+function refreshSlideHistoryControls() {
+  if (state.app !== 'slides') return;
+  const history = getSlideHistory(activeDoc());
+  const undo = document.querySelector('[data-slide-undo]');
+  const redo = document.querySelector('[data-slide-redo]');
+  if (undo) undo.disabled = !history.canUndo();
+  if (redo) redo.disabled = !history.canRedo();
+}
+function commitSlideChange(doc = activeDoc(), group = null) {
+  getSlideHistory(doc).commit(doc, group);
+  refreshSlideHistoryControls();
+}
+function applySlideHistory(direction) {
+  const doc = activeDoc();
+  const history = getSlideHistory(doc);
+  const changed = history[direction](doc);
+  if (!changed) return false;
+  renderSlides();
+  renderToolbar();
+  persist();
+  setStatus(direction === 'undo' ? 'Slide change undone' : 'Slide change redone');
+  return true;
+}
+function undoSlideEdit() { return applySlideHistory('undo'); }
+function redoSlideEdit() { return applySlideHistory('redo'); }
 function setStatus(message) { $('save-status').textContent = message; }
 function persist() {
   try { commonJsonStorage.writeJsonValue(localStorage, 'brightdesk-docs-v3', state.docs); setStatus('Saved on this device'); }
@@ -198,6 +232,14 @@ function renderToolbar() {
   } else if (app === 'slides') {
     if (tab === 'home') {
       const slides = group('slides'); addButton(slides, label('newSlide'), addSlide); addButton(slides, label('duplicate'), duplicateSlide); addButton(slides, label('delete'), deleteSlide);
+      const editing = group('editing');
+      const history = getSlideHistory(activeDoc());
+      const undo = addButton(editing, label('undo'), undoSlideEdit);
+      undo.dataset.slideUndo = 'true';
+      undo.disabled = !history.canUndo();
+      const redo = addButton(editing, label('redo'), redoSlideEdit);
+      redo.dataset.slideRedo = 'true';
+      redo.disabled = !history.canRedo();
     } else if (tab === 'insert') {
       const insert = group('slideContent');
       addButton(insert, label('titleSlide'), () => addSlideWithLayout('title', 'Presentation title', 'Add a subtitle'));
@@ -292,10 +334,12 @@ function applyEditorZoom() { editor.style.fontSize = `${14 * state.editorZoom / 
 function changeSheetZoom(delta) { state.sheetZoom = Math.max(70, Math.min(160, state.sheetZoom + delta)); applySheetZoom(); }
 function applySheetZoom() { sheetWrap.style.zoom = `${state.sheetZoom}%`; setStatus(`Sheet zoom ${state.sheetZoom}%`); }
 function insertNoteText(value) { const input = $('notes-editor'); const start = input.selectionStart, end = input.selectionEnd; input.setRangeText(value, start, end, 'end'); activeDoc().text = input.value; persist(); input.focus(); }
-function addSlideWithContent(title, body) { activeDoc().slides.push({ title, body }); activeDoc().current = activeDoc().slides.length - 1; renderSlides(); renderToolbar(); persist(); }
+function addSlideWithContent(title, body) { const doc = activeDoc(); doc.slides.push({ title, body }); doc.current = doc.slides.length - 1; commitSlideChange(doc); renderSlides(); renderToolbar(); persist(); }
 function setSlideTheme(theme) { state.slideTheme = theme; renderSlides(); setStatus(`${theme[0].toUpperCase()}${theme.slice(1)} theme selected`); }
 function addSlideWithLayout(layout, title, body) {
-  const slide = window.BrightdeskSlidesService.addSlide(activeDoc(), { title, body, layout });
+  const doc = activeDoc();
+  const slide = window.BrightdeskSlidesService.addSlide(doc, { title, body, layout });
+  commitSlideChange(doc);
   renderSlides();
   renderToolbar();
   persist();
@@ -378,6 +422,7 @@ function renderSlideSorter(doc) {
     select.append(number, preview);
     select.addEventListener('click', () => {
       window.BrightdeskSlidesService.setCurrentSlide(doc, index);
+      getSlideHistory(doc).sync(doc);
       grid.querySelectorAll('.slide-sorter-card').forEach((item, itemIndex) => {
         const active = itemIndex === index;
         item.classList.toggle('active', active);
@@ -394,6 +439,7 @@ function renderSlideSorter(doc) {
     earlier.disabled = index === 0;
     earlier.addEventListener('click', () => {
       window.BrightdeskSlidesService.moveSlide(doc, index, index - 1);
+      commitSlideChange(doc);
       renderSlides();
       persist();
     });
@@ -403,6 +449,7 @@ function renderSlideSorter(doc) {
     later.disabled = index === doc.slides.length - 1;
     later.addEventListener('click', () => {
       window.BrightdeskSlidesService.moveSlide(doc, index, index + 1);
+      commitSlideChange(doc);
       renderSlides();
       persist();
     });
@@ -434,6 +481,7 @@ function renderSlideSorter(doc) {
       const source = draggedIndex;
       if (source < 0 || source === index) return;
       window.BrightdeskSlidesService.moveSlide(doc, source, index);
+      commitSlideChange(doc);
       renderSlides();
       persist();
     });
@@ -455,6 +503,7 @@ function setSlideLayout(layout) {
   const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
   try {
     window.BrightdeskSlidesService.setSlideLayout(doc, doc.current, layout);
+    commitSlideChange(doc);
   } catch (error) {
     setStatus(error.message);
     return;
@@ -542,6 +591,7 @@ function renderSlides() {
     select.append(number, preview);
     select.addEventListener('click', () => {
       slidesService.setCurrentSlide(doc, index);
+      getSlideHistory(doc).sync(doc);
       renderSlides();
       renderToolbar();
     });
@@ -556,6 +606,7 @@ function renderSlides() {
     moveEarlier.disabled = index === 0;
     moveEarlier.addEventListener('click', () => {
       slidesService.moveSlide(doc, index, index - 1);
+      commitSlideChange(doc);
       renderSlides();
       persist();
     });
@@ -567,6 +618,7 @@ function renderSlides() {
     moveLater.disabled = index === doc.slides.length - 1;
     moveLater.addEventListener('click', () => {
       slidesService.moveSlide(doc, index, index + 1);
+      commitSlideChange(doc);
       renderSlides();
       persist();
     });
@@ -598,6 +650,7 @@ function renderSlides() {
       const source = draggedIndex;
       if (source < 0 || source === index) return;
       slidesService.moveSlide(doc, source, index);
+      commitSlideChange(doc);
       renderSlides();
       persist();
     });
@@ -629,11 +682,13 @@ function renderSlides() {
   let secondary = null;
   const updatePrimary = () => {
     slidesService.updateSlide(doc, doc.current, { body: body.value });
+    commitSlideChange(doc, `slide:${doc.current}:body`);
     updateThumbnailPreview(doc.current, title.value, body.value, secondary?.value || '');
     persist();
   };
   title.addEventListener('input', () => {
     slidesService.updateSlide(doc, doc.current, { title: title.value });
+    commitSlideChange(doc, `slide:${doc.current}:title`);
     updateThumbnailPreview(doc.current, title.value, body.value, secondary?.value || '');
     persist();
   });
@@ -649,6 +704,7 @@ function renderSlides() {
     secondary.lang = state.proofingLanguage;
     secondary.addEventListener('input', () => {
       slidesService.updateSlide(doc, doc.current, { bodySecondary: secondary.value });
+      commitSlideChange(doc, `slide:${doc.current}:secondary`);
       updateThumbnailPreview(doc.current, title.value, body.value, secondary.value);
       persist();
     });
@@ -672,6 +728,7 @@ function renderSlides() {
   notes.lang = state.proofingLanguage;
   notes.addEventListener('input', () => {
     slidesService.updateSlide(doc, doc.current, { notes: notes.value });
+    commitSlideChange(doc, `slide:${doc.current}:notes`);
     persist();
   });
   notesHeading.append(notes);
@@ -685,6 +742,7 @@ function renderSlides() {
   prev.disabled = doc.current === 0;
   prev.addEventListener('click', () => {
     slidesService.setCurrentSlide(doc, doc.current - 1);
+    getSlideHistory(doc).sync(doc);
     renderSlides();
     renderToolbar();
   });
@@ -696,6 +754,7 @@ function renderSlides() {
   next.disabled = doc.current === doc.slides.length - 1;
   next.addEventListener('click', () => {
     slidesService.setCurrentSlide(doc, doc.current + 1);
+    getSlideHistory(doc).sync(doc);
     renderSlides();
     renderToolbar();
   });
@@ -706,22 +765,28 @@ function renderSlides() {
   slideWrap.append(shell);
 }
 function addSlide() {
-  window.BrightdeskSlidesService.addSlide(activeDoc());
+  const doc = activeDoc();
+  window.BrightdeskSlidesService.addSlide(doc);
+  commitSlideChange(doc);
   renderSlides();
   renderToolbar();
   persist();
 }
 function duplicateSlide() {
-  window.BrightdeskSlidesService.duplicateSlide(activeDoc());
+  const doc = activeDoc();
+  window.BrightdeskSlidesService.duplicateSlide(doc);
+  commitSlideChange(doc);
   renderSlides();
   renderToolbar();
   persist();
 }
 function deleteSlide() {
-  if (!window.BrightdeskSlidesService.deleteSlide(activeDoc())) {
+  const doc = activeDoc();
+  if (!window.BrightdeskSlidesService.deleteSlide(doc)) {
     alert('A presentation needs at least one slide.');
     return;
   }
+  commitSlideChange(doc);
   renderSlides();
   renderToolbar();
   persist();
@@ -1332,7 +1397,20 @@ async function saveProject(){try{const result=await window.brightdesk.saveProjec
 function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
 document.addEventListener('keydown', event => {
-  if (state.app !== 'slides' || state.view !== 'workspace' || event.key !== 'F5' || document.querySelector('.presentation-overlay')) return;
+  if (state.app !== 'slides' || state.view !== 'workspace') return;
+  const modifier = event.ctrlKey || event.metaKey;
+  if (modifier && event.key.toLowerCase() === 'z') {
+    event.preventDefault();
+    if (event.shiftKey) redoSlideEdit();
+    else undoSlideEdit();
+    return;
+  }
+  if (modifier && event.key.toLowerCase() === 'y') {
+    event.preventDefault();
+    redoSlideEdit();
+    return;
+  }
+  if (event.key !== 'F5' || document.querySelector('.presentation-overlay')) return;
   event.preventDefault();
   presentSlides(!event.shiftKey);
 });
