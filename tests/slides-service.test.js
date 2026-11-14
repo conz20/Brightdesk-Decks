@@ -10,6 +10,8 @@ const {
   updateSlide,
   moveSlide,
   setSlideLayout,
+  getSlideLayoutDefinition,
+  resetSlideLayout,
   setCurrentSlide,
   getPresenterSnapshot,
   createHistory,
@@ -1162,4 +1164,67 @@ test('Decks chooses readable text colours for dark and light slide backgrounds',
   assert.equal(getReadableTextColor('#202B3B'), '#FFFFFF');
   assert.equal(getReadableTextColor('#FFFFFF'), '#111827');
   assert.equal(getReadableTextColor('#F3EBDD'), '#111827');
+});
+
+
+test('Decks defines helpful placeholder labels for each built-in slide layout', () => {
+  const layouts = ['title', 'title-content', 'two-content', 'section-header'];
+  const definitions = layouts.map(layout => getSlideLayoutDefinition(layout));
+
+  assert.deepEqual(definitions.map(item => item.id), [
+    'layout-title',
+    'layout-title-content',
+    'layout-two-content',
+    'layout-section-header'
+  ]);
+  assert.deepEqual(definitions.map(item => item.titlePlaceholder), [
+    'Add a presentation title',
+    'Add a slide title',
+    'Add a comparison title',
+    'Add a section title'
+  ]);
+  assert.deepEqual(definitions.map(item => item.bodyPlaceholder), [
+    'Add a subtitle',
+    'Add your content',
+    'Add first-column content',
+    'Add a short introduction'
+  ]);
+  assert.equal(definitions[0].secondaryBodyPlaceholder, null);
+  assert.equal(definitions[1].secondaryBodyPlaceholder, null);
+  assert.equal(definitions[2].secondaryBodyPlaceholder, 'Add second-column content');
+  assert.equal(definitions[3].secondaryBodyPlaceholder, null);
+  assert.throws(() => getSlideLayoutDefinition('unknown-layout'), RangeError);
+});
+
+test('Decks resets the selected layout structure without clearing slide content or metadata', () => {
+  const presentation = ensurePresentation({
+    sections: [{ id: 'section-main', name: 'Main section' }],
+    slides: [{
+      id: 'slide-comparison',
+      title: 'Options',
+      body: 'First option',
+      bodySecondary: 'Second option',
+      notes: 'Explain the comparison.',
+      layout: 'two-content',
+      sectionId: 'section-main',
+      hidden: true,
+      backgroundColor: '#1A2B3C'
+    }],
+    current: 0
+  });
+  presentation.slides[0].layoutId = 'obsolete-layout-id';
+
+  const reset = resetSlideLayout(presentation, 0);
+
+  assert.equal(reset.layout, 'two-content');
+  assert.equal(reset.layoutId, 'layout-two-content');
+  assert.equal(reset.id, 'slide-comparison');
+  assert.equal(reset.title, 'Options');
+  assert.equal(reset.body, 'First option');
+  assert.equal(reset.bodySecondary, 'Second option');
+  assert.equal(reset.notes, 'Explain the comparison.');
+  assert.equal(reset.sectionId, 'section-main');
+  assert.equal(reset.hidden, true);
+  assert.equal(reset.backgroundColor, '#1A2B3C');
+  assert.throws(() => resetSlideLayout(presentation, 1), RangeError);
 });
