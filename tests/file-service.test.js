@@ -963,6 +963,7 @@ test('PPTX export keeps text boxes and basic vector shapes editable as native sl
     assert.match(xml || '', /DCEBFA/);
     assert.match(xml || '', /9A5E20/);
     assert.match(xml || '', /Quarterly results/);
+    assert.match(xml || '', /202B3B/, 'the text box keeps its own selected text colour');
     assert.match(xml || '', /<p:sp>/);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
