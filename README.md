@@ -47,7 +47,7 @@ These are configured build targets, not confirmation that a package has passed i
 
 ## Current first-use workflows
 
-- Create a presentation and edit slide titles and content.
+- Create a presentation and edit slide titles and content. Add slides from Home or press Ctrl/Cmd+Shift+N; change the selected slide's layout from Home.
 - Choose from four slide layouts: Title slide, Title and content, Two content and Section header.
 - Set the presentation size to Widescreen (16:9) or Standard (4:3); the selected size is saved with the presentation and included in PowerPoint export.
 - Navigate slides from the left thumbnail rail; reorder them by dragging or with the accessible move-earlier and move-later controls.
