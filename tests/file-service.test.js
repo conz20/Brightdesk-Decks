@@ -330,3 +330,54 @@ test('Brightdesk project validation checks slide size even before a slide collec
     docs: { slides: { title: 'Unfinished deck', slideSize: 'panoramic' } }
   }), /invalid slide size/);
 });
+
+
+test('Brightdesk project validation accepts and preserves named slide sections', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-sections-'));
+  const filePath = path.join(directory, 'sections.bdesk');
+  const project = {
+    title: 'Sections',
+    docs: {
+      slides: {
+        title: 'Sections',
+        sections: [{ id: 'opening', name: 'Opening' }],
+        slides: [
+          { title: 'Welcome', body: '', sectionId: 'opening' },
+          { title: 'Agenda', body: '', sectionId: 'opening' }
+        ],
+        current: 0
+      }
+    }
+  };
+  try {
+    assert.doesNotThrow(() => validateProject(project));
+    await exportOfficeFile({ project }, filePath);
+    const reopened = await openOfficeFile(filePath);
+    assert.deepEqual(reopened.docs.slides.sections, [{ id: 'opening', name: 'Opening' }]);
+    assert.equal(reopened.docs.slides.slides[1].sectionId, 'opening');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Brightdesk project validation rejects malformed or duplicate slide sections', () => {
+  assert.throws(() => validateProject({
+    docs: { slides: { sections: 'not an array', slides: [{ title: 'Slide' }] } }
+  }), /invalid section collection/);
+  assert.throws(() => validateProject({
+    docs: {
+      slides: {
+        sections: [{ id: 'same', name: 'One' }, { id: 'same', name: 'Two' }],
+        slides: [{ title: 'Slide', sectionId: 'same' }]
+      }
+    }
+  }), /invalid section/);
+  assert.throws(() => validateProject({
+    docs: {
+      slides: {
+        sections: [{ id: 'known', name: 'Known' }],
+        slides: [{ title: 'Slide', sectionId: 'missing' }]
+      }
+    }
+  }), /unknown section/);
+});
