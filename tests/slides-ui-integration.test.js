@@ -106,7 +106,7 @@ test('Decks renders saved slide objects in both editing and full-screen playback
   const app = read('src/app.js');
 
   assert.match(app, /renderSlideObjects\(stage, slide\.objects/);
-  assert.match(app, /renderPresentationObjects\(slide, currentSlide\.objects/);
+  assert.match(app, /renderPresentationObjects\(objectLayer, currentSlide\.objects/);
 });
 
 
@@ -119,7 +119,7 @@ test('Decks Draw ribbon inserts, selects, moves, resizes, formats and deletes ed
   assert.match(app, /addButton\(shapes, 'Rectangle', \(\) => insertSlideObject\('rectangle'\)\)/);
   assert.match(app, /addButton\(shapes, 'Ellipse', \(\) => insertSlideObject\('ellipse'\)\)/);
   assert.match(app, /addButton\(shapes, 'Line', \(\) => insertSlideObject\('line'\)\)/);
-  assert.match(app, /element\.contentEditable = editable \? 'true' : 'false'/);
+  assert.match(app, /textEditor\.contentEditable = editable \? 'true' : 'false'/);
   assert.match(app, /moveHandle\.addEventListener\('pointerdown'/);
   assert.match(app, /resizeHandle\.addEventListener\('pointerdown'/);
   assert.match(app, /function updateSelectedSlideObject\(/);
