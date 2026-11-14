@@ -1181,3 +1181,37 @@
     min-height:0;
   }
 }
+
+
+/* Keep the chosen presentation theme when a layout supplies its own surface. */
+.presentation-slide.layout-title.theme-midnight{
+  background:#202b3b;
+}
+.presentation-slide.layout-title.theme-midnight h1{
+  color:#fff;
+}
+.presentation-slide.layout-title.theme-midnight .presentation-body-primary{
+  color:#e0c69f;
+}
+.presentation-slide.layout-title.theme-paper{
+  background:#fff;
+}
+.presentation-slide.layout-section-header.theme-midnight{
+  background:#202b3b;
+  border-left-color:#c47a2d;
+}
+.presentation-slide.layout-section-header.theme-midnight h1{
+  color:#e6b46f;
+}
+.presentation-slide.layout-section-header.theme-midnight .presentation-body-primary{
+  color:#d0d9e6;
+}
+.presentation-slide.layout-section-header.theme-paper{
+  background:#fff;
+}
+.presentation-slide.layout-section-header.theme-paper h1{
+  color:#80501f;
+}
+.presentation-slide.layout-two-content.theme-midnight h1{
+  color:#fff;
+}
