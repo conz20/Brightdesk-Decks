@@ -121,10 +121,18 @@ function createPresenterWindow(display, initialState) {
     presenterWindowReady = false;
     presenterState = null;
     presenterDisplayId = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('presentation:display-lost');
+    }
   });
   audienceWindow.loadFile(path.join(__dirname, 'presentation.html')).catch(error => {
     console.error('The audience presentation window could not be loaded.', error);
-    if (presenterWindow === audienceWindow) closePresenterWindow();
+    if (presenterWindow === audienceWindow) {
+      closePresenterWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('presentation:display-lost');
+      }
+    }
   });
   return audienceWindow;
 }
