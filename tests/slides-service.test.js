@@ -1336,6 +1336,24 @@ test('Decks restores saved picture objects by local asset reference', () => {
   assert.equal(presentation.slides[0].objects[0].imageData, undefined);
 });
 
+test('Decks associates legacy picture history by image data rather than per-slide object IDs', () => {
+  const firstData = 'data:image/png;base64,AAAA';
+  const secondData = 'data:image/png;base64,BBBB';
+  const firstAsset = 'picture-550e8400-e29b-41d4-a716-446655440000.png';
+  const secondAsset = 'picture-550e8400-e29b-41d4-a716-446655440001.png';
+  const presentation = ensurePresentation({
+    slides: [
+      { title: 'One', body: '', objects: [{ id: 'object-picture', type: 'image', imageData: firstData, imageName: 'one.png', imageWidth: 1, imageHeight: 1 }] },
+      { title: 'Two', body: '', objects: [{ id: 'object-picture', type: 'image', imageData: secondData, imageName: 'two.png', imageWidth: 1, imageHeight: 1 }] }
+    ]
+  });
+  const history = createHistory(presentation);
+  assert.equal(history.hydrateAssetIds(new Map([[firstData, firstAsset], [secondData, secondAsset]])), 2);
+  const snapshot = history.exportState().current.slides;
+  assert.equal(snapshot[0].objects[0].imageAssetId, firstAsset);
+  assert.equal(snapshot[1].objects[0].imageAssetId, secondAsset);
+});
+
 test('Decks hydrates picture data across current, undo and redo history snapshots', () => {
   const imageAssetId = 'picture-550e8400-e29b-41d4-a716-446655440000.png';
   const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
