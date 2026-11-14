@@ -133,7 +133,7 @@ The existing open Brightdesk-Decks pull requests include separate design, slide-
 
 ## Implementation progress — 14 November 2026
 
-The first part of P0 is now represented by draft implementation work in [Brightdesk-Decks PR #15](https://github.com/conz20/Brightdesk-Decks/pull/15):
+The first part of P0 is now represented by draft implementation work in [Brightdesk-Decks PR #34](https://github.com/conz20/Brightdesk-Decks/pull/34):
 
 - A thumbnail navigator with slide selection.
 - Drag-and-drop slide reordering, with Move earlier / Move later controls as a keyboard-accessible alternative.
@@ -143,4 +143,4 @@ The first part of P0 is now represented by draft implementation work in [Brightd
 
 **Status: implemented on a review branch, not merged or verified.** The existing first-run and legacy slide data is migrated in memory with notes defaulting to an empty string. PowerPoint speaker-note import is still open. No genuine running-build screenshot comparison, exact Node.js 24.22.2 test run, current-head CI pass, or native Windows/macOS/Linux acceptance is claimed.
 
-The remainder of P0 is still open: slide layouts and placeholders, undo/redo, a complete Slide Sorter, and stronger file-format regression coverage. Continue in the existing PR where appropriate; do not create duplicate slide services or competing branches for the same functionality.
+The remainder of P0 is still open: slide layouts and placeholders, undo/redo, a complete Slide Sorter, and stronger file-format regression coverage. PR #34 is the clean current-main implementation branch and supersedes the older PR #15 branch, which has diverged from current main. Do not create duplicate slide services or competing branches for the same functionality.
