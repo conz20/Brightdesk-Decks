@@ -818,3 +818,148 @@
   font-weight:700;
   line-height:1.2;
 }
+
+
+/* Brightdesk Decks: compact, editable slide outline. */
+.slide-outline-view{
+  min-height:100%;
+  padding:24px clamp(18px,3vw,38px);
+  overflow:auto;
+  background:#f3f5f8;
+}
+.slide-outline-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:15px;
+  max-width:1040px;
+  margin:0 auto 20px;
+}
+.slide-outline-header h2{
+  margin:0;
+  color:#26364d;
+  font-size:20px;
+  font-weight:700;
+  letter-spacing:-.35px;
+}
+.slide-outline-header p{
+  margin:5px 0 0;
+  color:#758197;
+  font-size:11px;
+}
+.slide-outline-count{
+  flex-shrink:0;
+  color:#7b8798;
+  font-size:11px;
+}
+.slide-outline-list{
+  display:flex;
+  max-width:1040px;
+  flex-direction:column;
+  gap:11px;
+  margin:0 auto;
+}
+.slide-outline-section-heading{
+  padding:8px 11px 2px;
+  color:#54647a;
+  font-size:11px;
+  font-weight:750;
+  letter-spacing:.02em;
+}
+.slide-outline-entry{
+  min-width:0;
+  padding:13px 15px;
+  border:1px solid #e1e6ed;
+  border-radius:8px;
+  background:#fff;
+  box-shadow:0 2px 8px #26364d08;
+}
+.slide-outline-entry.is-hidden-slide{
+  opacity:.76;
+}
+.slide-outline-meta{
+  display:flex;
+  min-height:26px;
+  align-items:center;
+  gap:9px;
+  margin-bottom:10px;
+}
+.slide-outline-number{
+  color:#65748a;
+  font-size:11px;
+  font-weight:750;
+}
+.slide-outline-open-button{
+  margin-left:auto;
+  padding:5px 9px;
+  border:1px solid #dfe4eb;
+  border-radius:5px;
+  background:#fff;
+  color:#53647b;
+  font:inherit;
+  font-size:10px;
+  cursor:pointer;
+}
+.slide-outline-open-button:hover{
+  border-color:#d8b284;
+  background:#fcf3e9;
+  color:#80501f;
+}
+.slide-outline-fields{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.slide-outline-field{
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  gap:5px;
+  color:#65748a;
+  font-size:10px;
+  font-weight:700;
+}
+.slide-outline-title,
+.slide-outline-body{
+  width:100%;
+  min-width:0;
+  padding:8px 10px;
+  border:1px solid #e1e6ed;
+  border-radius:5px;
+  background:#fbfcfe;
+  color:#34445b;
+  font:inherit;
+  font-size:12px;
+  font-weight:400;
+  line-height:1.5;
+  resize:vertical;
+}
+.slide-outline-title{
+  min-height:36px;
+  font-size:14px;
+  font-weight:650;
+}
+.slide-outline-body{
+  min-height:68px;
+  white-space:pre-wrap;
+}
+.slide-outline-content-fields{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:10px;
+}
+.slide-outline-title:focus-visible,
+.slide-outline-body:focus-visible,
+.slide-outline-open-button:focus-visible{
+  outline:2px solid #c47a2d;
+  outline-offset:2px;
+}
+@media(min-width:760px){
+  .slide-outline-content-fields:has(.slide-outline-body-secondary){
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:680px){
+  .slide-outline-view{padding:16px 12px}
+  .slide-outline-entry{padding:10px}
+}
