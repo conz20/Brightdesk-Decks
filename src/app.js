@@ -177,7 +177,7 @@ function colIndex(label) { return window.BrightdeskFormula.columnIndex(label); }
 const ribbonTabs = {
   pages: ['home', 'insert', 'layout', 'review', 'view'],
   sheets: ['home', 'insert', 'formulas', 'data', 'view'],
-  slides: ['home', 'insert', 'draw', 'design', 'slideShow', 'view'],
+  slides: ['home', 'insert', 'draw', 'design', 'transitions', 'slideShow', 'view'],
   notes: ['home', 'insert', 'view']
 };
 function ribbonGroup(toolbar, label) {
@@ -416,6 +416,31 @@ function renderToolbar() {
       boldButton.disabled = object.type !== 'text';
       const deleteGroup = ribbonGroup(toolbar, 'Object');
       addButton(deleteGroup, 'Delete object', deleteSelectedSlideObject);
+    } else if (tab === 'transitions') {
+      const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+      const currentSlide = doc.slides[doc.current];
+      const transitionGroup = ribbonGroup(toolbar, 'Slide transition');
+      const transitionSelect = document.createElement('select');
+      transitionSelect.className = 'slide-transition-select';
+      transitionSelect.setAttribute('aria-label', 'Slide transition');
+      [
+        ['none', 'No transition'],
+        ['fade', 'Fade'],
+        ['push', 'Push'],
+        ['wipe', 'Wipe']
+      ].forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        transitionSelect.append(option);
+      });
+      transitionSelect.value = currentSlide.transition || 'none';
+      transitionSelect.addEventListener('change', () => setSlideTransition(transitionSelect.value));
+      transitionGroup.append(transitionSelect);
+      const hint = document.createElement('span');
+      hint.className = 'slide-transition-hint';
+      hint.textContent = 'This transition plays when the slide appears';
+      transitionGroup.append(hint);
     } else if (tab === 'design') {
       const design = group('themes');
       const presentation = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
@@ -554,6 +579,21 @@ function setSlideBackgroundColor(backgroundColor) {
     renderToolbar();
     persist();
     setStatus(backgroundColor ? 'Slide background updated' : 'Slide background reset to the presentation theme');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function setSlideTransition(transition) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  try {
+    window.BrightdeskSlidesService.setSlideTransition(doc, doc.current, transition);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    const label = transition === 'none' ? 'No transition' : transition[0].toUpperCase() + transition.slice(1);
+    setStatus(`${label} transition selected for this slide`);
   } catch (error) {
     setStatus(error.message);
   }
@@ -828,6 +868,13 @@ function renderSlideSorter(doc) {
       preview.append(second);
     }
     select.append(number, preview);
+    const sorterTransition = document.createElement('span');
+    sorterTransition.className = 'slide-sorter-transition';
+    sorterTransition.dataset.slideTransition = slide.transition || 'none';
+    sorterTransition.textContent = slide.transition && slide.transition !== 'none'
+      ? slide.transition[0].toUpperCase() + slide.transition.slice(1)
+      : 'No transition';
+    select.append(sorterTransition);
     if (slide.hidden) {
       const hiddenBadge = document.createElement('span');
       hiddenBadge.className = 'slide-hidden-indicator';
@@ -1346,6 +1393,14 @@ function renderSlides() {
     previewBody.textContent = previewSummary.slice(0, 88) || layoutDefinition.bodyPlaceholder;
     preview.append(previewTitle, previewBody);
     select.append(number, preview);
+    const thumbnailTransition = document.createElement('span');
+    thumbnailTransition.className = 'slide-thumbnail-transition';
+    thumbnailTransition.dataset.slideTransition = item.transition || 'none';
+    const transitionLabel = item.transition && item.transition !== 'none'
+      ? item.transition[0].toUpperCase() + item.transition.slice(1)
+      : 'No transition';
+    thumbnailTransition.textContent = transitionLabel;
+    select.append(thumbnailTransition);
     if (item.hidden) {
       const hiddenBadge = document.createElement('span');
       hiddenBadge.className = 'slide-hidden-indicator';
@@ -1792,6 +1847,8 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   let blankMode = null;
   let showMessage = '';
   let audienceDisplayActive = false;
+  let lastPresentedSlideId = null;
+  let lastPlaybackTransitionClass = '';
   const removePresenterDisplayLostListener = presenterMode
     ? window.brightdesk?.onPresenterDisplayLost?.(() => {
       audienceDisplayActive = false;
@@ -1806,7 +1863,9 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
         title: currentSlide.title || '',
         body: currentSlide.body || '',
         bodySecondary: currentSlide.bodySecondary || '',
+        id: currentSlide.id || '',
         layout: currentSlide.layout || 'title-content',
+        transition: currentSlide.transition || 'none',
         ...(currentSlide.backgroundColor ? { backgroundColor: currentSlide.backgroundColor } : {}),
         objects: Array.isArray(currentSlide.objects) ? currentSlide.objects : []
       },
@@ -1842,7 +1901,22 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
       ? window.BrightdeskSlidesService.getPresenterSnapshot(d, position)
       : null;
     const currentSlide = snapshot?.currentSlide || d.slides[currentSlideIndex()];
-    slide.className = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${d.themeId} layout-${currentSlide.layout || 'title-content'}${presenterMode ? ' presenter-current-slide' : ''}`;
+    const slideChanged = currentSlide.id !== lastPresentedSlideId;
+    if (slideChanged) {
+      const transition = ['fade', 'push', 'wipe'].includes(currentSlide.transition) ? currentSlide.transition : 'none';
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      lastPlaybackTransitionClass = transition !== 'none' && !reducedMotion
+        ? `slide-transition-${transition}`
+        : '';
+      lastPresentedSlideId = currentSlide.id;
+    }
+    const slideBaseClass = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${d.themeId} layout-${currentSlide.layout || 'title-content'}${presenterMode ? ' presenter-current-slide' : ''}`;
+    slide.className = slideBaseClass + (lastPlaybackTransitionClass ? ` ${lastPlaybackTransitionClass}` : '');
+    if (slideChanged && lastPlaybackTransitionClass) {
+      slide.classList.remove(lastPlaybackTransitionClass);
+      void slide.offsetWidth;
+      slide.classList.add(lastPlaybackTransitionClass);
+    }
     const currentTextColor = currentSlide.backgroundColor
       ? window.BrightdeskSlidesService.getReadableTextColor(currentSlide.backgroundColor)
       : '';
