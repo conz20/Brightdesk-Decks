@@ -353,3 +353,57 @@ test('Decks exposes undo and redo controls and keyboard shortcuts in the editor'
   assert.match(app, /history\.undo\(doc\)/);
   assert.match(app, /history\.redo\(doc\)/);
 });
+
+
+test('Decks restores undo and redo history after the editor is reopened', () => {
+  const { createHistory } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'Draft', body: 'Original', notes: '' }], current: 0 };
+  const firstSession = createHistory(presentation);
+
+  updateSlide(presentation, 0, { body: 'Revised' });
+  firstSession.commit(presentation);
+  const savedHistory = firstSession.exportState();
+
+  const reopenedPresentation = structuredClone(presentation);
+  const reopenedSession = createHistory(reopenedPresentation, { state: savedHistory });
+
+  assert.equal(reopenedSession.restored, true);
+  assert.equal(reopenedSession.canUndo(), true);
+  assert.equal(reopenedSession.undo(reopenedPresentation), true);
+  assert.equal(reopenedPresentation.slides[0].body, 'Original');
+  assert.equal(reopenedSession.redo(reopenedPresentation), true);
+  assert.equal(reopenedPresentation.slides[0].body, 'Revised');
+});
+
+test('Decks does not restore saved history onto a different imported presentation', () => {
+  const { createHistory } = require('../src/slides-service');
+  const original = { slides: [{ title: 'Old deck', body: 'Old text', notes: '' }], current: 0 };
+  const oldSession = createHistory(original);
+  updateSlide(original, 0, { body: 'Edited old text' });
+  oldSession.commit(original);
+
+  const imported = { slides: [{ title: 'New deck', body: 'New text', notes: '' }], current: 0 };
+  const newSession = createHistory(imported, { state: oldSession.exportState() });
+
+  assert.equal(newSession.restored, false);
+  assert.equal(newSession.canUndo(), false);
+  assert.equal(newSession.undo(imported), false);
+  assert.equal(imported.slides[0].body, 'New text');
+});
+
+test('Decks preserves redo history when reopening after an undo', () => {
+  const { createHistory } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'One', body: '', notes: '' }], current: 0 };
+  const firstSession = createHistory(presentation);
+  updateSlide(presentation, 0, { title: 'Two' });
+  firstSession.commit(presentation);
+  firstSession.undo(presentation);
+
+  const reopened = structuredClone(presentation);
+  const secondSession = createHistory(reopened, { state: firstSession.exportState() });
+
+  assert.equal(secondSession.restored, true);
+  assert.equal(secondSession.canRedo(), true);
+  assert.equal(secondSession.redo(reopened), true);
+  assert.equal(reopened.slides[0].title, 'Two');
+});
