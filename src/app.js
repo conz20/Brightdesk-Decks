@@ -1109,7 +1109,7 @@ async function saveProject(){try{const result=await window.brightdesk.saveProjec
 function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
 document.addEventListener('keydown', event => {
-  if (state.app !== 'slides' || state.view !== 'workspace' || event.key !== 'F5') return;
+  if (state.app !== 'slides' || state.view !== 'workspace' || event.key !== 'F5' || document.querySelector('.presentation-overlay')) return;
   event.preventDefault();
   presentSlides(!event.shiftKey);
 });
