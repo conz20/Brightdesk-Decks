@@ -733,3 +733,66 @@
 .presentation-slide.size-standard{
   width:min(100%,calc((100vh - 8vw)*4/3),1200px);
 }
+
+/* Brightdesk Decks: named sections in Normal View and Slide Sorter. */
+.slide-section-heading,
+.slide-sorter-section-heading{
+  display:flex;
+  min-width:0;
+  align-items:center;
+  padding:3px 2px;
+}
+.slide-section-heading button,
+.slide-sorter-section-heading button{
+  display:flex;
+  width:100%;
+  min-width:0;
+  align-items:center;
+  gap:8px;
+  padding:7px 9px;
+  border:1px solid #e5e8ef;
+  border-radius:6px;
+  background:#f6f8fb;
+  color:#34445b;
+  text-align:left;
+  cursor:pointer;
+}
+.slide-section-heading button:hover,
+.slide-sorter-section-heading button:hover{
+  border-color:#d8b284;
+  background:#fcf3e9;
+}
+.slide-section-heading strong,
+.slide-sorter-section-heading strong{
+  overflow:hidden;
+  font-size:10px;
+  font-weight:750;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.slide-section-heading small,
+.slide-sorter-section-heading small{
+  margin-left:auto;
+  color:#778398;
+  font-size:9px;
+  white-space:nowrap;
+}
+.slide-sorter-section-heading{
+  grid-column:1/-1;
+  padding-top:7px;
+}
+.slide-section-select{
+  min-width:140px;
+  max-width:200px;
+  padding:7px 25px 7px 8px;
+  border:1px solid #d9dfe8;
+  border-radius:5px;
+  background:#fff;
+  color:#34445b;
+  font:inherit;
+  font-size:11px;
+}
+.slide-section-select:focus-visible{
+  outline:2px solid #c47a2d;
+  outline-offset:2px;
+}
