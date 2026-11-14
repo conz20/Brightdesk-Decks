@@ -235,7 +235,7 @@
       bold,
       rotation,
       ...(object.type === 'image' ? {
-        ...(imageData ? { imageData } : {}),
+        ...(hasImageData ? { imageData } : {}),
         ...(hasImageAsset ? { imageAssetId } : {}),
         imageName, imageWidth, imageHeight
       } : {})
@@ -686,7 +686,7 @@
     if (objectIndex < 0) throw new RangeError('The slide object could not be found.');
     const existing = slide.objects[objectIndex];
     const usedIds = new Set(slide.objects.filter(object => object.id !== objectId).map(object => object.id));
-    if (existing.type !== 'image' && ['imageData', 'imageName', 'imageWidth', 'imageHeight'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) {
+    if (existing.type !== 'image' && ['imageData', 'imageName', 'imageWidth', 'imageHeight', 'imageAssetId'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) {
       throw new TypeError('Only picture objects can change picture data.');
     }
     const updated = normalizeSlideObject({ ...existing, ...patch, id: existing.id, type: existing.type }, usedIds);
