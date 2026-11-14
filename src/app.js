@@ -34,7 +34,7 @@ const state = {
   todoView: 'my-day', todoQuery: '',
   selectedCell: { row: 0, col: 0 }, update: null, ribbonTab: 'home',
   installedApps: [], setupComplete: false, firstRunSelection: new Set(installableCatalog.map(item => item.id)),
-  slideTheme: 'lavender', slideView: 'normal', collapsedSlideSections: new Set(), focusMode: false, editorZoom: 100, sheetZoom: 100,
+  slideView: 'normal', collapsedSlideSections: new Set(), focusMode: false, editorZoom: 100, sheetZoom: 100,
   languageCatalog: [], installedLanguagePacks: [], spellCheckerLanguages: [], usesNativeMacSpellChecker: false,
   displayLanguage: 'en-AU', proofingLanguage: 'en-AU',
   installedDictionaries: [], dictionaryCatalogue: [], selectedDictionary: localStorage.getItem('brightdesk-selected-dictionary') || ''
@@ -334,7 +334,13 @@ function renderToolbar() {
       addButton(insert, 'Section header', () => addSlideWithLayout('section-header', 'New section', 'Add a short introduction'));
     } else if (tab === 'design') {
       const design = group('themes');
-      [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => addButton(design, label, () => setSlideTheme(theme)));
+      const presentation = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+      [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => {
+        const button = addButton(design, label, () => setSlideTheme(theme));
+        const selected = presentation.themeId === theme;
+        button.setAttribute('aria-pressed', String(selected));
+        if (selected) button.classList.add('active');
+      });
 
       const sizeGroup = ribbonGroup(toolbar, 'Slide Size');
       const sizeSelect = document.createElement('select');
@@ -349,7 +355,6 @@ function renderToolbar() {
         option.textContent = text;
         sizeSelect.append(option);
       });
-      const presentation = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
       sizeSelect.value = presentation.slideSize;
       sizeSelect.addEventListener('change', () => setSlideSize(sizeSelect.value));
       sizeGroup.append(sizeSelect);
@@ -428,7 +433,19 @@ function changeSheetZoom(delta) { state.sheetZoom = Math.max(70, Math.min(160, s
 function applySheetZoom() { sheetWrap.style.zoom = `${state.sheetZoom}%`; setStatus(`Sheet zoom ${state.sheetZoom}%`); }
 function insertNoteText(value) { const input = $('notes-editor'); const start = input.selectionStart, end = input.selectionEnd; input.setRangeText(value, start, end, 'end'); activeDoc().text = input.value; persist(); input.focus(); }
 function addSlideWithContent(title, body) { const doc = activeDoc(); doc.slides.push({ title, body }); doc.current = doc.slides.length - 1; commitSlideChange(doc); renderSlides(); renderToolbar(); persist(); }
-function setSlideTheme(theme) { state.slideTheme = theme; renderSlides(); setStatus(`${theme[0].toUpperCase()}${theme.slice(1)} theme selected`); }
+function setSlideTheme(theme) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  try {
+    window.BrightdeskSlidesService.setSlideTheme(doc, theme);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`${theme[0].toUpperCase()}${theme.slice(1)} theme selected`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
 function addSlideWithLayout(layout, title, body) {
   const doc = activeDoc();
   const slide = window.BrightdeskSlidesService.addSlide(doc, { title, body, layout });
@@ -671,7 +688,7 @@ function renderSlideSorter(doc) {
     number.className = 'slide-sorter-number';
     number.textContent = String(index + 1);
     const preview = document.createElement('span');
-    preview.className = `slide-sorter-preview theme-${state.slideTheme} layout-${slide.layout} size-${doc.slideSize}`;
+    preview.className = `slide-sorter-preview theme-${doc.themeId} layout-${slide.layout} size-${doc.slideSize}`;
     const previewTitle = document.createElement('b');
     previewTitle.textContent = slide.title.trim() || `Slide ${index + 1}`;
     const previewBody = document.createElement('span');
@@ -1061,7 +1078,7 @@ function renderSlides() {
   editorMain.setAttribute('aria-label', 'Slide editor');
 
   const stage = document.createElement('div');
-  stage.className = `slide-stage theme-${state.slideTheme} layout-${slide.layout} size-${doc.slideSize}`;
+  stage.className = `slide-stage theme-${doc.themeId} layout-${slide.layout} size-${doc.slideSize}`;
 
   const title = document.createElement('textarea');
   title.className = 'slide-title';
@@ -1401,7 +1418,7 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
       ? window.BrightdeskSlidesService.getPresenterSnapshot(d, position)
       : null;
     const currentSlide = snapshot?.currentSlide || d.slides[currentSlideIndex()];
-    slide.className = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${state.slideTheme} layout-${currentSlide.layout || 'title-content'}${presenterMode ? ' presenter-current-slide' : ''}`;
+    slide.className = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${d.themeId} layout-${currentSlide.layout || 'title-content'}${presenterMode ? ' presenter-current-slide' : ''}`;
     title.textContent = currentSlide.title || '';
     body.textContent = currentSlide.body || '';
     secondaryBody.textContent = currentSlide.bodySecondary || '';
@@ -1429,7 +1446,7 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
       if (snapshot.nextSlide) {
         nextPreview.hidden = false;
         noNextSlide.hidden = true;
-        nextPreview.className = `presentation-slide presenter-slide-preview size-${d.slideSize || 'widescreen'} theme-${state.slideTheme} layout-${snapshot.nextSlide.layout || 'title-content'}`;
+        nextPreview.className = `presentation-slide presenter-slide-preview size-${d.slideSize || 'widescreen'} theme-${d.themeId} layout-${snapshot.nextSlide.layout || 'title-content'}`;
         nextPreviewTitle.textContent = snapshot.nextSlide.title || '';
         nextPreviewBody.textContent = snapshot.nextSlide.body || '';
         nextPreviewSecondary.textContent = snapshot.nextSlide.bodySecondary || '';
