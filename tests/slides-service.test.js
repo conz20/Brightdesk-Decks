@@ -1283,8 +1283,8 @@ test('Decks adds a local picture object with its source and original dimensions'
     type: 'image',
     imageData,
     imageName: 'team-photo.png',
-    imageWidth: 1600,
-    imageHeight: 900,
+    imageWidth: 1,
+    imageHeight: 1,
     x: 12, y: 18, width: 40, height: 28
   });
 
