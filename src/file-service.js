@@ -359,7 +359,7 @@ async function writePptxThemeMetadata(filePath, themeId) {
     'i'
   ).test(relationshipsXml);
   if (!hasThemeProperties) {
-    const ids = [...relationshipsXml.matchAll(/\\bId=["']rId(\\d+)["']/g)].map(match => Number(match[1]));
+    const ids = [...relationshipsXml.matchAll(/\bId=["']rId(\d+)["']/g)].map(match => Number(match[1]));
     const nextId = Math.max(0, ...ids) + 1;
     const relationship = '<Relationship Id="rId' + nextId + '" Type="' +
       PPTX_CUSTOM_PROPERTIES_RELATIONSHIP + '" Target="docProps/custom.xml"/>';
@@ -418,7 +418,7 @@ async function readPptxThemeMetadata(zip) {
   } catch {
     return 'lavender';
   }
-  const partName = path.posix.normalize(target.replace(/^\\/+/, ''));
+  const partName = path.posix.normalize(target.replace(/^\/+/, ''));
   if (partName !== 'docProps/custom.xml') return 'lavender';
 
   const customFile = zip.file(partName);
