@@ -313,7 +313,7 @@ async function openOfficeFile(filePath) {
     const slides = [];
     for (const name of names) {
       const xml = await zip.files[name].async('string');
-      const hidden = /<(?:[A-Za-z0-9_]+:)?sld\\b[^>]*\\bshow=["'](?:0|false)["']/i.test(xml);
+      const hidden = /<(?:[A-Za-z0-9_]+:)?sld\b[^>]*\bshow=["'](?:0|false)["']/i.test(xml);
       const texts = collectXmlText(parser.parse(xml)).filter(Boolean);
       slides.push({
         ...(hidden ? { hidden: true } : {}),
