@@ -108,3 +108,35 @@ test('Decks renders saved slide objects in both editing and full-screen playback
   assert.match(app, /renderSlideObjects\(stage, slide\.objects/);
   assert.match(app, /renderPresentationObjects\(slide, currentSlide\.objects/);
 });
+
+
+test('Decks Draw ribbon inserts, selects, moves, resizes, formats and deletes editable slide objects', () => {
+  const app = read('src/app.js');
+  const service = read('src/slides-service.js');
+  const css = read('src/styles.css');
+
+  assert.match(app, /addButton\(shapes, 'Text box', \(\) => insertSlideObject\('text'\)\)/);
+  assert.match(app, /addButton\(shapes, 'Rectangle', \(\) => insertSlideObject\('rectangle'\)\)/);
+  assert.match(app, /addButton\(shapes, 'Ellipse', \(\) => insertSlideObject\('ellipse'\)\)/);
+  assert.match(app, /addButton\(shapes, 'Line', \(\) => insertSlideObject\('line'\)\)/);
+  assert.match(app, /element\.contentEditable = editable \? 'true' : 'false'/);
+  assert.match(app, /moveHandle\.addEventListener\('pointerdown'/);
+  assert.match(app, /resizeHandle\.addEventListener\('pointerdown'/);
+  assert.match(app, /function updateSelectedSlideObject\(/);
+  assert.match(app, /function deleteSelectedSlideObject\(/);
+  assert.match(service, /function addSlideObject\(/);
+  assert.match(service, /function updateSlideObject\(/);
+  assert.match(service, /function deleteSlideObject\(/);
+  assert.match(css, /\.slide-object-drag-handle/);
+  assert.match(css, /\.slide-object-resize-handle/);
+});
+
+test('Decks PowerPoint export creates native editable object shapes instead of raster images', () => {
+  const files = read('src/file-service.js');
+  assert.match(files, /slide\.addText\(typeof object\.text === 'string' \? object\.text : ''/);
+  assert.match(files, /slide\.addShape\(shapeType/);
+  assert.match(files, /pptx\.ShapeType\.rect/);
+  assert.match(files, /pptx\.ShapeType\.ellipse/);
+  assert.match(files, /pptx\.ShapeType\.line/);
+  assert.match(files, /objectName/);
+});
