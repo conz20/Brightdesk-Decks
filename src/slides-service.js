@@ -21,6 +21,52 @@
   const SLIDE_LAYOUT_BY_ID = new Map(
     Object.entries(SLIDE_LAYOUT_IDS).map(([layout, id]) => [id, layout])
   );
+  const SLIDE_LAYOUT_DEFINITIONS = Object.freeze({
+    title: Object.freeze({
+      layout: 'title',
+      id: SLIDE_LAYOUT_IDS.title,
+      label: 'Title slide',
+      titlePlaceholder: 'Add a presentation title',
+      titleLabel: 'Slide title',
+      bodyPlaceholder: 'Add a subtitle',
+      bodyLabel: 'Slide subtitle',
+      secondaryBodyPlaceholder: null,
+      secondaryBodyLabel: null
+    }),
+    'title-content': Object.freeze({
+      layout: 'title-content',
+      id: SLIDE_LAYOUT_IDS['title-content'],
+      label: 'Title and content',
+      titlePlaceholder: 'Add a slide title',
+      titleLabel: 'Slide title',
+      bodyPlaceholder: 'Add your content',
+      bodyLabel: 'Slide content',
+      secondaryBodyPlaceholder: null,
+      secondaryBodyLabel: null
+    }),
+    'two-content': Object.freeze({
+      layout: 'two-content',
+      id: SLIDE_LAYOUT_IDS['two-content'],
+      label: 'Two content',
+      titlePlaceholder: 'Add a comparison title',
+      titleLabel: 'Slide title',
+      bodyPlaceholder: 'Add first-column content',
+      bodyLabel: 'First content column',
+      secondaryBodyPlaceholder: 'Add second-column content',
+      secondaryBodyLabel: 'Second content column'
+    }),
+    'section-header': Object.freeze({
+      layout: 'section-header',
+      id: SLIDE_LAYOUT_IDS['section-header'],
+      label: 'Section header',
+      titlePlaceholder: 'Add a section title',
+      titleLabel: 'Section title',
+      bodyPlaceholder: 'Add a short introduction',
+      bodyLabel: 'Section introduction',
+      secondaryBodyPlaceholder: null,
+      secondaryBodyLabel: null
+    })
+  });
   const SLIDE_SIZES = Object.freeze(['widescreen', 'standard']);
   const DEFAULT_SLIDE_SIZE = 'widescreen';
   const SLIDE_THEMES = Object.freeze(['lavender', 'midnight', 'paper']);
@@ -240,6 +286,21 @@
     if (Object.prototype.hasOwnProperty.call(patch, 'bodySecondary')) slide.bodySecondary = String(patch.bodySecondary ?? '');
     if (Object.prototype.hasOwnProperty.call(patch, 'notes')) slide.notes = String(patch.notes ?? '');
     return slide;
+  }
+
+  function getSlideLayoutDefinition(layout) {
+    if (!SLIDE_LAYOUTS.includes(layout)) {
+      throw new RangeError('The selected slide layout is not supported.');
+    }
+    return { ...SLIDE_LAYOUT_DEFINITIONS[layout] };
+  }
+
+  function resetSlideLayout(presentation, index) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    const layout = target.slides[index].layout;
+    getSlideLayoutDefinition(layout);
+    return setSlideLayout(target, index, layout);
   }
 
   function setSlideLayout(presentation, index, layout) {
@@ -606,6 +667,8 @@
     deleteSlide,
     updateSlide,
     setSlideLayout,
+    getSlideLayoutDefinition,
+    resetSlideLayout,
     moveSlide,
     setCurrentSlide,
     setSlideSize,
