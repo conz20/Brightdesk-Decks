@@ -136,31 +136,6 @@ test('Audience renderer keeps both comparison columns and safely draws slide obj
   assert.doesNotMatch(renderer, /innerHTML/);
 });
 
-  render({
-    slide: { title: 'Compare', body: 'Option A', bodySecondary: 'Option B', layout: 'two-content' },
-    themeId: 'midnight',
-    slideSize: 'standard'
-  });
-  assert.equal(elements['presentation-root'].className, 'audience-presentation theme-midnight size-standard layout-two-content');
-  assert.equal(elements['audience-title'].textContent, 'Compare');
-  assert.equal(elements['audience-body'].textContent, 'Option A');
-  assert.equal(elements['audience-body-secondary'].textContent, 'Option B');
-  assert.equal(elements['audience-body-secondary'].hidden, false);
-  assert.equal(elements['audience-columns'].hidden, false);
-
-  render({
-    slide: { title: '<img src=x onerror=alert(1)>', body: 'Ordinary content', bodySecondary: 'Unused', layout: 'title-content' },
-    themeId: 'paper',
-    slideSize: 'widescreen',
-    blankMode: 'black'
-  });
-  assert.equal(elements['presentation-root'].className, 'audience-presentation theme-paper size-widescreen layout-title-content is-blank-black');
-  assert.equal(elements['audience-title'].textContent, '<img src=x onerror=alert(1)>');
-  assert.equal(elements['audience-body-secondary'].hidden, true);
-  assert.equal(elements['audience-columns'].hidden, false);
-  assert.doesNotMatch(renderer, /innerHTML/);
-});
-
 
 test('Decks closes the audience window when its external display is disconnected', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
