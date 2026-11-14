@@ -496,11 +496,11 @@ function getReadablePptxTextColor(backgroundColor) {
 }
 
 function readPptxSlideSolidBackground(xml) {
-  const backgroundMatch = String(xml || '').match(/<(?:[A-Za-z_][\\w.-]*:)?bg\\b[^>]*>([\\s\\S]*?)<\\/(?:[A-Za-z_][\\w.-]*:)?bg\\s*>/i);
+  const backgroundMatch = String(xml || '').match(/<(?:[A-Za-z_][\w.-]*:)?bg\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?bg\s*>/i);
   if (!backgroundMatch) return null;
-  const fillMatch = backgroundMatch[1].match(/<(?:[A-Za-z_][\\w.-]*:)?solidFill\\b[^>]*>([\\s\\S]*?)<\\/(?:[A-Za-z_][\\w.-]*:)?solidFill\\s*>/i);
+  const fillMatch = backgroundMatch[1].match(/<(?:[A-Za-z_][\w.-]*:)?solidFill\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?solidFill\s*>/i);
   if (!fillMatch) return null;
-  const colorMatch = fillMatch[1].match(/<(?:[A-Za-z_][\\w.-]*:)?srgbClr\\b[^>]*\\bval=["']([0-9A-F]{6})["']/i);
+  const colorMatch = fillMatch[1].match(/<(?:[A-Za-z_][\w.-]*:)?srgbClr\b[^>]*\bval=["']([0-9A-F]{6})["']/i);
   return colorMatch ? '#' + colorMatch[1].toUpperCase() : null;
 }
 
