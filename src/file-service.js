@@ -267,10 +267,10 @@ async function openOfficeFile(filePath) {
     const presentationPart = zip.file('ppt/presentation.xml');
     if (presentationPart) {
       const presentationXml = await presentationPart.async('string');
-      const sizeTag = presentationXml.match(/<(?:[A-Za-z0-9_]+:)?sldSz\\b([^>]*)\\/?\s*>/i);
+      const sizeTag = presentationXml.match(/<(?:[A-Za-z0-9_]+:)?sldSz\b([^>]*)\/?\s*>/i);
       if (sizeTag) {
-        const width = Number(sizeTag[1].match(/\\bcx=["'](\\d+)["']/i)?.[1]);
-        const height = Number(sizeTag[1].match(/\\bcy=["'](\\d+)["']/i)?.[1]);
+        const width = Number(sizeTag[1].match(/\bcx=["'](\d+)["']/i)?.[1]);
+        const height = Number(sizeTag[1].match(/\bcy=["'](\d+)["']/i)?.[1]);
         if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
           const ratio = width / height;
           if (Math.abs(ratio - 4 / 3) < 0.02) slideSize = 'standard';
