@@ -6,6 +6,7 @@
   const body = document.getElementById('audience-body');
   const columns = document.getElementById('audience-columns');
   const secondaryBody = document.getElementById('audience-body-secondary');
+  title.className = 'audience-title';
   const supportedLayouts = new Set(['title', 'title-content', 'two-content', 'section-header']);
   const supportedThemes = new Set(['lavender', 'midnight', 'paper']);
 
