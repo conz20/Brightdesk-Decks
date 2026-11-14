@@ -796,3 +796,25 @@
   outline:2px solid #c47a2d;
   outline-offset:2px;
 }
+
+/* Brightdesk Decks: hidden slides remain editable but are marked clearly. */
+.slide-thumbnail-card.is-hidden-slide,
+.slide-sorter-card.is-hidden-slide{
+  opacity:.72;
+}
+.slide-thumbnail-card.is-hidden-slide .slide-thumbnail-preview,
+.slide-sorter-card.is-hidden-slide .slide-sorter-preview{
+  border-style:dashed;
+  background-image:repeating-linear-gradient(135deg,#f7f8fa 0,#f7f8fa 8px,#eef1f5 8px,#eef1f5 16px);
+}
+.slide-hidden-indicator{
+  align-self:flex-start;
+  padding:3px 7px;
+  border:1px solid #e6d6bd;
+  border-radius:10px;
+  background:#fcf3e9;
+  color:#8a5a27;
+  font-size:9px;
+  font-weight:700;
+  line-height:1.2;
+}
