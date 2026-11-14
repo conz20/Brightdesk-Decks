@@ -530,3 +530,141 @@ test('Decks puts the current slide layout control on Home and supports New Slide
   assert.match(app, /event\.shiftKey && event\.key\.toLowerCase\(\) === 'n'/);
   assert.match(app, /addSlide\(\);\s*return;/);
 });
+
+
+test('Decks migrates presentations without sections and preserves existing slide content', () => {
+  const { ensurePresentation } = require('../src/slides-service');
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Old slide', body: 'Do not lose this' }],
+    current: 0
+  });
+
+  assert.deepEqual(presentation.sections, []);
+  assert.equal(presentation.slides[0].title, 'Old slide');
+  assert.equal(presentation.slides[0].body, 'Do not lose this');
+  assert.equal(presentation.slides[0].sectionId, undefined);
+});
+
+test('Decks creates a named section from the selected slide to the next section boundary', () => {
+  const { createSection } = require('../src/slides-service');
+  const presentation = {
+    slides: [
+      { title: 'Intro', body: '' },
+      { title: 'Overview', body: '' },
+      { title: 'Details', body: '' },
+      { title: 'Appendix', body: '' }
+    ],
+    current: 1
+  };
+
+  const first = createSection(presentation, 'Main section');
+  assert.equal(first.name, 'Main section');
+  assert.equal(presentation.slides[0].sectionId, undefined);
+  assert.equal(presentation.slides[1].sectionId, first.id);
+  assert.equal(presentation.slides[2].sectionId, first.id);
+  assert.equal(presentation.slides[3].sectionId, first.id);
+});
+
+test('Decks creates a section without absorbing slides from a later named section', () => {
+  const { createSection } = require('../src/slides-service');
+  const presentation = {
+    sections: [{ id: 'appendix', name: 'Appendix' }],
+    slides: [
+      { title: 'Intro', body: '' },
+      { title: 'Main', body: '' },
+      { title: 'Appendix', body: '', sectionId: 'appendix' }
+    ],
+    current: 1
+  };
+
+  const section = createSection(presentation, 'Main');
+  assert.equal(presentation.slides[1].sectionId, section.id);
+  assert.equal(presentation.slides[2].sectionId, 'appendix');
+  assert.deepEqual(presentation.sections.map(item => item.name), ['Main', 'Appendix']);
+});
+
+test('Decks can rename sections, move slides between sections, and remove a section', () => {
+  const { createSection, renameSection, moveSlideToSection, deleteSection } = require('../src/slides-service');
+  const presentation = {
+    slides: [
+      { title: 'One', body: '' },
+      { title: 'Two', body: '' },
+      { title: 'Three', body: '' }
+    ],
+    current: 0
+  };
+
+  const first = createSection(presentation, 'First');
+  presentation.current = 2;
+  const second = createSection(presentation, 'Second');
+  renameSection(presentation, first.id, 'Opening');
+  moveSlideToSection(presentation, 2, first.id);
+
+  assert.equal(presentation.sections.find(item => item.id === first.id).name, 'Opening');
+  assert.equal(presentation.slides[2].sectionId, first.id);
+  assert.equal(presentation.sections.some(item => item.id === second.id), false);
+
+  deleteSection(presentation, first.id);
+  assert.deepEqual(presentation.sections, []);
+  assert.ok(presentation.slides.every(slide => slide.sectionId === undefined));
+});
+
+test('Decks rejects empty section names and unknown section targets', () => {
+  const { createSection, moveSlideToSection, renameSection } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'One', body: '' }], current: 0 };
+
+  assert.throws(() => createSection(presentation, '   '), /section name/);
+  assert.throws(() => moveSlideToSection(presentation, 0, 'missing'), /section/);
+  assert.throws(() => renameSection(presentation, 'missing', 'Renamed'), /section/);
+});
+
+test('Decks includes section metadata in undo and redo snapshots', () => {
+  const { createSection, createHistory } = require('../src/slides-service');
+  const presentation = {
+    slides: [{ title: 'One', body: '' }, { title: 'Two', body: '' }],
+    current: 0
+  };
+  const history = createHistory(presentation);
+
+  const section = createSection(presentation, 'Opening');
+  history.commit(presentation);
+  assert.equal(presentation.slides[0].sectionId, section.id);
+  assert.equal(history.undo(presentation), true);
+  assert.deepEqual(presentation.sections, []);
+  assert.equal(presentation.slides[0].sectionId, undefined);
+  assert.equal(history.redo(presentation), true);
+  assert.equal(presentation.slides[0].sectionId, section.id);
+});
+
+test('Decks includes section membership when restoring saved undo history', () => {
+  const { createSection, createHistory } = require('../src/slides-service');
+  const presentation = {
+    slides: [{ title: 'One', body: '' }, { title: 'Two', body: '' }],
+    current: 0
+  };
+  const firstHistory = createHistory(presentation);
+  createSection(presentation, 'Opening');
+  firstHistory.commit(presentation);
+
+  const reopened = JSON.parse(JSON.stringify(presentation));
+  const restored = createHistory(reopened, { state: firstHistory.exportState() });
+  assert.equal(restored.restored, true);
+  assert.equal(restored.undo(reopened), true);
+  assert.deepEqual(reopened.sections, []);
+  assert.equal(restored.redo(reopened), true);
+  assert.equal(reopened.sections[0].name, 'Opening');
+});
+
+test('Decks exposes section controls and section headings in both slide views', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+  assert.match(app, /New Section/);
+  assert.match(app, /Rename Section/);
+  assert.match(app, /Remove Section/);
+  assert.match(app, /moveSlideToSection/);
+  assert.match(app, /slide-section-heading/);
+  assert.match(app, /slide-sorter-section-heading/);
+});
+
