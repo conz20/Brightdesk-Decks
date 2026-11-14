@@ -68,3 +68,21 @@ test('Slide project and PowerPoint paths validate, save and restore solid backgr
   assert.match(slides, /function setSlideBackgroundColor/);
   assert.match(slides, /function getSlideBackgroundColor/);
 });
+
+
+test('Decks provides a guarded Reuse Slides workflow from the Home ribbon', () => {
+  const app = read('src/app.js');
+  const main = read('src/main.js');
+  const preload = read('src/preload.js');
+  const translations = read('src/i18n.js');
+
+  assert.match(app, /addButton\(slides, label\('reuseSlides'\), reuseSlides\)/);
+  assert.match(app, /async function reuseSlides\(\)/);
+  assert.match(app, /window\.brightdesk\.reuseSlides\(\)/);
+  assert.match(app, /insertSlidesAfterCurrent\(doc, data\.slides\)/);
+  assert.match(app, /commitSlideChange\(doc\)/);
+  assert.match(main, /ipcMain\.handle\('slides:reuse'/);
+  assert.match(main, /extensions: \['pptx'\]/);
+  assert.match(preload, /reuseSlides: \(\) => ipcRenderer\.invoke\('slides:reuse'\)/);
+  assert.match(translations, /'common\.reuseSlides':'Reuse slides/);
+});
