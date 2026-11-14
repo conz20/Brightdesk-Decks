@@ -1498,3 +1498,31 @@
   opacity:1;
   font-style:italic;
 }
+
+/* Brightdesk Decks: editable slide objects and contextual shape formatting. */
+.slide-stage{position:relative;overflow:hidden;isolation:isolate}
+.slide-title,.slide-body{position:relative;z-index:1}
+.slide-object{position:absolute;z-index:2;box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-width:12px;min-height:8px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;touch-action:none}
+.slide-object-rectangle,.slide-object-ellipse{box-shadow:0 2px 8px #1c284014}
+.slide-object-ellipse{border-radius:50%}
+.slide-object-line{min-height:0!important;box-shadow:none}
+.slide-object-text{align-items:flex-start;justify-content:flex-start;padding:5px;background:#ffffff15;white-space:pre-wrap;overflow:auto;outline:0;cursor:text}
+.slide-object-text:focus{outline:2px solid #8a79cf;outline-offset:2px}
+.slide-object-selected{outline:2px solid #6b5bc7!important;outline-offset:2px;z-index:4}
+.slide-object-drag-handle,.slide-object-resize-handle{position:absolute;display:none;z-index:6;width:22px;height:22px;border:1px solid #ffffff;border-radius:6px;background:#51478e;color:#fff;font:700 11px/1 sans-serif;box-shadow:0 1px 5px #11182740;padding:0;cursor:grab}
+.slide-object-drag-handle{top:-11px;left:-11px}
+.slide-object-resize-handle{right:-11px;bottom:-11px;cursor:nwse-resize}
+.slide-object-selected .slide-object-drag-handle,.slide-object-selected .slide-object-resize-handle{display:grid;place-items:center}
+.slide-object-count{align-self:center;padding:5px 8px;color:#7a7d8f;font-size:11px;white-space:nowrap}
+.slide-format-control{display:flex;align-items:center;gap:7px;padding:5px 8px;color:#5f6374;font-size:11px;white-space:nowrap}
+.slide-format-control input[type=color]{width:30px;height:26px;padding:2px;border:1px solid #dfe2eb;border-radius:6px;background:#fff;cursor:pointer}
+.slide-format-control input[type=number]{width:58px;padding:5px 6px;border:1px solid #dfe2eb;border-radius:6px;background:#fff;font:inherit;color:#33364b}
+.slide-format-control input:disabled{opacity:.4;cursor:not-allowed}
+.slide-object-layer,.presentation-object-layer{position:absolute;inset:0;z-index:3;pointer-events:none}
+.slide-object-layer>.slide-object,.presentation-object-layer>.slide-object{pointer-events:none;user-select:none}
+.presentation-slide{position:relative;overflow:hidden}
+.presentation-slide>.presentation-content,.presentation-slide>h1{position:relative;z-index:1}
+.presentation-object-layer{z-index:2}
+.presentation-footer{z-index:5}
+.presenter-slide-preview{position:relative}
+.presenter-preview-object-layer{z-index:3}
