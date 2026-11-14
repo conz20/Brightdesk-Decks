@@ -1221,18 +1221,86 @@ function presentSlides(startFromFirst = false) {
   const body = document.createElement('p');
   const footer = document.createElement('div');
   footer.className = 'presentation-footer';
-  footer.textContent = 'Click or press an arrow key to move · Esc to exit';
   slide.append(title, body, footer);
-  overlay.append(slide);
+
+  const picker = document.createElement('section');
+  picker.className = 'presentation-slide-picker';
+  picker.hidden = true;
+  picker.setAttribute('role', 'dialog');
+  picker.setAttribute('aria-label', 'Choose a slide');
+  const pickerHeader = document.createElement('header');
+  pickerHeader.className = 'presentation-slide-picker-header';
+  const pickerTitle = document.createElement('h2');
+  pickerTitle.textContent = 'All slides';
+  const pickerHint = document.createElement('p');
+  pickerHint.textContent = 'Choose a visible slide to continue the presentation.';
+  pickerHeader.append(pickerTitle, pickerHint);
+  const pickerGrid = document.createElement('div');
+  pickerGrid.className = 'presentation-slide-picker-grid';
+  const pickerButtons = [];
+
+  visibleSlides.forEach((slideIndex, visiblePosition) => {
+    const item = d.slides[slideIndex];
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'presentation-slide-picker-item';
+    button.dataset.visiblePosition = String(visiblePosition);
+    button.setAttribute('aria-label', `Go to slide ${slideIndex + 1}: ${item.title || 'Untitled slide'}`);
+    const number = document.createElement('span');
+    number.className = 'presentation-slide-picker-number';
+    number.textContent = String(slideIndex + 1);
+    const label = document.createElement('strong');
+    label.textContent = item.title.trim() || `Slide ${slideIndex + 1}`;
+    button.append(number, label);
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      position = visiblePosition;
+      pickerOpen = false;
+      draw();
+    });
+    pickerButtons.push(button);
+    pickerGrid.append(button);
+  });
+  picker.append(pickerHeader, pickerGrid);
+  overlay.append(slide, picker);
   document.body.append(overlay);
+
+  let closing = false;
+  let pickerOpen = false;
+  let numberBuffer = '';
+  let blankMode = null;
+
+  const togglePresentationBlank = mode => {
+    blankMode = blankMode === mode ? null : mode;
+    overlay.classList.toggle('is-blank-black', blankMode === 'black');
+    overlay.classList.toggle('is-blank-white', blankMode === 'white');
+  };
+
+  const showSlidePicker = () => {
+    pickerOpen = !pickerOpen;
+    if (pickerOpen) {
+      numberBuffer = '';
+      togglePresentationBlank(null);
+    }
+    draw();
+  };
 
   const draw = () => {
     const currentSlide = d.slides[currentSlideIndex()];
-    title.textContent = currentSlide.title;
-    body.textContent = currentSlide.body;
+    title.textContent = currentSlide.title || '';
+    body.textContent = currentSlide.body || '';
+    slide.hidden = pickerOpen;
+    picker.hidden = !pickerOpen;
+    pickerButtons.forEach(button => {
+      const active = Number(button.dataset.visiblePosition) === position;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-current', String(active));
+    });
+    footer.textContent = numberBuffer
+      ? `Go to slide ${numberBuffer} · Enter to jump · Backspace to edit · Esc to clear`
+      : 'Click or use arrows to move · G all slides · B black · W white · Esc to exit';
   };
 
-  let closing = false;
   const close = () => {
     if (closing) return;
     closing = true;
@@ -1257,26 +1325,86 @@ function presentSlides(startFromFirst = false) {
   };
 
   const key = event => {
-    if (event.key === 'Escape') {
-      close();
-      return;
-    }
+    if (closing) return;
     const keyName = event.key;
     const normalized = keyName.toLowerCase();
+
+    if (keyName === 'Escape') {
+      event.preventDefault();
+      if (pickerOpen) {
+        pickerOpen = false;
+        draw();
+      } else if (numberBuffer) {
+        numberBuffer = '';
+        draw();
+      } else {
+        close();
+      }
+      return;
+    }
+
+    if (!pickerOpen && !event.ctrlKey && !event.metaKey && !event.altKey && /^[0-9]$/.test(keyName)) {
+      event.preventDefault();
+      if (numberBuffer.length < 4) numberBuffer += keyName;
+      draw();
+      return;
+    }
+
+    if (!pickerOpen && numberBuffer && keyName === 'Backspace') {
+      event.preventDefault();
+      numberBuffer = numberBuffer.slice(0, -1);
+      draw();
+      return;
+    }
+
+    if (!pickerOpen && numberBuffer && keyName === 'Enter') {
+      event.preventDefault();
+      const requestedSlide = Number(numberBuffer);
+      const targetPosition = window.BrightdeskSlidesService.getVisibleSlidePosition(d, requestedSlide);
+      numberBuffer = '';
+      if (targetPosition >= 0) position = targetPosition;
+      draw();
+      return;
+    }
+
+    if (normalized === 'g') {
+      event.preventDefault();
+      showSlidePicker();
+      return;
+    }
+
+    if (normalized === 'b' || keyName === '.') {
+      event.preventDefault();
+      togglePresentationBlank('black');
+      return;
+    }
+
+    if (normalized === 'w' || keyName === ',') {
+      event.preventDefault();
+      togglePresentationBlank('white');
+      return;
+    }
+
+    if (pickerOpen) return;
+
     if (['ArrowRight', 'ArrowDown', 'PageDown', 'Enter', ' '].includes(keyName) || normalized === 'n') {
       event.preventDefault();
+      numberBuffer = '';
       position = Math.min(visibleSlides.length - 1, position + 1);
       draw();
     } else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(keyName) || normalized === 'p') {
       event.preventDefault();
+      numberBuffer = '';
       position = Math.max(0, position - 1);
       draw();
     } else if (keyName === 'Home') {
       event.preventDefault();
+      numberBuffer = '';
       position = 0;
       draw();
     } else if (keyName === 'End') {
       event.preventDefault();
+      numberBuffer = '';
       position = visibleSlides.length - 1;
       draw();
     }
@@ -1286,7 +1414,8 @@ function presentSlides(startFromFirst = false) {
     if (!closing && overlay.isConnected) overlay.dataset.state = 'open';
   });
   overlay.addEventListener('click', () => {
-    if (closing || overlay.dataset.state !== 'open') return;
+    if (closing || pickerOpen || overlay.dataset.state !== 'open') return;
+    numberBuffer = '';
     position = Math.min(visibleSlides.length - 1, position + 1);
     draw();
   });
