@@ -58,6 +58,7 @@ These are configured build targets, not confirmation that a package has passed i
 - Add speaker notes to each slide. Notes are saved with the local Brightdesk project and included when exporting to PowerPoint.
 - Choose from the included basic slide themes.
 - Start presentation mode from the first visible slide with F5 or from the selected slide with Shift+F5; use the arrow keys, Space, Page Up/Down, N/P, Home or End to navigate, and Escape to exit.
+- During a show, type a visible slide's number and press Enter to jump, press G to open the visible-slide picker, B or . for a black screen, and W or , for a white screen. Hidden slides stay out of the picker and cannot be targeted by number.
 - Import and export supported PowerPoint files; unsupported advanced objects and formatting may not be preserved.
 
 **Known boundaries:** Custom slide dimensions and nonstandard aspect ratios are not yet supported; PowerPoint files outside the two supported ratios currently import as Widescreen. Named sections are saved in Brightdesk project files but are not yet imported from or exported to PowerPoint files. Existing speaker notes are not yet imported from PowerPoint files. Slide masters, custom layout editing, shapes, pictures, charts, tables, transitions, embedded media, animations and full PowerPoint round-trip fidelity are not promised. The new workspace still requires genuine running-build visual review and native Windows, macOS and Linux verification before it can be described as release-ready.
