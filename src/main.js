@@ -85,7 +85,7 @@ function closePresenterWindow() {
 function createPresenterWindow(display, initialState) {
   presenterState = initialState;
   presenterWindowReady = false;
-  presenterWindow = new BrowserWindow({
+  const audienceWindow = new BrowserWindow({
     x: display.bounds.x,
     y: display.bounds.y,
     width: display.bounds.width,
@@ -103,21 +103,26 @@ function createPresenterWindow(display, initialState) {
       sandbox: true
     }
   });
-  presenterWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  presenterWindow.webContents.on('will-navigate', event => event.preventDefault());
-  presenterWindow.webContents.once('did-finish-load', () => {
-    if (!presenterWindow || presenterWindow.isDestroyed()) return;
+  presenterWindow = audienceWindow;
+  audienceWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  audienceWindow.webContents.on('will-navigate', event => event.preventDefault());
+  audienceWindow.webContents.once('did-finish-load', () => {
+    if (presenterWindow !== audienceWindow || audienceWindow.isDestroyed()) return;
     presenterWindowReady = true;
-    presenterWindow.webContents.send('presentation:update', presenterState);
-    presenterWindow.show();
+    audienceWindow.webContents.send('presentation:update', presenterState);
+    audienceWindow.show();
   });
-  presenterWindow.on('closed', () => {
+  audienceWindow.on('closed', () => {
+    if (presenterWindow !== audienceWindow) return;
     presenterWindow = null;
     presenterWindowReady = false;
     presenterState = null;
   });
-  presenterWindow.loadFile(path.join(__dirname, 'presentation.html'));
-  return presenterWindow;
+  audienceWindow.loadFile(path.join(__dirname, 'presentation.html')).catch(error => {
+    console.error('The audience presentation window could not be loaded.', error);
+    if (presenterWindow === audienceWindow) closePresenterWindow();
+  });
+  return audienceWindow;
 }
 
 function termsFilePath() { return path.join(app.getAppPath(), 'TERMS_AND_CONDITIONS.txt'); }
