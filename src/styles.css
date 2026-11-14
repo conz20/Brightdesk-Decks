@@ -1567,6 +1567,11 @@
 .slide-format-pane-toggle input{width:15px;height:15px;accent-color:#6259ad}
 
 .slide-format-pane-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.slide-format-pane-selection{display:grid;gap:4px;max-height:156px;overflow:auto}
+.slide-format-pane-selection-item{width:100%;min-width:0;padding:6px 8px;border:1px solid transparent;border-radius:6px;background:transparent;color:#536075;text-align:left;font:inherit;font-size:10px;cursor:pointer}
+.slide-format-pane-selection-item:hover{border-color:#e4d4c0;background:#fffaf4}
+.slide-format-pane-selection-item[aria-pressed=true]{border-color:#d9c1a4;background:#f8efe4;color:#80552b;font-weight:750}
+.slide-format-pane-selection-item:focus-visible{outline:2px solid #8575bd;outline-offset:2px}
 .slide-format-pane-action{min-width:0;padding:7px 6px;border:1px solid #dfe4eb;border-radius:6px;background:#fff;color:#465267;font:inherit;font-size:10px;font-weight:650;cursor:pointer}
 .slide-format-pane-action:hover:not(:disabled){border-color:#d5b994;background:#fffaf4;color:#80552b}
 .slide-format-pane-action:focus-visible{outline:2px solid #8575bd;outline-offset:2px}
