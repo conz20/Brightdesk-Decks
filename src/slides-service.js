@@ -25,6 +25,11 @@
   const DEFAULT_SLIDE_SIZE = 'widescreen';
   const SLIDE_THEMES = Object.freeze(['lavender', 'midnight', 'paper']);
   const DEFAULT_SLIDE_THEME = 'lavender';
+  const SLIDE_THEME_BACKGROUND_COLORS = Object.freeze({
+    lavender: '#FCF3E9',
+    midnight: '#202B3B',
+    paper: '#FFFFFF'
+  });
   const MAX_SECTION_NAME_LENGTH = 80;
   let sectionSequence = 0;
   let slideSequence = 0;
@@ -56,6 +61,23 @@
       && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
   }
 
+  function isValidSlideBackgroundColor(value) {
+    return typeof value === 'string' && /^#[0-9A-F]{6}$/i.test(value);
+  }
+
+  function getReadableTextColor(backgroundColor) {
+    if (!isValidSlideBackgroundColor(backgroundColor)) {
+      throw new RangeError('The selected slide background colour is not supported.');
+    }
+    const hex = backgroundColor.slice(1);
+    const channels = [0, 2, 4].map(offset => {
+      const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    return luminance < 0.179 ? '#FFFFFF' : '#111827';
+  }
+
   function normalizeSlide(slide, usedIds = null) {
     const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
     const layoutFromId = typeof source.layoutId === 'string' ? SLIDE_LAYOUT_BY_ID.get(source.layoutId) : null;
@@ -77,6 +99,11 @@
       layout,
       layoutId
     };
+    if (isValidSlideBackgroundColor(source.backgroundColor)) {
+      normalized.backgroundColor = source.backgroundColor.toUpperCase();
+    } else {
+      delete normalized.backgroundColor;
+    }
     if (source.hidden === true) normalized.hidden = true;
     else delete normalized.hidden;
     return normalized;
@@ -304,6 +331,26 @@
     }
     target.themeId = themeId;
     return target.themeId;
+  }
+
+  function setSlideBackgroundColor(presentation, index, backgroundColor) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (backgroundColor === null || backgroundColor === undefined) {
+      delete target.slides[index].backgroundColor;
+      return null;
+    }
+    if (!isValidSlideBackgroundColor(backgroundColor)) {
+      throw new RangeError('The selected slide background colour is not supported.');
+    }
+    target.slides[index].backgroundColor = backgroundColor.toUpperCase();
+    return target.slides[index].backgroundColor;
+  }
+
+  function getSlideBackgroundColor(presentation, index) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    return target.slides[index].backgroundColor || SLIDE_THEME_BACKGROUND_COLORS[target.themeId];
   }
 
   function createSection(presentation, name, startIndex) {
@@ -552,6 +599,7 @@
     DEFAULT_SLIDE_SIZE,
     SLIDE_THEMES,
     DEFAULT_SLIDE_THEME,
+    SLIDE_THEME_BACKGROUND_COLORS,
     ensurePresentation,
     addSlide,
     duplicateSlide,
@@ -562,6 +610,9 @@
     setCurrentSlide,
     setSlideSize,
     setSlideTheme,
+    setSlideBackgroundColor,
+    getSlideBackgroundColor,
+    getReadableTextColor,
     setSlideHidden,
     getVisibleSlideIndices,
     getVisibleSlidePosition,
