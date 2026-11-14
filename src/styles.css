@@ -705,3 +705,27 @@
   .slide-sorter-view{padding:16px 12px}
   .slide-layout-select{min-width:125px}
 }
+
+/* Brightdesk Decks: presentation slide-size presets. */
+.slide-size-select{
+  min-width:158px;
+  max-width:220px;
+  padding:7px 28px 7px 9px;
+  border:1px solid #d9dfe8;
+  border-radius:5px;
+  background:#fff;
+  color:#34445b;
+  font:inherit;
+  font-size:11px;
+  cursor:pointer;
+}
+.slide-size-select:focus-visible{
+  outline:2px solid #c47a2d;
+  outline-offset:2px;
+}
+.slide-stage.size-standard,
+.presentation-slide.size-standard,
+.slide-thumbnail-preview.size-standard,
+.slide-sorter-preview.size-standard{
+  aspect-ratio:4/3;
+}
