@@ -359,6 +359,11 @@
     assertSlideIndex(target, selected);
     const copy = copySlide(target.slides[selected]);
     copy.id = createSlideId(new Set(target.slides.map(item => item.id)));
+    const usedObjectIds = new Set();
+    copy.objects = (copy.objects || []).map(object => ({
+      ...object,
+      id: createSlideObjectId(usedObjectIds)
+    }));
     target.slides.splice(selected + 1, 0, copy);
     target.current = selected + 1;
     return copy;
@@ -513,6 +518,67 @@
     const target = ensurePresentation(presentation);
     assertSlideIndex(target, index);
     return target.slides[index].backgroundColor || SLIDE_THEME_BACKGROUND_COLORS[target.themeId];
+  }
+
+  function addSlideObject(presentation, slideIndex, definition = {}) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    const slide = target.slides[slideIndex];
+    if (slide.objects.length >= MAX_SLIDE_OBJECTS) {
+      throw new RangeError('A slide cannot contain more than ' + MAX_SLIDE_OBJECTS + ' objects.');
+    }
+    if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
+      throw new TypeError('A slide object definition is required.');
+    }
+    const usedIds = new Set(slide.objects.map(object => object.id));
+    const next = normalizeSlideObject(definition, usedIds);
+    if (!next) throw new RangeError('The slide object definition is invalid.');
+    slide.objects.push(next);
+    return next;
+  }
+
+  function updateSlideObject(presentation, slideIndex, objectId, patch = {}) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new TypeError('Slide object changes must be an object.');
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'id') || Object.prototype.hasOwnProperty.call(patch, 'type')) {
+      throw new TypeError('A slide object identity and type cannot be changed.');
+    }
+    const allowed = new Set(['x', 'y', 'width', 'height', 'fill', 'stroke', 'strokeWidth', 'text', 'fontSize', 'textColor', 'bold', 'rotation']);
+    if (Object.keys(patch).some(key => !allowed.has(key))) {
+      throw new TypeError('The slide object update contains an unsupported field.');
+    }
+    const slide = target.slides[slideIndex];
+    const objectIndex = slide.objects.findIndex(object => object.id === objectId);
+    if (objectIndex < 0) throw new RangeError('The slide object could not be found.');
+    const existing = slide.objects[objectIndex];
+    const usedIds = new Set(slide.objects.filter(object => object.id !== objectId).map(object => object.id));
+    const updated = normalizeSlideObject({ ...existing, ...patch, id: existing.id, type: existing.type }, usedIds);
+    if (!updated) throw new RangeError('The slide object changes are outside the supported limits.');
+    slide.objects[objectIndex] = updated;
+    return updated;
+  }
+
+  function moveSlideObject(presentation, slideIndex, objectId, x, y) {
+    return updateSlideObject(presentation, slideIndex, objectId, { x, y });
+  }
+
+  function deleteSlideObject(presentation, slideIndex, objectId) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    const slide = target.slides[slideIndex];
+    const objectIndex = slide.objects.findIndex(object => object.id === objectId);
+    if (objectIndex < 0) return false;
+    slide.objects.splice(objectIndex, 1);
+    return true;
+  }
+
+  function getSlideObjects(presentation, slideIndex) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, slideIndex);
+    return target.slides[slideIndex].objects.map(copySlide);
   }
 
   function createSection(presentation, name, startIndex) {
@@ -777,6 +843,13 @@
     setSlideBackgroundColor,
     getSlideBackgroundColor,
     getReadableTextColor,
+    SLIDE_OBJECT_TYPES,
+    MAX_SLIDE_OBJECTS,
+    addSlideObject,
+    updateSlideObject,
+    moveSlideObject,
+    deleteSlideObject,
+    getSlideObjects,
     setSlideHidden,
     getVisibleSlideIndices,
     getVisibleSlidePosition,
