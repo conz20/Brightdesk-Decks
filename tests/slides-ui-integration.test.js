@@ -140,3 +140,32 @@ test('Decks PowerPoint export creates native editable object shapes instead of r
   assert.match(files, /pptx\.ShapeType\.line/);
   assert.match(files, /objectName/);
 });
+
+
+test('Decks Transitions ribbon persists choices and labels each thumbnail', () => {
+  const app = read('src/app.js');
+  const styles = read('src/styles.css');
+  const service = read('src/slides-service.js');
+
+  assert.match(app, /slides: \['home', 'insert', 'draw', 'design', 'transitions'/);
+  assert.match(app, /function setSlideTransition\(transition\)/);
+  assert.match(app, /setSlideTransition\(activeDoc\(\), doc\.current, transition\)/);
+  assert.match(app, /slide-thumbnail-transition/);
+  assert.match(app, /slide-sorter-transition/);
+  assert.match(service, /function setSlideTransition\(/);
+  assert.match(styles, /\.slide-thumbnail-transition/);
+});
+
+test('Decks applies the selected slide transition during playback', () => {
+  const app = read('src/app.js');
+  const styles = read('src/styles.css');
+  const audience = read('src/presentation-window.js');
+  const audienceStyles = read('src/presentation-window.css');
+
+  assert.match(app, /slide-transition-\$\{transition\}/);
+  assert.match(styles, /@keyframes bd-slide-fade/);
+  assert.match(styles, /@keyframes bd-slide-push/);
+  assert.match(styles, /@keyframes bd-slide-wipe/);
+  assert.match(audience, /audience-transition-\$\{transition\}/);
+  assert.match(audienceStyles, /@keyframes bd-audience-fade/);
+});
