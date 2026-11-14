@@ -476,7 +476,6 @@ function renderSlideSorter(doc) {
   let draggedIndex = -1;
 
   doc.slides.forEach((slide, index) => {
-    const card = document.createElement('article');
     if (slide.sectionId && (index === 0 || doc.slides[index - 1].sectionId !== slide.sectionId)) {
       const section = doc.sections.find(item => item.id === slide.sectionId);
       if (section) {
