@@ -278,7 +278,7 @@ function renderToolbar() {
     }
   } else if (app === 'slides') {
     if (tab === 'home') {
-      const slides = group('slides'); addButton(slides, label('newSlide'), addSlide); addButton(slides, label('duplicate'), duplicateSlide); addButton(slides, label('delete'), deleteSlide);
+      const slides = group('slides'); addButton(slides, label('newSlide'), addSlide); addButton(slides, label('reuseSlides'), reuseSlides); addButton(slides, label('duplicate'), duplicateSlide); addButton(slides, label('delete'), deleteSlide);
       const editing = group('editing');
       const history = getSlideHistory(activeDoc());
       const undo = addButton(editing, label('undo'), undoSlideEdit);
@@ -1545,6 +1545,30 @@ function addSlide() {
   renderSlides();
   renderToolbar();
   persist();
+}
+async function reuseSlides() {
+  try {
+    const imported = await window.brightdesk.reuseSlides();
+    if (!imported) return;
+    if (imported.kind !== 'slides' || !Array.isArray(imported.slides)) {
+      throw new Error('The selected file does not contain reusable presentation slides.');
+    }
+
+    const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+    const result = window.BrightdeskSlidesService.insertSlidesAfterCurrent(doc, imported.slides);
+    commitSlideChange(doc);
+    persist();
+    renderSlides();
+    renderToolbar();
+
+    const slideWord = result.count === 1 ? 'slide' : 'slides';
+    setStatus(
+      result.count + ' ' + slideWord + ' reused after the selected slide. ' +
+      'The current theme and slide size are kept; some PowerPoint formatting or objects may not be preserved.'
+    );
+  } catch (error) {
+    alert('Could not reuse slides: ' + error.message);
+  }
 }
 function duplicateSlide() {
   const doc = activeDoc();
