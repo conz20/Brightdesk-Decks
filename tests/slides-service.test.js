@@ -21,7 +21,8 @@ const {
   addSlideObject,
   updateSlideObject,
   deleteSlideObject,
-  moveSlideObject
+  moveSlideObject,
+  insertSlidesAfterCurrent
 } = require('../src/slides-service');
 
 function withoutSlideId(slide) {
@@ -1336,4 +1337,99 @@ test('Decks includes structured objects in undo and redo history', () => {
   assert.equal(presentation.slides[0].objects.length, 0);
   assert.equal(history.redo(presentation), true);
   assert.equal(presentation.slides[0].objects[0].id, object.id);
+});
+
+
+test('Decks inserts reused slides after the selected slide, preserves supported content and keeps the destination presentation settings', () => {
+  const presentation = ensurePresentation({
+    slideSize: 'standard',
+    themeId: 'midnight',
+    slides: [
+      { id: 'slide-before', title: 'Before', body: 'First' },
+      { id: 'slide-selected', title: 'Selected', body: 'Current' },
+      { id: 'slide-after', title: 'After', body: 'Last' }
+    ],
+    current: 1
+  });
+  const importedSlides = [
+    {
+      id: 'slide-before',
+      title: 'Reused comparison',
+      body: 'Left column',
+      bodySecondary: 'Right column',
+      notes: 'Explain the comparison.',
+      layout: 'two-content',
+      backgroundColor: '#182A3A',
+      hidden: true,
+      objects: [{
+        id: 'object-source',
+        type: 'rectangle',
+        x: 10, y: 15, width: 30, height: 20,
+        fill: '#F3EBDD', stroke: '#26364D', strokeWidth: 1,
+        text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0
+      }]
+    },
+    {
+      title: 'Reused close',
+      body: 'Thank you',
+      notes: 'Invite questions.',
+      layout: 'title'
+    }
+  ];
+  const sourceBefore = JSON.parse(JSON.stringify(importedSlides));
+
+  const result = insertSlidesAfterCurrent(presentation, importedSlides);
+
+  assert.deepEqual(presentation.slides.map(slide => slide.title), [
+    'Before', 'Selected', 'Reused comparison', 'Reused close', 'After'
+  ]);
+  assert.equal(result.count, 2);
+  assert.equal(result.firstIndex, 2);
+  assert.equal(result.lastIndex, 3);
+  assert.equal(presentation.current, 2);
+  assert.equal(presentation.slideSize, 'standard');
+  assert.equal(presentation.themeId, 'midnight');
+  assert.equal(presentation.slides[2].layout, 'two-content');
+  assert.equal(presentation.slides[2].bodySecondary, 'Right column');
+  assert.equal(presentation.slides[2].notes, 'Explain the comparison.');
+  assert.equal(presentation.slides[2].backgroundColor, '#182A3A');
+  assert.equal(presentation.slides[2].hidden, true);
+  assert.equal(presentation.slides[2].objects.length, 1);
+  assert.notEqual(presentation.slides[2].id, 'slide-before');
+  assert.notEqual(presentation.slides[2].objects[0].id, 'object-source');
+  assert.equal(presentation.slides[3].layout, 'title');
+  assert.notDeepEqual(presentation.slides[2], importedSlides[0]);
+  assert.deepEqual(importedSlides, sourceBefore);
+});
+
+test('Decks rejects empty or malformed reused slide collections without changing the deck', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Keep this', body: 'Current content' }],
+    current: 0
+  });
+  const before = JSON.parse(JSON.stringify(presentation));
+
+  assert.throws(() => insertSlidesAfterCurrent(presentation, []), /at least one slide/i);
+  assert.throws(() => insertSlidesAfterCurrent(presentation, [null]), /valid slide collection/i);
+  assert.deepEqual(presentation, before);
+});
+
+test('Decks refuses to reuse slides beyond the 2,000-slide presentation limit', () => {
+  const presentation = ensurePresentation({
+    slides: Array.from({ length: 2000 }, (_, index) => ({
+      id: 'slide-existing-' + index,
+      title: 'Existing ' + index,
+      body: ''
+    })),
+    current: 0
+  });
+  const beforeIds = presentation.slides.map(slide => slide.id);
+
+  assert.throws(
+    () => insertSlidesAfterCurrent(presentation, [{ title: 'Over the limit', body: '' }]),
+    /2,000-slide limit/i
+  );
+  assert.deepEqual(presentation.slides.map(slide => slide.id), beforeIds);
+  assert.equal(presentation.slides.length, 2000);
+  assert.equal(presentation.current, 0);
 });
