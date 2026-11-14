@@ -137,6 +137,114 @@
     return target.current;
   }
 
+  function cloneSnapshot(presentation) {
+    return {
+      slides: copySlide(presentation.slides),
+      current: presentation.current
+    };
+  }
+
+  function snapshotEquals(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function restoreSnapshot(presentation, snapshot) {
+    presentation.slides = copySlide(snapshot.slides);
+    presentation.current = snapshot.current;
+    return presentation;
+  }
+
+  function createHistory(presentation, options = {}) {
+    const target = ensurePresentation(presentation);
+    const requestedLimit = Number.isInteger(options.limit) ? options.limit : 100;
+    const limit = Math.max(1, Math.min(requestedLimit, 500));
+    const groupWindow = 750;
+    let current = cloneSnapshot(target);
+    const past = [];
+    const future = [];
+    let lastGroup = null;
+    let lastAt = 0;
+
+    function trimPast() {
+      while (past.length > limit) past.shift();
+    }
+
+    function commit(nextPresentation, group = null, now = Date.now()) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      const next = cloneSnapshot(nextTarget);
+      if (snapshotEquals(next, current)) {
+        lastGroup = null;
+        lastAt = 0;
+        return false;
+      }
+
+      const grouped = typeof group === 'string'
+        && group.length > 0
+        && group === lastGroup
+        && Number.isFinite(now)
+        && now >= lastAt
+        && now - lastAt <= groupWindow;
+
+      if (!grouped) {
+        past.push(current);
+        trimPast();
+      }
+
+      current = next;
+      future.length = 0;
+      lastGroup = typeof group === 'string' && group.length > 0 ? group : null;
+      lastAt = Number.isFinite(now) ? now : Date.now();
+      return true;
+    }
+
+    function undo(nextPresentation) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      if (past.length === 0) return false;
+      future.push(current);
+      current = past.pop();
+      lastGroup = null;
+      lastAt = 0;
+      restoreSnapshot(nextTarget, current);
+      return true;
+    }
+
+    function redo(nextPresentation) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      if (future.length === 0) return false;
+      past.push(current);
+      trimPast();
+      current = future.pop();
+      lastGroup = null;
+      lastAt = 0;
+      restoreSnapshot(nextTarget, current);
+      return true;
+    }
+
+    function sync(nextPresentation) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      current.current = nextTarget.current;
+    }
+
+    function reset(nextPresentation) {
+      const nextTarget = ensurePresentation(nextPresentation);
+      current = cloneSnapshot(nextTarget);
+      past.length = 0;
+      future.length = 0;
+      lastGroup = null;
+      lastAt = 0;
+    }
+
+    return {
+      canUndo: () => past.length > 0,
+      canRedo: () => future.length > 0,
+      commit,
+      undo,
+      redo,
+      sync,
+      reset
+    };
+  }
+
   return {
     SLIDE_LAYOUTS,
     DEFAULT_LAYOUT,
@@ -147,6 +255,7 @@
     updateSlide,
     setSlideLayout,
     moveSlide,
-    setCurrentSlide
+    setCurrentSlide,
+    createHistory
   };
 });
