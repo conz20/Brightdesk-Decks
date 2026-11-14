@@ -81,3 +81,38 @@ test('Brightdesk project import rejects malformed JSON with a clear error', asyn
     await assert.rejects(openOfficeFile(filePath), /not valid JSON/);
   } finally { await fs.rm(directory, { recursive: true, force: true }); }
 });
+
+
+test('Brightdesk project validation checks speaker notes in Decks slides', () => {
+  assert.doesNotThrow(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Slide', body: 'Content', notes: 'Presenter cue' }], current: 0 } }
+  }));
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Slide', body: 'Content', notes: { invalid: true } }], current: 0 } }
+  }), /invalid slide/);
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Slide', body: 'Content', notes: 'x'.repeat(10 * 1024 * 1024 + 1) }], current: 0 } }
+  }), /invalid slide/);
+});
+
+test('PPTX export includes speaker notes for each slide', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-notes-'));
+  const filePath = path.join(directory, 'speaker-notes.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [
+        { title: 'Welcome', body: 'Hello', notes: 'Introduce the team and welcome everyone.' },
+        { title: 'Plan', body: 'Next steps', notes: 'Pause for questions after this slide.' }
+      ]
+    }, filePath);
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const firstNotes = await archive.file('ppt/notesSlides/notesSlide1.xml')?.async('string');
+    const secondNotes = await archive.file('ppt/notesSlides/notesSlide2.xml')?.async('string');
+    assert.match(firstNotes || '', /Introduce the team and welcome everyone/);
+    assert.match(secondNotes || '', /Pause for questions after this slide/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
