@@ -48,6 +48,81 @@ if (!commonJsonStorage) throw new Error('Brightdesk common storage helper was no
 
 function clone(value) { return commonJsonStorage.cloneJsonValue(value); }
 function activeDoc() { return state.docs[state.app]; }
+
+function stripSlidePictureData(value) {
+  const output = clone(value);
+  const docs = output?.docs && typeof output.docs === 'object' ? Object.values(output.docs) : [output];
+  for (const doc of docs) {
+    if (!Array.isArray(doc?.slides)) continue;
+    for (const slide of doc.slides) {
+      for (const object of slide?.objects || []) {
+        if (object?.type === 'image' && object.imageAssetId) delete object.imageData;
+      }
+    }
+  }
+  return output;
+}
+
+function getPicturesFromSlides(slides) {
+  if (!Array.isArray(slides)) return [];
+  return slides.flatMap(slide => Array.isArray(slide?.objects)
+    ? slide.objects.filter(object => object?.type === 'image')
+    : []);
+}
+
+function getHistorySnapshots(historyState) {
+  return [
+    historyState?.current,
+    ...(Array.isArray(historyState?.past) ? historyState.past : []),
+    ...(Array.isArray(historyState?.future) ? historyState.future : [])
+  ].filter(Boolean);
+}
+
+async function hydrateSavedSlidePictures(doc = state.docs.slides) {
+  if (!doc || !Array.isArray(doc.slides)) return { loaded: 0, missing: 0 };
+  const history = getSlideHistory(doc);
+  const savedHistory = history.exportState();
+  const pictures = [
+    ...getPicturesFromSlides(doc.slides),
+    ...getHistorySnapshots(savedHistory).flatMap(snapshot => getPicturesFromSlides(snapshot.slides))
+  ];
+  const assetIdsByObjectId = new Map();
+  for (const object of pictures) {
+    if (object.imageAssetId || !object.imageData || !object.id) continue;
+    let assetId = assetIdsByObjectId.get(object.id);
+    if (!assetId) {
+      assetId = await window.brightdesk.storeSlidePicture(object.imageData);
+      assetIdsByObjectId.set(object.id, assetId);
+    }
+    object.imageAssetId = assetId;
+  }
+  if (assetIdsByObjectId.size) history.hydrateAssetIds(assetIdsByObjectId);
+
+  const allPictures = [
+    ...getPicturesFromSlides(doc.slides),
+    ...getHistorySnapshots(history.exportState()).flatMap(snapshot => getPicturesFromSlides(snapshot.slides))
+  ];
+  const assetIds = [...new Set(allPictures.map(object => object.imageAssetId).filter(Boolean))];
+  const imageDataByAssetId = new Map();
+  let missing = 0;
+  await Promise.all(assetIds.map(async assetId => {
+    try {
+      const imageData = await window.brightdesk.loadSlidePicture(assetId);
+      if (typeof imageData === 'string') imageDataByAssetId.set(assetId, imageData);
+      else missing++;
+    } catch (error) {
+      missing++;
+      console.warn('A saved slide picture could not be loaded.', error);
+    }
+  }));
+  getPicturesFromSlides(doc.slides).forEach(object => {
+    const imageData = imageDataByAssetId.get(object.imageAssetId);
+    if (imageData) object.imageData = imageData;
+  });
+  history.hydrateImages(imageDataByAssetId);
+  return { loaded: imageDataByAssetId.size, missing };
+}
+
 function readSavedSlideHistory() {
   try {
     const raw = localStorage.getItem(SLIDE_HISTORY_STORAGE_KEY);
@@ -62,7 +137,7 @@ function writeSavedSlideHistory(doc) {
   const history = slideHistories.get(doc);
   if (!history) return;
   try {
-    localStorage.setItem(SLIDE_HISTORY_STORAGE_KEY, JSON.stringify(history.exportState()));
+    localStorage.setItem(SLIDE_HISTORY_STORAGE_KEY, JSON.stringify(stripSlidePictureData(history.exportState())));
   } catch (error) {
     console.warn('Slide history could not be saved on this device.', error);
   }
@@ -116,8 +191,8 @@ function redoSlideEdit() { return applySlideHistory('redo'); }
 function setStatus(message) { $('save-status').textContent = message; }
 function persist() {
   try {
-    commonJsonStorage.writeJsonValue(localStorage, 'brightdesk-docs-v3', state.docs);
-    if (state.app === 'slides') writeSavedSlideHistory(state.docs.slides);
+    commonJsonStorage.writeJsonValue(localStorage, 'brightdesk-docs-v3', stripSlidePictureData(state.docs));
+    writeSavedSlideHistory(state.docs.slides);
     setStatus('Saved on this device');
   } catch (error) {
     setStatus('Could not save locally');
