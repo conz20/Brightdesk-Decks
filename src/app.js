@@ -300,6 +300,7 @@ function renderToolbar() {
       layoutSelect.value = currentSlide.layout;
       layoutSelect.addEventListener('change', () => setSlideLayout(layoutSelect.value));
       layoutGroup.append(layoutSelect);
+      addButton(layoutGroup, 'Reset Layout', resetCurrentSlideLayout);
 
       const sectionGroup = ribbonGroup(toolbar, 'Sections');
       const sectionDoc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
@@ -328,10 +329,10 @@ function renderToolbar() {
       sectionGroup.append(sectionSelect);
     } else if (tab === 'insert') {
       const insert = group('slideContent');
-      addButton(insert, label('titleSlide'), () => addSlideWithLayout('title', 'Presentation title', 'Add a subtitle'));
-      addButton(insert, label('textSlide'), () => addSlideWithLayout('title-content', 'New section', 'Add your points here'));
-      addButton(insert, 'Two content', () => addSlideWithLayout('two-content', 'Compare the options', 'First column'));
-      addButton(insert, 'Section header', () => addSlideWithLayout('section-header', 'New section', 'Add a short introduction'));
+      addButton(insert, label('titleSlide'), () => addSlideWithLayout('title'));
+      addButton(insert, label('textSlide'), () => addSlideWithLayout('title-content'));
+      addButton(insert, 'Two content', () => addSlideWithLayout('two-content'));
+      addButton(insert, 'Section header', () => addSlideWithLayout('section-header'));
     } else if (tab === 'design') {
       const design = group('themes');
       const presentation = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
@@ -474,9 +475,14 @@ function setSlideBackgroundColor(backgroundColor) {
     setStatus(error.message);
   }
 }
-function addSlideWithLayout(layout, title, body) {
+function addSlideWithLayout(layout) {
   const doc = activeDoc();
-  const slide = window.BrightdeskSlidesService.addSlide(doc, { title, body, layout });
+  const slide = window.BrightdeskSlidesService.addSlide(doc, {
+    title: '',
+    body: '',
+    bodySecondary: '',
+    layout
+  });
   commitSlideChange(doc);
   renderSlides();
   renderToolbar();
@@ -576,6 +582,7 @@ function renderSlideOutline(doc) {
     const fields = document.createElement('div');
     fields.className = 'slide-outline-fields';
 
+    const layoutDefinition = slidesService.getSlideLayoutDefinition(slide.layout);
     const titleLabel = document.createElement('label');
     titleLabel.className = 'slide-outline-field';
     const titleCaption = document.createElement('span');
@@ -584,7 +591,7 @@ function renderSlideOutline(doc) {
     titleInput.className = 'slide-outline-title';
     titleInput.rows = 1;
     titleInput.value = slide.title || '';
-    titleInput.placeholder = `Slide ${index + 1} title`;
+    titleInput.placeholder = layoutDefinition.titlePlaceholder;
     titleInput.setAttribute('aria-label', `Slide ${index + 1} title`);
     titleInput.lang = state.proofingLanguage;
     titleInput.addEventListener('input', () => {
@@ -605,7 +612,7 @@ function renderSlideOutline(doc) {
     bodyInput.className = 'slide-outline-body';
     bodyInput.rows = 3;
     bodyInput.value = slide.body || '';
-    bodyInput.placeholder = 'Add slide content';
+    bodyInput.placeholder = layoutDefinition.bodyPlaceholder;
     bodyInput.setAttribute('aria-label', `Slide ${index + 1} content`);
     bodyInput.lang = state.proofingLanguage;
     bodyInput.addEventListener('input', () => {
@@ -625,7 +632,7 @@ function renderSlideOutline(doc) {
       secondaryInput.className = 'slide-outline-body slide-outline-body-secondary';
       secondaryInput.rows = 3;
       secondaryInput.value = slide.bodySecondary || '';
-      secondaryInput.placeholder = 'Add second-column content';
+      secondaryInput.placeholder = layoutDefinition.secondaryBodyPlaceholder || '';
       secondaryInput.setAttribute('aria-label', `Slide ${index + 1} second content column`);
       secondaryInput.lang = state.proofingLanguage;
       secondaryInput.addEventListener('input', () => {
@@ -720,7 +727,7 @@ function renderSlideSorter(doc) {
     const previewTitle = document.createElement('b');
     previewTitle.textContent = slide.title.trim() || `Slide ${index + 1}`;
     const previewBody = document.createElement('span');
-    previewBody.textContent = slide.body.trim().slice(0, 120) || 'Add content';
+    previewBody.textContent = slide.body.trim().slice(0, 120) || slidesService.getSlideLayoutDefinition(slide.layout).bodyPlaceholder;
     const previewTextColor = slide.backgroundColor
       ? window.BrightdeskSlidesService.getReadableTextColor(slide.backgroundColor)
       : '';
@@ -819,6 +826,21 @@ function setSlideView(view) {
   state.slideView = view;
   renderSlides();
   renderToolbar();
+}
+
+function resetCurrentSlideLayout() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  try {
+    const slide = window.BrightdeskSlidesService.resetSlideLayout(doc, doc.current);
+    const definition = window.BrightdeskSlidesService.getSlideLayoutDefinition(slide.layout);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`${definition.label} layout restored. Existing slide text and speaker notes were kept.`);
+  } catch (error) {
+    setStatus(error.message);
+  }
 }
 
 function setSlideLayout(layout) {
@@ -1028,7 +1050,7 @@ function renderSlides() {
     const previewBody = document.createElement('span');
     previewBody.className = 'slide-thumbnail-summary';
     const previewSummary = [item.body.trim(), item.bodySecondary.trim()].filter(Boolean).join(' · ');
-    previewBody.textContent = previewSummary.slice(0, 88) || 'Add text to this slide';
+    previewBody.textContent = previewSummary.slice(0, 88) || slidesService.getSlideLayoutDefinition(item.layout).bodyPlaceholder;
     preview.append(previewTitle, previewBody);
     select.append(number, preview);
     if (item.hidden) {
@@ -1119,17 +1141,20 @@ function renderSlides() {
     : '';
   stage.style.backgroundColor = slide.backgroundColor || '';
 
+  const layoutDefinition = slidesService.getSlideLayoutDefinition(slide.layout);
   const title = document.createElement('textarea');
   title.className = 'slide-title';
   title.value = slide.title || '';
-  title.setAttribute('aria-label', 'Slide title');
+  title.placeholder = layoutDefinition.titlePlaceholder;
+  title.setAttribute('aria-label', layoutDefinition.titleLabel);
   title.lang = state.proofingLanguage;
   title.style.color = slideTextColor;
 
   const body = document.createElement('textarea');
   body.className = 'slide-body slide-body-primary';
   body.value = slide.body || '';
-  body.setAttribute('aria-label', 'Slide text');
+  body.placeholder = layoutDefinition.bodyPlaceholder;
+  body.setAttribute('aria-label', layoutDefinition.bodyLabel);
   body.lang = state.proofingLanguage;
   body.style.color = slideTextColor;
 
@@ -1154,7 +1179,8 @@ function renderSlides() {
     secondary = document.createElement('textarea');
     secondary.className = 'slide-body slide-body-secondary';
     secondary.value = slide.bodySecondary || '';
-    secondary.setAttribute('aria-label', 'Second content column');
+    secondary.placeholder = layoutDefinition.secondaryBodyPlaceholder || '';
+    secondary.setAttribute('aria-label', layoutDefinition.secondaryBodyLabel || 'Second content column');
     secondary.lang = state.proofingLanguage;
     secondary.style.color = slideTextColor;
     secondary.addEventListener('input', () => {
