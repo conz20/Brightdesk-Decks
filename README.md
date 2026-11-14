@@ -56,6 +56,7 @@ These are configured build targets, not confirmation that a package has passed i
 - Undo and redo slide edits with toolbar controls or Ctrl/Cmd+Z, Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z. Consecutive typing in the same field is grouped into a single undo step. The bounded history is saved separately on this device and restored when Decks is reopened; importing a different presentation clears the previous deck's history.
 - Add, duplicate and delete slides. Hide or unhide slides from the Slide Show ribbon; hidden slides stay editable but are skipped during presentation playback and remain hidden in PowerPoint export.
 - Add speaker notes to each slide. Notes are saved with the local Brightdesk project, included when exporting to PowerPoint, and imported as plain text from each slide's linked PowerPoint notes page.
+- Each slide has a stable, unique local identity. Older presentations receive IDs when opened; IDs stay with their slides through reordering, and duplicated slides receive a fresh ID. IDs are saved in Brightdesk project files.
 - Choose from the included basic slide themes.
 - Start presentation mode from the first visible slide with F5 or from the selected slide with Shift+F5; use the arrow keys, Space, Page Up/Down, N/P, Home or End to navigate, and Escape to exit.
 - During a show, type a visible slide's number and press Enter to jump, press G to open the visible-slide picker, B or . for a black screen, and W or , for a white screen. Hidden slides stay out of the picker and cannot be targeted by number.
