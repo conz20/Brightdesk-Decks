@@ -979,14 +979,21 @@ function insertSlideObject(type) {
 
 function selectSlideObject(objectId) {
   state.selectedSlideObjectId = objectId || null;
-  const selected = Boolean(objectId);
-  if (selected) state.ribbonTab = 'shapeFormat';
+  const selectedObject = getSelectedSlideObject();
+  if (selectedObject) state.ribbonTab = 'shapeFormat';
   else if (state.ribbonTab === 'shapeFormat') state.ribbonTab = 'draw';
   slideWrap.querySelectorAll('[data-slide-object]').forEach(element => {
     const active = element.dataset.slideObject === state.selectedSlideObjectId;
     element.classList.toggle('slide-object-selected', active);
     element.setAttribute('aria-pressed', String(active));
   });
+  const canvasRow = slideWrap.querySelector('.slide-editor-canvas-row');
+  const existingPane = canvasRow?.querySelector('.slide-format-pane');
+  existingPane?.remove();
+  if (canvasRow) {
+    canvasRow.classList.toggle('has-format-pane', Boolean(selectedObject));
+    if (selectedObject) canvasRow.append(renderSlideFormatPane(selectedObject));
+  }
   renderToolbar();
 }
 
