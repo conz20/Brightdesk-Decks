@@ -635,6 +635,8 @@ function findFirstXmlNode(value, key) {
 function readPptxRgbColour(value) {
   const node = findFirstXmlNode(value, 'srgbClr');
   const hex = typeof node?.['@_val'] === 'string' ? node['@_val'] : '';
+  const alpha = Number(node?.alpha?.['@_val']);
+  if (Number.isFinite(alpha) && alpha <= 0) return null;
   return /^[0-9A-F]{6}$/i.test(hex) ? '#' + hex.toUpperCase() : null;
 }
 
@@ -652,13 +654,15 @@ function readPptxSlideObjects(xml, slideWidthEmu, slideHeightEmu) {
     return { objects: [], text: [] };
   }
 
-  const shapes = asArray(parsed.sld?.cSld?.spTree?.sp);
+  const tree = parsed.sld?.cSld?.spTree;
+  const shapes = [...asArray(tree?.sp), ...asArray(tree?.cxnSp)];
   const objects = [];
   const objectText = [];
   const seenIds = new Set();
   for (const shape of shapes) {
     if (!isPlainObject(shape)) continue;
-    const name = String(shape.nvSpPr?.cNvPr?.['@_name'] || '');
+    const shapeProperties = shape.nvSpPr || shape.nvCxnSpPr;
+    const name = String(shapeProperties?.cNvPr?.['@_name'] || '');
     const match = name.match(/^Brightdesk (text|rectangle|ellipse|line) (object-[A-Za-z0-9][A-Za-z0-9._:-]{0,99})$/);
     if (!match) continue;
     const [, type, id] = match;
@@ -688,8 +692,8 @@ function readPptxSlideObjects(xml, slideWidthEmu, slideHeightEmu) {
     if (
       (type === 'rectangle' && geometry !== 'rect') ||
       (type === 'ellipse' && geometry !== 'ellipse') ||
-      (type === 'line' && geometry !== 'line') ||
-      (type === 'text' && shape.nvSpPr?.cNvSpPr?.['@_txBox'] !== '1')
+      (type === 'line' && geometry !== 'line' && !(shape.nvCxnSpPr && !geometry)) ||
+      (type === 'text' && String(shape.nvSpPr?.cNvSpPr?.['@_txBox'] || '') !== '1')
     ) continue;
 
     const fill = readPptxRgbColour(shape.spPr?.solidFill);
