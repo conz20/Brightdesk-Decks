@@ -1267,7 +1267,11 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   presenterTitle.textContent = 'Presenter View';
   const presenterProgress = document.createElement('p');
   presenterProgress.className = 'presenter-progress';
-  presenterHeading.append(presenterTitle, presenterProgress);
+  const presenterDisplayStatus = document.createElement('p');
+  presenterDisplayStatus.className = 'presenter-display-status';
+  presenterDisplayStatus.setAttribute('role', 'status');
+  presenterDisplayStatus.textContent = 'Checking for a second display…';
+  presenterHeading.append(presenterTitle, presenterProgress, presenterDisplayStatus);
 
   const presenterElapsed = document.createElement('span');
   presenterElapsed.className = 'presenter-elapsed';
@@ -1394,6 +1398,22 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   let numberBuffer = '';
   let blankMode = null;
   let showMessage = '';
+  let audienceDisplayActive = false;
+
+  const createAudienceState = () => {
+    const currentSlide = d.slides[currentSlideIndex()];
+    return {
+      slide: {
+        title: currentSlide.title || '',
+        body: currentSlide.body || '',
+        bodySecondary: currentSlide.bodySecondary || '',
+        layout: currentSlide.layout || 'title-content'
+      },
+      themeId: d.themeId || 'lavender',
+      slideSize: d.slideSize || 'widescreen',
+      blankMode
+    };
+  };
 
   const togglePresentationBlank = mode => {
     numberBuffer = '';
@@ -1401,6 +1421,9 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
     blankMode = blankMode === mode ? null : mode;
     overlay.classList.toggle('is-blank-black', blankMode === 'black');
     overlay.classList.toggle('is-blank-white', blankMode === 'white');
+    if (presenterMode && audienceDisplayActive && window.brightdesk?.updatePresenter) {
+      window.brightdesk.updatePresenter(createAudienceState());
+    }
   };
 
   const showSlidePicker = () => {
@@ -1456,6 +1479,9 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
         noNextSlide.hidden = false;
       }
     }
+    if (presenterMode && audienceDisplayActive && window.brightdesk?.updatePresenter) {
+      window.brightdesk.updatePresenter(createAudienceState());
+    }
   };
 
   const refreshPresenterElapsed = () => {
@@ -1474,6 +1500,10 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   const close = () => {
     if (closing) return;
     closing = true;
+    if (presenterMode && window.brightdesk?.endPresenter) {
+      window.brightdesk.endPresenter().catch(() => {});
+      audienceDisplayActive = false;
+    }
     if (elapsedTimer !== null) {
       window.clearInterval(elapsedTimer);
       elapsedTimer = null;
@@ -1632,6 +1662,26 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   if (presenterMode) {
     refreshPresenterElapsed();
     elapsedTimer = window.setInterval(refreshPresenterElapsed, 1000);
+    if (window.brightdesk?.startPresenter) {
+      window.brightdesk.startPresenter(createAudienceState()).then(result => {
+        if (closing) {
+          if (result?.ok) window.brightdesk.endPresenter().catch(() => {});
+          return;
+        }
+        if (result?.ok) {
+          audienceDisplayActive = true;
+          const displayName = result.display?.label || 'second display';
+          presenterDisplayStatus.textContent = `Audience slide is showing on the ${displayName}.`;
+          window.brightdesk.updatePresenter(createAudienceState());
+        } else {
+          presenterDisplayStatus.textContent = 'No second display detected. Notes and preview remain on this screen.';
+        }
+      }).catch(() => {
+        presenterDisplayStatus.textContent = 'The audience display could not be opened. Notes and preview remain on this screen.';
+      });
+    } else {
+      presenterDisplayStatus.textContent = 'The audience display is not available in this build.';
+    }
   }
 }
 function todoTasks() { return Array.isArray(activeDoc().tasks) ? activeDoc().tasks : (activeDoc().tasks = []); }
