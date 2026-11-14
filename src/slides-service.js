@@ -77,8 +77,10 @@
     midnight: '#202B3B',
     paper: '#FFFFFF'
   });
-  const SLIDE_OBJECT_TYPES = Object.freeze(['text', 'rectangle', 'ellipse', 'line']);
+  const SLIDE_OBJECT_TYPES = Object.freeze(['text', 'rectangle', 'ellipse', 'line', 'image']);
   const MAX_SLIDE_OBJECTS = 1000;
+  const MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024;
+  const MAX_SLIDE_IMAGE_BYTES_PER_SLIDE = 15 * 1024 * 1024;
   const MAX_SLIDE_OBJECT_TEXT_LENGTH = 10000;
   const MAX_SLIDE_OBJECT_FONT_SIZE = 96;
   const MAX_SLIDE_OBJECT_STROKE_WIDTH = 12;
@@ -140,6 +142,28 @@
       || (typeof value === 'string' && /^#[0-9A-F]{6}$/i.test(value));
   }
 
+  function estimateSlideImageBytes(imageData) {
+    if (typeof imageData !== 'string') return 0;
+    const base64 = imageData.slice(imageData.indexOf(',') + 1);
+    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+    return Math.max(0, Math.floor(base64.length * 3 / 4) - padding);
+  }
+
+  function isValidSlideImageData(imageData) {
+    if (typeof imageData !== 'string' || imageData.length > 7 * 1024 * 1024) return false;
+    const match = imageData.match(/^data:image\\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+    if (!match || match[1].length % 4 !== 0) return false;
+    const bytes = estimateSlideImageBytes(imageData);
+    return bytes > 0 && bytes <= MAX_SLIDE_IMAGE_BYTES;
+  }
+
+  function getSlideImageBytes(objects, excludedId = null) {
+    return objects.reduce((total, object) => {
+      if (object.id === excludedId || object.type !== 'image') return total;
+      return total + estimateSlideImageBytes(object.imageData);
+    }, 0);
+  }
+
   function normalizeSlideObject(object, usedIds = new Set()) {
     if (!object || typeof object !== 'object' || Array.isArray(object)) return null;
     if (!SLIDE_OBJECT_TYPES.includes(object.type)) return null;
@@ -169,8 +193,19 @@
     const textColor = object.textColor === undefined ? '#26364D' : object.textColor;
     const bold = object.bold === undefined ? false : object.bold;
     const rotation = object.rotation === undefined ? 0 : object.rotation;
+    const imageData = object.type === 'image' ? object.imageData : undefined;
+    const imageName = object.type === 'image' ? (object.imageName ?? 'Picture') : undefined;
+    const imageWidth = object.type === 'image' ? object.imageWidth : undefined;
+    const imageHeight = object.type === 'image' ? object.imageHeight : undefined;
 
     if (!isValidObjectColour(fill, true) || !isValidObjectColour(stroke, true)) return null;
+    if (object.type === 'image' && (
+      !isValidSlideImageData(imageData) ||
+      typeof imageName !== 'string' || !imageName.trim() || imageName.length > 255 ||
+      !Number.isInteger(imageWidth) || imageWidth < 1 || imageWidth > 20000 ||
+      !Number.isInteger(imageHeight) || imageHeight < 1 || imageHeight > 20000 ||
+      imageWidth * imageHeight > 40000000
+    )) return null;
     if (typeof strokeWidth !== 'number' || !Number.isFinite(strokeWidth) || strokeWidth < 0 || strokeWidth > MAX_SLIDE_OBJECT_STROKE_WIDTH) return null;
     if (typeof text !== 'string' || text.length > MAX_SLIDE_OBJECT_TEXT_LENGTH) return null;
     if (typeof fontSize !== 'number' || !Number.isFinite(fontSize) || fontSize < 8 || fontSize > MAX_SLIDE_OBJECT_FONT_SIZE) return null;
@@ -194,7 +229,8 @@
       fontSize,
       textColor: textColor.toUpperCase(),
       bold,
-      rotation
+      rotation,
+      ...(object.type === 'image' ? { imageData, imageName, imageWidth, imageHeight } : {})
     };
   }
 
@@ -202,9 +238,14 @@
     if (!Array.isArray(objects)) return [];
     const usedIds = new Set();
     const normalized = [];
+    let totalImageBytes = 0;
     for (const object of objects.slice(0, MAX_SLIDE_OBJECTS)) {
       const safe = normalizeSlideObject(object, usedIds);
-      if (safe) normalized.push(safe);
+      if (!safe) continue;
+      const imageBytes = safe.type === 'image' ? estimateSlideImageBytes(safe.imageData) : 0;
+      if (totalImageBytes + imageBytes > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) continue;
+      totalImageBytes += imageBytes;
+      normalized.push(safe);
     }
     return normalized;
   }
@@ -611,6 +652,9 @@
     const usedIds = new Set(slide.objects.map(object => object.id));
     const next = normalizeSlideObject(definition, usedIds);
     if (!next) throw new RangeError('The slide object definition is invalid.');
+    if (getSlideImageBytes(slide.objects) + (next.type === 'image' ? estimateSlideImageBytes(next.imageData) : 0) > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
+      throw new RangeError('A slide cannot contain more than 15 MB of embedded pictures.');
+    }
     slide.objects.push(next);
     return next;
   }
@@ -624,7 +668,7 @@
     if (Object.prototype.hasOwnProperty.call(patch, 'id') || Object.prototype.hasOwnProperty.call(patch, 'type')) {
       throw new TypeError('A slide object identity and type cannot be changed.');
     }
-    const allowed = new Set(['x', 'y', 'width', 'height', 'fill', 'stroke', 'strokeWidth', 'text', 'fontSize', 'textColor', 'bold', 'rotation']);
+    const allowed = new Set(['x', 'y', 'width', 'height', 'fill', 'stroke', 'strokeWidth', 'text', 'fontSize', 'textColor', 'bold', 'rotation', 'imageData', 'imageName', 'imageWidth', 'imageHeight']);
     if (Object.keys(patch).some(key => !allowed.has(key))) {
       throw new TypeError('The slide object update contains an unsupported field.');
     }
@@ -633,8 +677,14 @@
     if (objectIndex < 0) throw new RangeError('The slide object could not be found.');
     const existing = slide.objects[objectIndex];
     const usedIds = new Set(slide.objects.filter(object => object.id !== objectId).map(object => object.id));
+    if (existing.type !== 'image' && ['imageData', 'imageName', 'imageWidth', 'imageHeight'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) {
+      throw new TypeError('Only picture objects can change picture data.');
+    }
     const updated = normalizeSlideObject({ ...existing, ...patch, id: existing.id, type: existing.type }, usedIds);
     if (!updated) throw new RangeError('The slide object changes are outside the supported limits.');
+    if (getSlideImageBytes(slide.objects, objectId) + (updated.type === 'image' ? estimateSlideImageBytes(updated.imageData) : 0) > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
+      throw new RangeError('A slide cannot contain more than 15 MB of embedded pictures.');
+    }
     slide.objects[objectIndex] = updated;
     return updated;
   }
@@ -948,6 +998,8 @@
     getReadableTextColor,
     SLIDE_OBJECT_TYPES,
     MAX_SLIDE_OBJECTS,
+    MAX_SLIDE_IMAGE_BYTES,
+    MAX_SLIDE_IMAGE_BYTES_PER_SLIDE,
     addSlideObject,
     updateSlideObject,
     moveSlideObject,
