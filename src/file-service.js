@@ -21,6 +21,12 @@ const SUPPORTED_SLIDE_SIZES = new Set(['widescreen', 'standard']);
 const SUPPORTED_SLIDE_THEMES = new Set(['lavender', 'midnight', 'paper']);
 const SLIDE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 const SLIDE_BACKGROUND_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
+const SUPPORTED_SLIDE_OBJECT_TYPES = new Set(['text', 'rectangle', 'ellipse', 'line']);
+const SLIDE_OBJECT_ID_PATTERN = /^object-[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
+const MAX_SLIDE_OBJECTS_PER_SLIDE = 1_000;
+const MAX_SLIDE_OBJECT_TEXT_LENGTH = 10_000;
+const MAX_SLIDE_OBJECT_FONT_SIZE = 96;
+const MAX_SLIDE_OBJECT_STROKE_WIDTH = 12;
 
 /*
  * Load format-specific libraries only when the corresponding format is used.
@@ -174,9 +180,40 @@ function validateProject(project) {
           (slide.backgroundColor !== undefined && (
             typeof slide.backgroundColor !== 'string' ||
             !SLIDE_BACKGROUND_COLOR_PATTERN.test(slide.backgroundColor)
+          )) ||
+          (slide.objects !== undefined && (
+            !Array.isArray(slide.objects) ||
+            slide.objects.length > MAX_SLIDE_OBJECTS_PER_SLIDE
           ))
         ) {
           throw new Error('The Brightdesk Decks presentation contains an invalid slide.');
+        }
+        if (slide.objects !== undefined) {
+          const objectIds = new Set();
+          for (const object of slide.objects) {
+            const validObject = isPlainObject(object)
+              && typeof object.id === 'string'
+              && SLIDE_OBJECT_ID_PATTERN.test(object.id)
+              && !objectIds.has(object.id)
+              && SUPPORTED_SLIDE_OBJECT_TYPES.has(object.type)
+              && Number.isFinite(object.x) && object.x >= 0
+              && Number.isFinite(object.y) && object.y >= 0
+              && Number.isFinite(object.width) && object.width > 0
+              && Number.isFinite(object.height) && object.height > 0
+              && object.width <= 100 && object.height <= 100
+              && object.x + object.width <= 100
+              && object.y + object.height <= 100
+              && (object.fill === undefined || object.fill === null || (typeof object.fill === 'string' && SLIDE_BACKGROUND_COLOR_PATTERN.test(object.fill)))
+              && (object.stroke === undefined || object.stroke === null || (typeof object.stroke === 'string' && SLIDE_BACKGROUND_COLOR_PATTERN.test(object.stroke)))
+              && (object.text === undefined || (typeof object.text === 'string' && object.text.length <= MAX_SLIDE_OBJECT_TEXT_LENGTH))
+              && (object.strokeWidth === undefined || (Number.isFinite(object.strokeWidth) && object.strokeWidth >= 0 && object.strokeWidth <= MAX_SLIDE_OBJECT_STROKE_WIDTH))
+              && (object.fontSize === undefined || (Number.isFinite(object.fontSize) && object.fontSize >= 8 && object.fontSize <= MAX_SLIDE_OBJECT_FONT_SIZE))
+              && (object.textColor === undefined || (typeof object.textColor === 'string' && SLIDE_BACKGROUND_COLOR_PATTERN.test(object.textColor)))
+              && (object.bold === undefined || typeof object.bold === 'boolean')
+              && (object.rotation === undefined || (Number.isFinite(object.rotation) && object.rotation >= -360 && object.rotation <= 360));
+            if (!validObject) throw new Error('The Brightdesk Decks presentation contains an invalid slide object.');
+            objectIds.add(object.id);
+          }
         }
         if (slide.id !== undefined) slideIds.add(slide.id);
       }
