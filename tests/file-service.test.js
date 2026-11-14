@@ -1004,3 +1004,56 @@ test('Brightdesk PowerPoint object round-trip restores editable object types, ge
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Decks preserves supported slide transitions across PowerPoint export and import', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-transition-roundtrip-'));
+  const filePath = path.join(directory, 'transitions.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [
+        { title: 'No transition', body: 'First', transition: 'none' },
+        { title: 'Fade', body: 'Second', transition: 'fade' },
+        { title: 'Push', body: 'Third', transition: 'push' },
+        { title: 'Wipe', body: 'Fourth', transition: 'wipe' }
+      ]
+    }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const fadeXml = await archive.file('ppt/slides/slide2.xml').async('string');
+    const pushXml = await archive.file('ppt/slides/slide3.xml').async('string');
+    const wipeXml = await archive.file('ppt/slides/slide4.xml').async('string');
+    assert.match(fadeXml, /<p:transition[^>]*>\s*<p:fade\s*\/?\s*>\s*<\/p:transition>/);
+    assert.match(pushXml, /<p:transition[^>]*>\s*<p:push\b/);
+    assert.match(wipeXml, /<p:transition[^>]*>\s*<p:wipe\b/);
+
+    const reopened = await openOfficeFile(filePath);
+    assert.deepEqual(reopened.slides.map(slide => slide.transition), ['none', 'fade', 'push', 'wipe']);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Decks ignores unsupported PowerPoint transition names and defaults them to none', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-unknown-transition-'));
+  const filePath = path.join(directory, 'unknown-transition.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [{ title: 'Transition', body: 'Content', transition: 'fade' }]
+    }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const slideXml = await archive.file('ppt/slides/slide1.xml').async('string');
+    archive.file('ppt/slides/slide1.xml', slideXml.replace(/<p:fade\s*\/?\s*>/, '<p:morph/>'));
+    await fs.writeFile(filePath, await archive.generateAsync({ type: 'nodebuffer' }));
+
+    const reopened = await openOfficeFile(filePath);
+    assert.equal(reopened.slides[0].transition, 'none');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
