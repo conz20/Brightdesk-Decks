@@ -216,3 +216,20 @@ test('Decks Format Shape pane lists overlapping objects for direct selection', (
   assert.match(app, /selectSlideObject\(item\.id\)/);
   assert.match(styles, /\.slide-format-pane-selection/);
 });
+
+
+test('Decks Draw ribbon imports local pictures and renders them as contained images', () => {
+  const app = read('src/app.js');
+  const styles = read('src/styles.css');
+  const audience = read('src/presentation-window.js');
+
+  assert.match(app, /async function insertSlidePicture\(\)/);
+  assert.match(app, /window\.brightdesk\.openSlidePicture\(\)/);
+  assert.match(app, /type: 'image'/);
+  assert.match(app, /createElement\('img'\)/);
+  assert.match(app, /object\.imageData/);
+  assert.match(styles, /\.slide-object-image-content/);
+  assert.match(audience, /audience-object-image/);
+  assert.match(audience, /image\.src = object\.imageData/);
+});
+
