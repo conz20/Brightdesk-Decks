@@ -1218,10 +1218,19 @@ function presentSlides(startFromFirst = false) {
   const slide = document.createElement('div');
   slide.className = `presentation-slide size-${d.slideSize || 'widescreen'}`;
   const title = document.createElement('h1');
+  const content = document.createElement('div');
+  content.className = 'presentation-content';
   const body = document.createElement('p');
+  body.className = 'presentation-body-primary';
+  const columns = document.createElement('div');
+  columns.className = 'presentation-content-columns';
+  const secondaryBody = document.createElement('p');
+  secondaryBody.className = 'presentation-body-secondary';
+  columns.append(body, secondaryBody);
+  content.append(columns);
   const footer = document.createElement('div');
   footer.className = 'presentation-footer';
-  slide.append(title, body, footer);
+  slide.append(title, content, footer);
 
   const picker = document.createElement('section');
   picker.className = 'presentation-slide-picker';
@@ -1291,8 +1300,11 @@ function presentSlides(startFromFirst = false) {
 
   const draw = () => {
     const currentSlide = d.slides[currentSlideIndex()];
+    slide.className = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${state.slideTheme} layout-${currentSlide.layout || 'title-content'}`;
     title.textContent = currentSlide.title || '';
     body.textContent = currentSlide.body || '';
+    secondaryBody.textContent = currentSlide.bodySecondary || '';
+    secondaryBody.hidden = currentSlide.layout !== 'two-content';
     slide.hidden = pickerOpen;
     picker.hidden = !pickerOpen;
     pickerButtons.forEach(button => {
