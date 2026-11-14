@@ -129,3 +129,18 @@ A feature is not complete because a button or mock-up exists. Each milestone nee
 This audit is based on the seven supplied public documentation pages, the publicly described DeckCraft screenshots/product material, and the Brightdesk-Decks `main` source files inspected for the current workspace, slide renderer, package configuration and file service. It is a source-level comparison, not a runtime REA trace of DeckCraft. No DeckCraft binary, process, network capture or proprietary source was inspected. Features described as absent are absent from the inspected Brightdesk baseline, not a claim that no experimental branch or unmerged PR contains related work.
 
 The existing open Brightdesk-Decks pull requests include separate design, slide-service, printing, help and test-discovery work. This plan must be reconciled with those branches before implementation is merged; do not duplicate or overwrite their work.
+
+
+## Implementation progress — 14 November 2026
+
+The first part of P0 is now represented by draft implementation work in [Brightdesk-Decks PR #15](https://github.com/conz20/Brightdesk-Decks/pull/15):
+
+- A thumbnail navigator with slide selection.
+- Drag-and-drop slide reordering, with Move earlier / Move later controls as a keyboard-accessible alternative.
+- Per-slide speaker notes stored in the existing local presentation model.
+- Speaker notes included in PowerPoint export.
+- F5 / Shift+F5 presentation shortcuts.
+
+**Status: implemented on a review branch, not merged or verified.** The existing first-run and legacy slide data is migrated in memory with notes defaulting to an empty string. PowerPoint speaker-note import is still open. No genuine running-build screenshot comparison, exact Node.js 24.22.2 test run, current-head CI pass, or native Windows/macOS/Linux acceptance is claimed.
+
+The remainder of P0 is still open: slide layouts and placeholders, undo/redo, a complete Slide Sorter, and stronger file-format regression coverage. Continue in the existing PR where appropriate; do not create duplicate slide services or competing branches for the same functionality.
