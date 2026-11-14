@@ -1141,7 +1141,7 @@ test('Decks skips external and cropped PowerPoint picture relationships without 
     const relationshipName = 'ppt/slides/_rels/slide1.xml.rels';
     const relationshipXml = await externalArchive.file(relationshipName).async('string');
     const externalXml = relationshipXml.replace(
-      /(<Relationship\\b(?=[^>]*\\bType=["'][^"']*\\/image["'])[^>]*?)\\sTarget=["'][^"']*["']/,
+      /(<Relationship\b(?=[^>]*\bType=["'][^"']*\/image["'])[^>]*?)\sTarget=["'][^"']*["']/,
       '$1 Target="https://example.invalid/picture.png" TargetMode="External"'
     );
     assert.notEqual(externalXml, relationshipXml);
@@ -1153,7 +1153,10 @@ test('Decks skips external and cropped PowerPoint picture relationships without 
     const croppedArchive = await JSZip.loadAsync(await fs.readFile(sourcePath));
     const slideName = 'ppt/slides/slide1.xml';
     const slideXml = await croppedArchive.file(slideName).async('string');
-    const croppedXml = slideXml.replace(/<a:srcRect\\s*\\/?\\s*>/, '<a:srcRect l="1000"/>');
+    let croppedXml = slideXml.replace(/<a:srcRect\b[^>]*\/>/, '<a:srcRect l="1000"/>');
+    if (croppedXml === slideXml) {
+      croppedXml = slideXml.replace(/(<p:blipFill\b[^>]*>)/, '$1<a:srcRect l="1000"/>');
+    }
     assert.notEqual(croppedXml, slideXml);
     croppedArchive.file(slideName, croppedXml);
     await fs.writeFile(croppedPath, await croppedArchive.generateAsync({ type: 'nodebuffer' }));
