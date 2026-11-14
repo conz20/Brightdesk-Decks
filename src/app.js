@@ -104,17 +104,17 @@ async function hydrateSavedSlidePictures(doc = state.docs.slides) {
     ...getPicturesFromSlides(doc.slides),
     ...getHistorySnapshots(savedHistory).flatMap(snapshot => getPicturesFromSlides(snapshot.slides))
   ];
-  const assetIdsByObjectId = new Map();
+  const assetIdsByImageData = new Map();
   for (const object of pictures) {
-    if (object.imageAssetId || !object.imageData || !object.id) continue;
-    let assetId = assetIdsByObjectId.get(object.id);
+    if (object.imageAssetId || !object.imageData) continue;
+    let assetId = assetIdsByImageData.get(object.imageData);
     if (!assetId) {
       assetId = await window.brightdesk.storeSlidePicture(object.imageData);
-      assetIdsByObjectId.set(object.id, assetId);
+      assetIdsByImageData.set(object.imageData, assetId);
     }
     object.imageAssetId = assetId;
   }
-  if (assetIdsByObjectId.size) history.hydrateAssetIds(assetIdsByObjectId);
+  if (assetIdsByImageData.size) history.hydrateAssetIds(assetIdsByImageData);
 
   const allPictures = [
     ...getPicturesFromSlides(doc.slides),
