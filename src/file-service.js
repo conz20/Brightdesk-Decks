@@ -775,7 +775,7 @@ async function exportOfficeFile(payload, filePath) {
         });
         if (data.body) slide.addText(data.body, {
           x: x(1.0), y: 3.65, w: w(10.5), h: 1.0,
-          fontFace: 'Aptos', fontSize: 21, color: theme.body,
+          fontFace: 'Aptos', fontSize: 21, color: customTextColor || theme.body,
           valign: 'top', margin: 0.04
         });
       } else if (layout === 'two-content') {
@@ -786,19 +786,19 @@ async function exportOfficeFile(payload, filePath) {
         });
         slide.addText(data.body || '', {
           x: x(0.8), y: 1.7, w: w(5.45), h: 4.9,
-          fontFace: 'Aptos', fontSize: 20, color: theme.body,
+          fontFace: 'Aptos', fontSize: 20, color: customTextColor || theme.body,
           valign: 'top', margin: 0.08, breakLine: false
         });
         slide.addText(data.bodySecondary || '', {
           x: x(6.95), y: 1.7, w: w(5.45), h: 4.9,
-          fontFace: 'Aptos', fontSize: 20, color: theme.body,
+          fontFace: 'Aptos', fontSize: 20, color: customTextColor || theme.body,
           valign: 'top', margin: 0.08, breakLine: false
         });
       } else {
         slide.addText(data.title || '', titleStyle);
         slide.addText(data.body || '', {
           x: x(0.85), y: 1.7, w: w(11.7), h: 4.9,
-          fontFace: 'Aptos', fontSize: 20, color: theme.body,
+          fontFace: 'Aptos', fontSize: 20, color: customTextColor || theme.body,
           breakLine: false, valign: 'top', margin: 0.08
         });
       }
