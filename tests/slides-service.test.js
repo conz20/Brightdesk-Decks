@@ -17,6 +17,7 @@ const {
   createHistory,
   setSlideTheme,
   setSlideBackgroundColor,
+  setSlideTransition,
   getReadableTextColor,
   addSlideObject,
   updateSlideObject,
