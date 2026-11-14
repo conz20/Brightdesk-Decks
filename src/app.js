@@ -419,15 +419,15 @@ function renderToolbar() {
     } else if (tab === 'transitions') {
       const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
       const currentSlide = doc.slides[doc.current];
-      const transitionGroup = ribbonGroup(toolbar, 'Slide transition');
+      const transitionGroup = ribbonGroup(toolbar, label('transition'));
       const transitionSelect = document.createElement('select');
       transitionSelect.className = 'slide-transition-select';
       transitionSelect.setAttribute('aria-label', 'Slide transition');
       [
-        ['none', 'No transition'],
-        ['fade', 'Fade'],
-        ['push', 'Push'],
-        ['wipe', 'Wipe']
+        ['none', label('transitionNone')],
+        ['fade', label('transitionFade')],
+        ['push', label('transitionPush')],
+        ['wipe', label('transitionWipe')]
       ].forEach(([value, text]) => {
         const option = document.createElement('option');
         option.value = value;
@@ -439,7 +439,7 @@ function renderToolbar() {
       transitionGroup.append(transitionSelect);
       const hint = document.createElement('span');
       hint.className = 'slide-transition-hint';
-      hint.textContent = 'This transition plays when the slide appears';
+      hint.textContent = label('transitionHint');
       transitionGroup.append(hint);
     } else if (tab === 'design') {
       const design = group('themes');
