@@ -11,6 +11,7 @@ const KNOWN_APP_IDS = new Set(appCatalog.map(app => app.id));
 const EXCLUDED_APP_IDS = new Set(['teams', 'outlook', 'onedrive']);
 const SUPPORTED_SLIDE_LAYOUTS = new Set(['title', 'title-content', 'two-content', 'section-header']);
 const SUPPORTED_SLIDE_SIZES = new Set(['widescreen', 'standard']);
+const SUPPORTED_SLIDE_THEMES = new Set(['lavender', 'midnight', 'paper']);
 const SLIDE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 
 /*
@@ -124,6 +125,9 @@ function validateProject(project) {
     }
     if (appId === 'slides' && doc.slideSize !== undefined && !SUPPORTED_SLIDE_SIZES.has(doc.slideSize)) {
       throw new Error('The Brightdesk Decks presentation has an invalid slide size.');
+    }
+    if (appId === 'slides' && doc.themeId !== undefined && !SUPPORTED_SLIDE_THEMES.has(doc.themeId)) {
+      throw new Error('The Brightdesk Decks presentation has an invalid theme.');
     }
     if (appId === 'slides' && doc.slides !== undefined) {
       if (!Array.isArray(doc.slides) || doc.slides.length > MAX_SLIDES) throw new Error('The Brightdesk Decks presentation has an invalid slide collection.');
@@ -482,6 +486,21 @@ async function exportOfficeFile(payload, filePath) {
     const horizontalScale = isStandard ? 0.75 : 1;
     const x = value => value * horizontalScale;
     const w = value => value * horizontalScale;
+    const themeId = SUPPORTED_SLIDE_THEMES.has(payload.themeId) ? payload.themeId : 'lavender';
+    const theme = {
+      lavender: {
+        background: 'FCF3E9', surface: 'FFFFFF', title: '26364D',
+        body: '4A5A70', accent: '9A5E20', divider: 'E5E8EE'
+      },
+      midnight: {
+        background: '202B3B', surface: '202B3B', title: 'FFFFFF',
+        body: 'D0D9E6', accent: 'D0D9E6', divider: '35445B'
+      },
+      paper: {
+        background: 'FFFFFF', surface: 'FFFFFF', title: '26364D',
+        body: '53647B', accent: '53647B', divider: 'E1E1E1'
+      }
+    }[themeId];
     const pptx = new PptxGenJS();
     pptx.layout = isStandard ? 'LAYOUT_4x3' : 'LAYOUT_WIDE';
     pptx.author = 'Brightdesk'; pptx.subject = 'Brightdesk presentation';
@@ -489,11 +508,11 @@ async function exportOfficeFile(payload, filePath) {
       const slide = pptx.addSlide();
       if (data.hidden === true) slide.hidden = true;
       const layout = SUPPORTED_SLIDE_LAYOUTS.has(data.layout) ? data.layout : 'title-content';
-      slide.background = { color: layout === 'title' ? 'FCF3E9' : 'FFFFFF' };
+      slide.background = { color: layout === 'title' ? theme.background : theme.surface };
       const titleStyle = {
         x: x(0.72), y: 0.48, w: w(11.9), h: 0.9,
         fontFace: 'Aptos Display', fontSize: 30, bold: true,
-        color: '26364D', margin: 0.04, breakLine: false
+        color: theme.title, margin: 0.04, breakLine: false
       };
       if (layout === 'title') {
         slide.addText(data.title || '', {
@@ -502,28 +521,28 @@ async function exportOfficeFile(payload, filePath) {
         });
         if (data.body) slide.addText(data.body, {
           x: x(1.4), y: 3.75, w: w(10.5), h: 0.9,
-          fontFace: 'Aptos', fontSize: 22, color: '68758A',
+          fontFace: 'Aptos', fontSize: 22, color: theme.body,
           align: 'center', valign: 'mid', margin: 0.04
         });
       } else if (layout === 'section-header') {
         slide.addText(data.title || '', {
           ...titleStyle, x: x(0.95), y: 2.1, w: w(11.0), h: 1.4,
-          fontSize: 36, color: '9A5E20', valign: 'mid'
+          fontSize: 36, color: theme.accent, valign: 'mid'
         });
         if (data.body) slide.addText(data.body, {
           x: x(1.0), y: 3.65, w: w(10.5), h: 1.0,
-          fontFace: 'Aptos', fontSize: 21, color: '68758A',
+          fontFace: 'Aptos', fontSize: 21, color: theme.body,
           valign: 'top', margin: 0.04
         });
       } else if (layout === 'two-content') {
         slide.addText(data.title || '', titleStyle);
         slide.addShape(pptx.ShapeType.line, {
           x: x(6.65), y: 1.7, w: w(0), h: 4.9,
-          line: { color: 'E5E8EE', width: 1 }
+          line: { color: theme.divider, width: 1 }
         });
         slide.addText(data.body || '', {
           x: x(0.8), y: 1.7, w: w(5.45), h: 4.9,
-          fontFace: 'Aptos', fontSize: 20, color: '4A5A70',
+          fontFace: 'Aptos', fontSize: 20, color: theme.body,
           valign: 'top', margin: 0.08, breakLine: false
         });
         slide.addText(data.bodySecondary || '', {
