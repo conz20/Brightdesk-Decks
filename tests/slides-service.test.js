@@ -13,12 +13,17 @@ const {
   setCurrentSlide
 } = require('../src/slides-service');
 
+function withoutSlideId(slide) {
+  const { id, ...content } = slide;
+  return content;
+}
+
 test('Decks creates an editable presentation with one starter slide', () => {
   const presentation = ensurePresentation({ title: 'Quarterly review', slides: [], current: 0 });
 
   assert.equal(presentation.title, 'Quarterly review');
   assert.equal(presentation.slides.length, 1);
-  assert.deepEqual(presentation.slides[0], { title: 'Slide 1', body: '', bodySecondary: '', notes: '', layout: 'title-content' });
+  assert.deepEqual(withoutSlideId(presentation.slides[0]), { title: 'Slide 1', body: '', bodySecondary: '', notes: '', layout: 'title-content' });
   assert.equal(presentation.current, 0);
 });
 
@@ -29,7 +34,7 @@ test('Decks migrates legacy slides without losing titles or body text', () => {
     current: 0
   });
 
-  assert.deepEqual(presentation.slides[0], {
+  assert.deepEqual(withoutSlideId(presentation.slides[0]), {
     title: 'Welcome',
     body: 'Existing content',
     bodySecondary: '',
@@ -52,7 +57,7 @@ test('Decks adds a slide and selects the new slide', () => {
 
   const slide = addSlide(presentation, { title: 'Priorities', body: 'Plan the work' });
 
-  assert.deepEqual(slide, { title: 'Priorities', body: 'Plan the work', bodySecondary: '', notes: '', layout: 'title-content' });
+  assert.deepEqual(withoutSlideId(slide), { title: 'Priorities', body: 'Plan the work', bodySecondary: '', notes: '', layout: 'title-content' });
   assert.equal(presentation.slides.length, 2);
   assert.equal(presentation.current, 1);
 });
@@ -63,7 +68,7 @@ test('Decks duplicates the selected slide and its speaker notes without sharing 
 
   const copy = duplicateSlide(presentation);
 
-  assert.deepEqual(copy, original);
+  assert.deepEqual(withoutSlideId(copy), original);
   assert.notEqual(copy, original);
   assert.equal(presentation.slides.length, 2);
   assert.equal(presentation.current, 1);
@@ -105,7 +110,7 @@ test('Decks edits slide title, body and speaker notes as text', () => {
     notes: 'Pause here for questions.'
   });
 
-  assert.deepEqual(updated, {
+  assert.deepEqual(withoutSlideId(updated), {
     title: 'Final',
     body: 'Approved text',
     bodySecondary: '',
@@ -127,7 +132,7 @@ test('Decks reorders slides and keeps the same selected slide active', () => {
 
   const moved = moveSlide(presentation, 1, 2);
 
-  assert.deepEqual(moved, { title: 'Two', body: 'Content', bodySecondary: '', notes: 'Speaker notes', layout: 'title-content' });
+  assert.deepEqual(withoutSlideId(moved), { title: 'Two', body: 'Content', bodySecondary: '', notes: 'Speaker notes', layout: 'title-content' });
   assert.deepEqual(presentation.slides.map(slide => slide.title), ['One', 'Three', 'Two']);
   assert.equal(presentation.current, 2);
   assert.equal(presentation.slides[presentation.current].notes, 'Speaker notes');
