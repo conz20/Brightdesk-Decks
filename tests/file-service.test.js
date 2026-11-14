@@ -323,3 +323,10 @@ test('PPTX export retains widescreen 16:9 dimensions by default', async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk project validation checks slide size even before a slide collection is created', () => {
+  assert.throws(() => validateProject({
+    docs: { slides: { title: 'Unfinished deck', slideSize: 'panoramic' } }
+  }), /invalid slide size/);
+});
