@@ -12,7 +12,8 @@ const {
   setSlideLayout,
   setCurrentSlide,
   getPresenterSnapshot,
-  createHistory
+  createHistory,
+  setSlideTheme
 } = require('../src/slides-service');
 
 function withoutSlideId(slide) {
@@ -1012,4 +1013,44 @@ test('Decks keeps stable slide IDs through undo and redo of duplication and reor
   assert.deepEqual(presentation.slides.map(slide => slide.id), [
     duplicateId, originalIds[1], originalIds[0]
   ]);
+});
+
+
+test('Decks defaults legacy presentations to the lavender theme and keeps the selected theme', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Legacy', body: 'Existing text' }],
+    current: 0
+  });
+  assert.equal(presentation.themeId, 'lavender');
+
+  setSlideTheme(presentation, 'midnight');
+  assert.equal(presentation.themeId, 'midnight');
+
+  ensurePresentation(presentation);
+  assert.equal(presentation.themeId, 'midnight');
+});
+
+test('Decks rejects unknown presentation themes', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Slide', body: '' }] });
+  assert.throws(() => setSlideTheme(presentation, 'ultraviolet'), RangeError);
+  assert.equal(presentation.themeId, 'lavender');
+});
+
+test('Decks includes theme selection in undo, redo and saved history', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Slide', body: '' }] });
+  const history = createHistory(presentation);
+
+  setSlideTheme(presentation, 'midnight');
+  history.commit(presentation);
+  assert.equal(presentation.themeId, 'midnight');
+
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.themeId, 'lavender');
+
+  assert.equal(history.redo(presentation), true);
+  assert.equal(presentation.themeId, 'midnight');
+
+  const savedState = history.exportState();
+  assert.equal(savedState.current.themeId, 'midnight');
+  assert.ok(savedState.past.every(snapshot => typeof snapshot.themeId === 'string'));
 });
