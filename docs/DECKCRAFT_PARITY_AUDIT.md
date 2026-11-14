@@ -137,6 +137,7 @@ The first practical presentation-editor milestone is now represented by [Brightd
 
 - A left thumbnail navigator with slide selection and drag reordering.
 - Keyboard-accessible Move earlier / Move later controls in Normal View and Slide Sorter.
+- The current slide layout selector is on the Home ribbon, with Ctrl/Cmd+Shift+N to add a slide.
 - A Slide Sorter grid in the View ribbon.
 - Four initial slide layouts: Title slide, Title and content, Two content and Section header.
 - Editable secondary content for Two content slides.
