@@ -83,7 +83,7 @@ Match the reference product's information architecture and visual density rather
 ### P1 — Visual authoring
 - Add structured text boxes and a first useful set of vector shapes.
 - Add local picture insertion, crop, alt text, alignment, grouping and formatting.
-- Add theme presets, background controls and slide size settings.
+- [x] Add Widescreen (16:9) and Standard (4:3) slide-size controls, saved in the presentation and preserved by PowerPoint import/export. Custom dimensions, theme presets and background controls remain future work.
 - Add a sample presentation built from original Brightdesk content and artwork.
 - Add slide sorter and outline views.
 
@@ -141,10 +141,12 @@ The first practical presentation-editor milestone is now represented by [Brightd
 - Four initial slide layouts: Title slide, Title and content, Two content and Section header.
 - Editable secondary content for Two content slides.
 - Per-slide speaker notes stored in the existing local presentation model.
+- Widescreen (16:9) and Standard (4:3) slide sizes, shown in the canvas, thumbnails, Slide Sorter and presentation mode.
+- Slide size is saved in local projects, restored in undo/redo, and preserved through supported PowerPoint import/export.
 - Speaker notes and supported layout positioning included in PowerPoint export.
 - F5 / Shift+F5 presentation shortcuts while preserving the current motion-aware presentation overlay.
 - Bounded undo/redo for slide content, speaker notes, layouts and slide structure, including grouped typing and keyboard/toolbar controls. History is also saved on this device and restored when Decks is reopened; importing another presentation clears the previous history.
-- File validation for notes, layouts and secondary slide content.
+- File validation for notes, layouts, secondary content and supported slide sizes.
 
 Legacy slides migrate in memory to the Title and content layout while preserving their title/body text. PowerPoint speaker-note import remains open.
 
