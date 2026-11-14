@@ -614,3 +614,36 @@ test('Brightdesk project export and import preserve the selected slide theme', a
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('PPTX import ignores external Brightdesk theme metadata relationships', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-external-theme-'));
+  const filePath = path.join(directory, 'external-theme.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      themeId: 'midnight',
+      slides: [{ title: 'External theme', body: 'Keep it local' }]
+    }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const relationshipsPath = '_rels/.rels';
+    const relationships = await archive.file(relationshipsPath)?.async('string');
+    assert.ok(relationships, 'the package has a root relationships part');
+    assert.match(relationships, /relationships\/custom-properties/);
+    archive.file(
+      relationshipsPath,
+      relationships.replace(
+        'Target="docProps/custom.xml"',
+        'Target="https://example.invalid/custom.xml" TargetMode="External"'
+      )
+    );
+    await fs.writeFile(filePath, await archive.generateAsync({ type: 'nodebuffer' }));
+
+    const reopened = await openOfficeFile(filePath);
+    assert.equal(reopened.themeId, 'lavender');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
