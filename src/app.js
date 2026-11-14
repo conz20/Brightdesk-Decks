@@ -1011,6 +1011,33 @@ function updateSelectedSlideObject(patch) {
   }
 }
 
+function reorderSelectedSlideObject(action) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  if (!state.selectedSlideObjectId) return;
+  try {
+    const changed = window.BrightdeskSlidesService.reorderSlideObject(
+      doc,
+      doc.current,
+      state.selectedSlideObjectId,
+      action
+    );
+    if (!changed) return;
+    commitSlideChange(doc);
+    persist();
+    renderSlides();
+    renderToolbar();
+    const messages = {
+      front: 'Object brought to front',
+      forward: 'Object moved forward',
+      backward: 'Object moved backward',
+      back: 'Object sent to back'
+    };
+    setStatus(messages[action] || 'Object layer order updated');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
 function deleteSelectedSlideObject() {
   const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
   if (!state.selectedSlideObjectId) return;
@@ -1239,6 +1266,32 @@ function renderSlideFormatPane(object) {
   addControl(size, 'Width (%)', 'width', 'number', { min: 1, max: 100, step: 0.5 });
   addControl(size, 'Height (%)', 'height', 'number', { min: 1, max: 100, step: 0.5 });
   addControl(size, 'Rotation (degrees)', 'rotation', 'number', { min: -360, max: 360, step: 1 });
+
+  const arrange = createGroup('Arrange');
+  const actions = document.createElement('div');
+  actions.className = 'slide-format-pane-actions';
+  const actionDefinitions = [
+    { action: 'front', label: 'Bring to Front', unavailable: objectIndex => objectIndex === objectCount - 1 },
+    { action: 'forward', label: 'Bring Forward', unavailable: objectIndex => objectIndex === objectCount - 1 },
+    { action: 'backward', label: 'Send Backward', unavailable: objectIndex => objectIndex === 0 },
+    { action: 'back', label: 'Send to Back', unavailable: objectIndex => objectIndex === 0 }
+  ];
+  const currentDoc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const currentObjects = window.BrightdeskSlidesService.getSlideObjects(currentDoc, currentDoc.current);
+  const objectIndex = currentObjects.findIndex(item => item.id === object.id);
+  const objectCount = currentObjects.length;
+  actionDefinitions.forEach(({ action, label, unavailable }) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'slide-format-pane-action';
+    button.textContent = label;
+    button.dataset.layerAction = action;
+    button.setAttribute('aria-label', label);
+    button.disabled = objectIndex < 0 || unavailable(objectIndex);
+    button.addEventListener('click', () => reorderSelectedSlideObject(action));
+    actions.append(button);
+  });
+  arrange.append(actions);
 
   const footer = document.createElement('p');
   footer.className = 'slide-format-pane-note';
