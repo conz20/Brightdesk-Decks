@@ -333,10 +333,11 @@ test('Decks bounds undo history and restores slide structure and selection', () 
   history.commit(presentation);
 
   assert.equal(history.undo(presentation), true);
+  assert.deepEqual(presentation.slides.map(slide => slide.title), ['One', 'Two', 'Three']);
+  assert.equal(presentation.current, 2);
+  assert.equal(history.undo(presentation), true);
   assert.deepEqual(presentation.slides.map(slide => slide.title), ['One', 'Two']);
   assert.equal(presentation.current, 1);
-  assert.equal(history.undo(presentation), true);
-  assert.deepEqual(presentation.slides.map(slide => slide.title), ['One']);
   assert.equal(history.undo(presentation), false);
 });
 
