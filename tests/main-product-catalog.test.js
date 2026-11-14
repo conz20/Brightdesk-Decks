@@ -107,7 +107,7 @@ test('Audience renderer keeps both comparison columns and safely draws slide obj
         { type: 'text', x: 48, y: 24, width: 25, height: 12, text: 'Plain text object', textColor: '#26364D', fontSize: 24 },
         {
           type: 'image', x: 18, y: 50, width: 30, height: 24,
-          imageData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+          imageData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==',
           imageName: 'team-photo.png', imageWidth: 1600, imageHeight: 900
         }
       ]
