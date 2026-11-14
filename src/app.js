@@ -357,6 +357,8 @@ function renderToolbar() {
       const show = group('startPresentation');
       addButton(show, label('fromCurrentSlide'), () => presentSlides(false));
       addButton(show, 'From first slide', () => presentSlides(true));
+      const currentSlide = window.BrightdeskSlidesService.ensurePresentation(activeDoc()).slides[activeDoc().current];
+      addButton(show, currentSlide.hidden ? 'Unhide Slide' : 'Hide Slide', toggleSlideHidden);
     } else {
       const view = group('zoom');
       addButton(view, label('fitSlide'), () => { slideWrap.scrollTop = 0; setStatus('Slide fitted to workspace'); });
@@ -509,6 +511,7 @@ function renderSlideSorter(doc) {
     const card = document.createElement('article');
     card.className = 'slide-sorter-card';
     card.classList.toggle('active', index === doc.current);
+    card.classList.toggle('is-hidden-slide', slide.hidden === true);
     card.draggable = true;
     card.dataset.slideIndex = String(index);
     card.dataset.sectionId = slide.sectionId || '';
@@ -517,7 +520,7 @@ function renderSlideSorter(doc) {
     const select = document.createElement('button');
     select.type = 'button';
     select.className = 'slide-sorter-select';
-    select.setAttribute('aria-label', `Select slide ${index + 1}: ${slide.title || 'Untitled slide'}`);
+    select.setAttribute('aria-label', `Select slide ${index + 1}: ${slide.title || 'Untitled slide'}${slide.hidden ? ', hidden from slide show' : ''}`);
     select.setAttribute('aria-current', index === doc.current ? 'true' : 'false');
     const number = document.createElement('span');
     number.className = 'slide-sorter-number';
@@ -795,6 +798,7 @@ function renderSlides() {
     }
     const card = document.createElement('article');
     card.className = 'slide-thumbnail-card';
+    card.classList.toggle('is-hidden-slide', item.hidden === true);
     card.dataset.slideIndex = String(index);
     card.dataset.sectionId = item.sectionId || '';
     card.hidden = Boolean(item.sectionId && state.collapsedSlideSections.has(item.sectionId));
@@ -804,7 +808,7 @@ function renderSlides() {
     const select = document.createElement('button');
     select.type = 'button';
     select.className = 'slide-thumbnail-select';
-    select.setAttribute('aria-label', `Select slide ${index + 1}: ${item.title || 'Untitled slide'}`);
+    select.setAttribute('aria-label', `Select slide ${index + 1}: ${item.title || 'Untitled slide'}${item.hidden ? ', hidden from slide show' : ''}`);
     select.setAttribute('aria-current', index === doc.current ? 'true' : 'false');
     const number = document.createElement('span');
     number.className = 'slide-thumbnail-number';
