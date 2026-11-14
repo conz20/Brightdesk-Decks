@@ -49,6 +49,80 @@ function createWindow() {
 }
 function senderIsMain(event) { return mainWindow && event.sender === mainWindow.webContents; }
 
+const SLIDE_PICTURE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\\.(?:png|jpg|webp)$/i;
+
+function getSlidePictureAssetPath(assetId) {
+  if (typeof assetId !== 'string' || !SLIDE_PICTURE_ASSET_ID_PATTERN.test(assetId)) {
+    throw new TypeError('The saved picture reference is invalid.');
+  }
+  return path.join(app.getPath('userData'), 'slide-images', assetId);
+}
+
+function assertSlidePictureDimensions(imageInfo) {
+  if (
+    !imageInfo ||
+    imageInfo.width < 1 || imageInfo.height < 1 ||
+    imageInfo.width > 20000 || imageInfo.height > 20000 ||
+    imageInfo.width * imageInfo.height > 40000000
+  ) {
+    throw new Error('This picture exceeds the supported image dimensions.');
+  }
+}
+
+async function storeSlidePictureAsset(imageData) {
+  const imageInfo = inspectSlideImageDataUrl(imageData);
+  assertSlidePictureDimensions(imageInfo);
+  const extension = imageInfo.mimeType === 'image/jpeg'
+    ? 'jpg'
+    : imageInfo.mimeType === 'image/webp' ? 'webp' : 'png';
+  const assetId = 'picture-' + crypto.randomUUID() + '.' + extension;
+  const assetPath = getSlidePictureAssetPath(assetId);
+  await fs.mkdir(path.dirname(assetPath), { recursive: true });
+  await fs.writeFile(assetPath, imageInfo.buffer, { flag: 'wx' });
+  return assetId;
+}
+
+async function loadSlidePictureAsset(assetId) {
+  const assetPath = getSlidePictureAssetPath(assetId);
+  const buffer = await fs.readFile(assetPath);
+  if (buffer.length > MAX_SLIDE_IMAGE_BYTES) {
+    throw new Error('The locally saved picture exceeds the supported size.');
+  }
+  const imageData = createSlideImageDataUrl(buffer);
+  const imageInfo = inspectSlideImageDataUrl(imageData);
+  assertSlidePictureDimensions(imageInfo);
+  const image = nativeImage.createFromBuffer(buffer);
+  if (image.isEmpty()) throw new Error('Brightdesk could not read a locally saved picture.');
+  const decoded = image.getSize();
+  if (decoded.width !== imageInfo.width || decoded.height !== imageInfo.height) {
+    throw new Error('The locally saved picture failed its dimension check.');
+  }
+  return imageData;
+}
+
+async function prepareProjectSlidePictures(value) {
+  if (!value || typeof value !== 'object') return value;
+  const docs = value.docs && typeof value.docs === 'object'
+    ? Object.values(value.docs)
+    : [value];
+  for (const doc of docs) {
+    if (!doc || !Array.isArray(doc.slides)) continue;
+    for (const slide of doc.slides) {
+      if (!Array.isArray(slide?.objects)) continue;
+      for (const object of slide.objects) {
+        if (object?.type !== 'image') continue;
+        const imageInfo = inspectSlideImageDataUrl(object.imageData);
+        assertSlidePictureDimensions(imageInfo);
+        if (object.imageWidth !== imageInfo.width || object.imageHeight !== imageInfo.height) {
+          throw new Error('A saved slide picture has mismatched pixel dimensions.');
+        }
+        object.imageAssetId = await storeSlidePictureAsset(object.imageData);
+      }
+    }
+  }
+  return value;
+}
+
 const supportedPresenterLayouts = new Set(['title', 'title-content', 'two-content', 'section-header']);
 const supportedPresenterThemes = new Set(['lavender', 'midnight', 'paper']);
 const supportedPresenterTransitions = new Set(['none', 'fade', 'push', 'wipe']);
@@ -469,7 +543,8 @@ ipcMain.handle('file:open', async event => {
     filters: [{ name: 'Office files', extensions: ['docx','xlsx','xlsm','csv','tsv','pptx','txt','md','html','bdesk'] }, { name: 'All files', extensions: ['*'] }]
   });
   if (result.canceled || !result.filePaths[0]) return null;
-  return openOfficeFile(result.filePaths[0]);
+  const opened = await openOfficeFile(result.filePaths[0]);
+  return prepareProjectSlidePictures(opened);
 });
 ipcMain.handle('slides:picture:open', async event => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
@@ -514,6 +589,14 @@ ipcMain.handle('slides:picture:open', async event => {
     imageHeight: height
   };
 });
+ipcMain.handle('slides:picture:store', async (event, imageData) => {
+  if (!senderIsMain(event)) throw new Error('Invalid sender.');
+  return storeSlidePictureAsset(imageData);
+});
+ipcMain.handle('slides:picture:load', async (event, assetId) => {
+  if (!senderIsMain(event)) throw new Error('Invalid sender.');
+  return loadSlidePictureAsset(assetId);
+});
 ipcMain.handle('slides:reuse', async event => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -553,7 +636,8 @@ ipcMain.handle('project:open', async event => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'], filters: [{ name: 'Brightdesk project', extensions: ['bdesk'] }] });
   if (result.canceled || !result.filePaths[0]) return null;
-  return openOfficeFile(result.filePaths[0]);
+  const opened = await openOfficeFile(result.filePaths[0]);
+  return prepareProjectSlidePictures(opened);
 });
 ipcMain.handle('file:pdf', async (event, payload) => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
