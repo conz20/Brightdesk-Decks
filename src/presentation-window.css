@@ -49,11 +49,16 @@ body{background:#171729;font-family:"Aptos","Segoe UI",Arial,sans-serif}
 }
 .audience-body-primary{width:100%}
 .audience-content-columns{
-  display:grid;
+  display:flex;
   min-height:0;
   flex:1;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  flex-direction:column;
   align-items:stretch;
+  gap:16px;
+}
+.audience-presentation.layout-two-content .audience-content-columns{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:5%;
 }
 .audience-content-columns p{
