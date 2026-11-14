@@ -81,6 +81,7 @@
   const MAX_SLIDE_OBJECT_TEXT_LENGTH = 10000;
   const MAX_SLIDE_OBJECT_FONT_SIZE = 96;
   const MAX_SLIDE_OBJECT_STROKE_WIDTH = 12;
+  const MAX_PRESENTATION_SLIDES = 2000;
   const MAX_SECTION_NAME_LENGTH = 80;
   let sectionSequence = 0;
   let slideSequence = 0;
@@ -351,6 +352,67 @@
     target.slides.push(next);
     target.current = target.slides.length - 1;
     return next;
+  }
+
+  function insertSlidesAfterCurrent(presentation, importedSlides) {
+    const target = ensurePresentation(presentation);
+    if (!Array.isArray(importedSlides) || importedSlides.length === 0) {
+      throw new RangeError('Choose a PowerPoint presentation containing at least one slide.');
+    }
+    if (target.slides.length + importedSlides.length > MAX_PRESENTATION_SLIDES) {
+      throw new RangeError('The presentation exceeds the 2,000-slide limit.');
+    }
+    if (importedSlides.some(slide => !slide || typeof slide !== 'object' || Array.isArray(slide))) {
+      throw new TypeError('The imported presentation contains an invalid slide collection.');
+    }
+
+    let copiedSlides;
+    try {
+      copiedSlides = importedSlides.map(slide => copySlide(slide));
+    } catch {
+      throw new TypeError('The imported slides could not be copied safely.');
+    }
+
+    const insertionIndex = target.current + 1;
+    const selectedSectionId = target.slides[target.current]?.sectionId || null;
+    const usedSlideIds = new Set(target.slides.map(slide => slide.id));
+    const slidesToInsert = copiedSlides.map(source => {
+      const {
+        id: _sourceId,
+        sectionId: _sourceSectionId,
+        title,
+        body,
+        bodySecondary,
+        notes,
+        layout,
+        layoutId,
+        backgroundColor,
+        hidden,
+        objects
+      } = source;
+      return normalizeSlide({
+        title,
+        body,
+        bodySecondary,
+        notes,
+        layout,
+        layoutId,
+        backgroundColor,
+        hidden,
+        objects,
+        ...(selectedSectionId ? { sectionId: selectedSectionId } : {})
+      }, usedSlideIds);
+    });
+
+    target.slides.splice(insertionIndex, 0, ...slidesToInsert);
+    target.current = insertionIndex;
+    normalizeSections(target);
+
+    return {
+      count: slidesToInsert.length,
+      firstIndex: insertionIndex,
+      lastIndex: insertionIndex + slidesToInsert.length - 1
+    };
   }
 
   function duplicateSlide(presentation, index) {
@@ -830,6 +892,7 @@
     SLIDE_THEME_BACKGROUND_COLORS,
     ensurePresentation,
     addSlide,
+    insertSlidesAfterCurrent,
     duplicateSlide,
     deleteSlide,
     updateSlide,
