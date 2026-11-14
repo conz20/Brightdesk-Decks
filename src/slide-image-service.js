@@ -22,7 +22,7 @@ function detectSlideImageMimeType(value) {
 
 function inspectSlideImageDataUrl(value) {
   if (typeof value !== 'string' || value.length > 7 * 1024 * 1024) return null;
-  const match = value.match(/^data:(image\\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+  const match = value.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
   if (!match || match[2].length % 4 !== 0) return null;
 
   const buffer = Buffer.from(match[2], 'base64');
