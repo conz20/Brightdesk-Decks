@@ -264,5 +264,5 @@ test('Decks connects slide layout selection and Slide Sorter to its ribbon', () 
   assert.match(app, /state\.slideView === 'sorter'/);
   assert.match(app, /Slide Sorter/);
   assert.match(styles, /\.slide-sorter-grid/);
-  assert.match(styles, /\.slide-layout-two-content/);
+  assert.match(styles, /\.layout-two-content/);
 });
