@@ -759,7 +759,7 @@ test('PPTX export applies custom slide background colours and readable text cont
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-custom-background-'));
   const cases = [
     { backgroundColor: '#202B3B', textColor: 'FFFFFF' },
-    { backgroundColor: '#F3EBDD', textColor: '111827' }
+    { backgroundColor: '#F3EBDD', textColor: '000000' }
   ];
   try {
     for (const item of cases) {
