@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const { APP_SLUGS } = require('../src/standalone-downloads');
 
 test('Electron main process imports the shared standalone app catalogue before validating its product ID', () => {
@@ -50,4 +51,46 @@ test('Decks only starts and updates its audience window from the main applicatio
   assert.match(source, /ipcMain\.handle\(['"]presentation:start['"][\s\S]*?senderIsMain\(event\)/);
   assert.match(source, /ipcMain\.on\(['"]presentation:update['"][\s\S]*?senderIsMain\(event\)/);
   assert.match(source, /ipcMain\.handle\(['"]presentation:end['"][\s\S]*?senderIsMain\(event\)/);
+});
+
+
+test('Audience renderer keeps both comparison columns and applies theme and slide size', () => {
+  const root = path.join(__dirname, '..');
+  const renderer = fs.readFileSync(path.join(root, 'src', 'presentation-window.js'), 'utf8');
+  const ids = ['presentation-root', 'audience-title', 'audience-body', 'audience-columns', 'audience-body-secondary'];
+  const elements = Object.fromEntries(ids.map(id => [id, { className: '', textContent: '', hidden: false }]));
+  let render;
+  const window = {
+    brightdeskPresentation: {
+      onPresentationUpdate(callback) { render = callback; }
+    }
+  };
+  const document = { getElementById(id) { return elements[id]; } };
+
+  vm.runInNewContext(renderer, { window, document });
+  assert.equal(typeof render, 'function');
+
+  render({
+    slide: { title: 'Compare', body: 'Option A', bodySecondary: 'Option B', layout: 'two-content' },
+    themeId: 'midnight',
+    slideSize: 'standard'
+  });
+  assert.equal(elements['presentation-root'].className, 'audience-presentation theme-midnight size-standard layout-two-content');
+  assert.equal(elements['audience-title'].textContent, 'Compare');
+  assert.equal(elements['audience-body'].textContent, 'Option A');
+  assert.equal(elements['audience-body-secondary'].textContent, 'Option B');
+  assert.equal(elements['audience-body-secondary'].hidden, false);
+  assert.equal(elements['audience-columns'].hidden, false);
+
+  render({
+    slide: { title: '<img src=x onerror=alert(1)>', body: 'Ordinary content', bodySecondary: 'Unused', layout: 'title-content' },
+    themeId: 'paper',
+    slideSize: 'widescreen',
+    blankMode: 'black'
+  });
+  assert.equal(elements['presentation-root'].className, 'audience-presentation theme-paper size-widescreen layout-title-content is-blank-black');
+  assert.equal(elements['audience-title'].textContent, '<img src=x onerror=alert(1)>');
+  assert.equal(elements['audience-body-secondary'].hidden, true);
+  assert.equal(elements['audience-columns'].hidden, false);
+  assert.doesNotMatch(renderer, /innerHTML/);
 });
