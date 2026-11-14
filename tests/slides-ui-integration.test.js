@@ -203,3 +203,16 @@ test('Decks Format Shape pane provides accessible stacking-order controls', () =
   assert.match(app, /data-layer-action/);
   assert.match(styles, /\.slide-format-pane-actions/);
 });
+
+
+test('Decks Format Shape pane lists overlapping objects for direct selection', () => {
+  const app = read('src/app.js');
+  const styles = read('src/styles.css');
+
+  assert.match(app, /createGroup\('Selection'\)/);
+  assert.match(app, /slide-format-pane-selection/);
+  assert.match(app, /button\.dataset\.selectObject = item\.id/);
+  assert.match(app, /button\.setAttribute\('aria-pressed', String\(item\.id === object\.id\)\)/);
+  assert.match(app, /selectSlideObject\(item\.id\)/);
+  assert.match(styles, /\.slide-format-pane-selection/);
+});
