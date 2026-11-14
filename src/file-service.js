@@ -200,6 +200,8 @@ function validateProject(project) {
             const validImage = object?.type === 'image'
               ? Boolean(
                 imageInfo &&
+                object.imageWidth === imageInfo.width &&
+                object.imageHeight === imageInfo.height &&
                 typeof object.imageName === 'string' &&
                 object.imageName.trim().length > 0 &&
                 object.imageName.length <= 255 &&
@@ -1079,6 +1081,8 @@ async function exportOfficeFile(payload, filePath) {
           const imageInfo = inspectSlideImageDataUrl(object.imageData);
           if (
             !imageInfo ||
+            object.imageWidth !== imageInfo.width ||
+            object.imageHeight !== imageInfo.height ||
             !Number.isFinite(object.x) || object.x < 0 ||
             !Number.isFinite(object.y) || object.y < 0 ||
             !Number.isFinite(object.width) || object.width <= 0 || object.width > 100 ||
