@@ -785,3 +785,45 @@ test('PPTX export applies custom slide background colours and readable text cont
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test('PPTX import follows presentation relationship order rather than slide filenames', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-slide-order-'));
+  const filePath = path.join(directory, 'reordered-slides.pptx');
+  const expectedSlides = [
+    { title: 'Opening slide', body: 'First in the show', notes: 'Opening notes.' },
+    { title: 'Closing slide', body: 'Second in the show', notes: 'Closing notes.', hidden: true }
+  ];
+  try {
+    await exportOfficeFile({ kind: 'slides', slides: expectedSlides }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const relationshipsPath = 'ppt/_rels/presentation.xml.rels';
+    const relationships = await archive.file(relationshipsPath)?.async('string');
+    assert.ok(relationships, 'the presentation has a relationships part');
+    assert.match(relationships, /Target=["']slides\/slide1\.xml["']/);
+    assert.match(relationships, /Target=["']slides\/slide2\.xml["']/);
+
+    const reorderedRelationships = relationships
+      .replace('Target="slides/slide1.xml"', 'Target="slides/__temporary-slide.xml"')
+      .replace('Target="slides/slide2.xml"', 'Target="slides/slide1.xml"')
+      .replace('Target="slides/__temporary-slide.xml"', 'Target="slides/slide2.xml"');
+    archive.file(relationshipsPath, reorderedRelationships);
+    await fs.writeFile(filePath, await archive.generateAsync({ type: 'nodebuffer' }));
+
+    const reopened = await openOfficeFile(filePath);
+
+    assert.deepEqual(reopened.slides.map(slide => ({
+      title: slide.title,
+      body: slide.body,
+      notes: slide.notes,
+      hidden: slide.hidden === true
+    })), [
+      { title: 'Closing slide', body: 'Second in the show', notes: 'Closing notes.', hidden: true },
+      { title: 'Opening slide', body: 'First in the show', notes: 'Opening notes.', hidden: false }
+    ]);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
