@@ -78,7 +78,7 @@
     paper: '#FFFFFF'
   });
   const SLIDE_OBJECT_TYPES = Object.freeze(['text', 'rectangle', 'ellipse', 'line', 'image']);
-  const SLIDE_IMAGE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\\.(?:png|jpg|webp)$/i;
+  const SLIDE_IMAGE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\.(?:png|jpg|webp)$/i;
   const MAX_SLIDE_OBJECTS = 1000;
   const MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024;
   const MAX_SLIDE_IMAGE_BYTES_PER_SLIDE = 15 * 1024 * 1024;
