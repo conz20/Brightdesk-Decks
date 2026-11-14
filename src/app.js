@@ -501,8 +501,45 @@ function renderSlides() {
 function addSlide(){window.BrightdeskSlidesService.addSlide(activeDoc());renderSlides();renderToolbar();persist();}
 function duplicateSlide(){window.BrightdeskSlidesService.duplicateSlide(activeDoc());renderSlides();renderToolbar();persist();}
 function deleteSlide(){if(!window.BrightdeskSlidesService.deleteSlide(activeDoc())){alert('A presentation needs at least one slide.');return;}renderSlides();renderToolbar();persist();}
-function presentSlides(){const d=activeDoc();let i=d.current;const overlay=document.createElement('div');overlay.className='presentation-overlay';const slide=document.createElement('div');slide.className='presentation-slide';const title=document.createElement('h1'),body=document.createElement('p'),footer=document.createElement('div');footer.className='presentation-footer';footer.textContent='Click or press an arrow key to move · Esc to exit';slide.append(title,body,footer);overlay.append(slide);document.body.append(overlay);
-  const draw=()=>{title.textContent=d.slides[i].title;body.textContent=d.slides[i].body;};const key=(e)=>{if(e.key==='Escape'){overlay.remove();document.removeEventListener('keydown',key);}else if(e.key==='ArrowRight'){i=Math.min(d.slides.length-1,i+1);draw();}else if(e.key==='ArrowLeft'){i=Math.max(0,i-1);draw();}};overlay.addEventListener('click',()=>{i=Math.min(d.slides.length-1,i+1);draw();});document.addEventListener('keydown',key);draw();}
+function presentSlides(startFromFirst = false) {
+  const d = activeDoc();
+  let i = startFromFirst ? 0 : d.current;
+  const overlay = document.createElement('div');
+  overlay.className = 'presentation-overlay';
+  const slide = document.createElement('div');
+  slide.className = 'presentation-slide';
+  const title = document.createElement('h1');
+  const body = document.createElement('p');
+  const footer = document.createElement('div');
+  footer.className = 'presentation-footer';
+  footer.textContent = 'Click or press an arrow key to move · Esc to exit';
+  slide.append(title, body, footer);
+  overlay.append(slide);
+  document.body.append(overlay);
+
+  const draw = () => {
+    title.textContent = d.slides[i].title;
+    body.textContent = d.slides[i].body;
+  };
+  const key = event => {
+    if (event.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', key);
+    } else if (event.key === 'ArrowRight') {
+      i = Math.min(d.slides.length - 1, i + 1);
+      draw();
+    } else if (event.key === 'ArrowLeft') {
+      i = Math.max(0, i - 1);
+      draw();
+    }
+  };
+  overlay.addEventListener('click', () => {
+    i = Math.min(d.slides.length - 1, i + 1);
+    draw();
+  });
+  document.addEventListener('keydown', key);
+  draw();
+}
 function todoTasks() { return Array.isArray(activeDoc().tasks) ? activeDoc().tasks : (activeDoc().tasks = []); }
 function saveTodoTasks() { persist(); $('todo-status').textContent = 'Saved on this device'; }
 function replaceTodoTask(id, patch) {
@@ -1071,6 +1108,11 @@ async function openFile(){try{const data=await window.brightdesk.openFile();if(!
 async function saveProject(){try{const result=await window.brightdesk.saveProject({title:$('doc-title').value,docs:state.docs});if(!result?.canceled)setStatus('Project saved');}catch(error){alert(`Could not save project: ${error.message}`);}}
 function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
+document.addEventListener('keydown', event => {
+  if (state.app !== 'slides' || state.view !== 'workspace' || event.key !== 'F5') return;
+  event.preventDefault();
+  presentSlides(!event.shiftKey);
+});
 document.querySelectorAll('.nav[data-app]').forEach(btn=>btn.addEventListener('click',()=>setApp(btn.dataset.app)));
 $('manage-apps').addEventListener('click',()=>{if (launchAppId) return; state.view='manager';render();});
 $('manage-languages').addEventListener('click',openLanguageManager);
