@@ -1525,7 +1525,9 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
     slide.style.backgroundColor = currentSlide.backgroundColor || '';
     title.style.color = currentTextColor;
     body.style.color = currentTextColor;
+    body.style.backgroundColor = currentSlide.backgroundColor || '';
     secondaryBody.style.color = currentTextColor;
+    secondaryBody.style.backgroundColor = currentSlide.backgroundColor || '';
     title.textContent = currentSlide.title || '';
     body.textContent = currentSlide.body || '';
     secondaryBody.textContent = currentSlide.bodySecondary || '';
@@ -1560,7 +1562,9 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
         nextPreview.style.backgroundColor = snapshot.nextSlide.backgroundColor || '';
         nextPreviewTitle.style.color = nextTextColor;
         nextPreviewBody.style.color = nextTextColor;
+        nextPreviewBody.style.backgroundColor = snapshot.nextSlide.backgroundColor || '';
         nextPreviewSecondary.style.color = nextTextColor;
+        nextPreviewSecondary.style.backgroundColor = snapshot.nextSlide.backgroundColor || '';
         nextPreviewTitle.textContent = snapshot.nextSlide.title || '';
         nextPreviewBody.textContent = snapshot.nextSlide.body || '';
         nextPreviewSecondary.textContent = snapshot.nextSlide.bodySecondary || '';
