@@ -856,7 +856,7 @@ async function exportOfficeFile(payload, filePath) {
             h: objectH,
             fontFace: 'Aptos',
             fontSize: Number.isFinite(object.fontSize) ? object.fontSize : 20,
-            color: backgroundColor ? customTextColor : String(object.textColor || theme.body).replace(/^#/, ''),
+            color: String(object.textColor || theme.body).replace(/^#/, ''),
             bold: object.bold === true,
             margin: 0.04,
             valign: 'mid',
@@ -883,7 +883,7 @@ async function exportOfficeFile(payload, filePath) {
           x: objectX,
           y: objectY,
           w: objectW,
-          h: objectH,
+          h: object.type === 'line' ? 0 : objectH,
           rotate: rotation,
           objectName,
           fill: object.type === 'line' || object.fill === null
