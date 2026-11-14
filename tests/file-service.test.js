@@ -426,3 +426,31 @@ test('PPTX export and import preserve hidden slide state', async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('PPTX import restores speaker notes for each matching slide', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-notes-import-'));
+  const filePath = path.join(directory, 'speaker-notes-import.pptx');
+  const expectedNotes = [
+    'Introduce the team & explain the purpose.\nPause for questions.',
+    '',
+    'Close with the agreed next steps.'
+  ];
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [
+        { title: 'Welcome', body: 'Hello', notes: expectedNotes[0] },
+        { title: 'Agenda', body: 'Today', notes: expectedNotes[1] },
+        { title: 'Next steps', body: 'Plan', notes: expectedNotes[2] }
+      ]
+    }, filePath);
+
+    const reopened = await openOfficeFile(filePath);
+
+    assert.equal(reopened.slides.length, 3);
+    assert.deepEqual(reopened.slides.map(slide => slide.notes), expectedNotes);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
