@@ -64,7 +64,7 @@
           typeof object.imageName !== 'string'
         ) continue;
         const image = document.createElement('img');
-        image.className = 'audience-object-image';
+        image.className = 'audience-object-image-content';
         image.src = object.imageData;
         image.alt = object.imageName || 'Slide picture';
         image.draggable = false;
