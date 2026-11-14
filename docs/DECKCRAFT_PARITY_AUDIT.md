@@ -73,9 +73,11 @@ Match the reference product's information architecture and visual density rather
 ## Implementation sequence
 
 ### P0 — Editing foundation
-- Extend the slide document model with stable slide IDs, layout IDs, notes, hidden state, section membership, slide size and theme reference.
+- [x] Add named section membership, Widescreen/Standard slide size and section metadata to local presentation documents.
+- [ ] Add stable slide IDs, layout IDs, hidden-slide state and theme references.
 - Migrate existing `{ title, body }` slides without data loss; retain compatibility with existing local JSON documents and PPTX import/export.
-- Add thumbnail navigation, add/duplicate/delete/reorder, keyboard navigation and a real notes editor.
+- [x] Add thumbnail navigation, add/duplicate/delete/reorder, keyboard navigation and a real notes editor.
+- [x] Add named slide sections with New/Rename/Remove, slide reassignment and collapsible groups in Normal View and Slide Sorter.
 - Add title, title-and-content, two-content, section-header, blank and comparison layouts.
 - [x] Add bounded undo/redo for slide text, speaker notes, layouts, slide creation/duplication/deletion and reordering, with typing grouped by field and device-local history restored across restarts. Object-edit history remains future work when editable objects are introduced.
 - Add tests for migration, selection bounds, reorder, duplicate, delete, one-slide minimum, notes persistence and recovery.
@@ -144,13 +146,14 @@ The first practical presentation-editor milestone is now represented by [Brightd
 - Per-slide speaker notes stored in the existing local presentation model.
 - Widescreen (16:9) and Standard (4:3) slide sizes, shown in the canvas, thumbnails, Slide Sorter and presentation mode.
 - Slide size is saved in local projects, restored in undo/redo, and preserved through supported PowerPoint import/export.
+- Named sections are saved in local Brightdesk project files, included in undo/redo, and shown as collapsible groups in both editing views. PowerPoint section import/export remains unsupported.
 - Speaker notes and supported layout positioning included in PowerPoint export.
 - F5 / Shift+F5 presentation shortcuts while preserving the current motion-aware presentation overlay.
 - Bounded undo/redo for slide content, speaker notes, layouts and slide structure, including grouped typing and keyboard/toolbar controls. History is also saved on this device and restored when Decks is reopened; importing another presentation clears the previous history.
-- File validation for notes, layouts, secondary content and supported slide sizes.
+- File validation for notes, layouts, secondary content, supported slide sizes and section membership.
 
 Legacy slides migrate in memory to the Title and content layout while preserving their title/body text. PowerPoint speaker-note import remains open.
 
 **Status: implemented on a review branch, not merged or verified.** The product-test and README-freshness workflows are queued on the private CI runner. They have not reported a pass. No genuine running-build screenshot comparison, exact Node.js 24.22.2 test result, or native Windows/macOS/Linux acceptance is claimed.
 
-The remaining P0 work includes layout placeholders/reset, stable slide identity and document metadata, and broader file-format fixtures. Undo/redo for slide-level edits is implemented on PR #34; undo/redo for rich objects will follow when object editing exists. Later milestones still include masters, sections, rich objects, transitions, animations and Presenter View. PR #34 is the clean current-main implementation branch; the older divergent PR #15 has been closed to avoid duplicate work. Do not create duplicate slide services or competing branches for the same functionality.
+The remaining P0 work includes layout placeholders/reset, stable slide identity and document metadata, and broader file-format fixtures. Named section grouping and slide-size presets are now implemented on PR #34. Undo/redo for slide-level edits is implemented on PR #34; undo/redo for rich objects will follow when object editing exists. Later milestones still include masters, sections, rich objects, transitions, animations and Presenter View. PR #34 is the clean current-main implementation branch; the older divergent PR #15 has been closed to avoid duplicate work. Do not create duplicate slide services or competing branches for the same functionality.
