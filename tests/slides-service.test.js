@@ -127,7 +127,7 @@ test('Decks reorders slides and keeps the same selected slide active', () => {
 
   const moved = moveSlide(presentation, 1, 2);
 
-  assert.equal(moved, selected);
+  assert.deepEqual(moved, { title: 'Two', body: 'Content', bodySecondary: '', notes: 'Speaker notes', layout: 'title-content' });
   assert.deepEqual(presentation.slides.map(slide => slide.title), ['One', 'Three', 'Two']);
   assert.equal(presentation.current, 2);
   assert.equal(presentation.slides[presentation.current].notes, 'Speaker notes');
