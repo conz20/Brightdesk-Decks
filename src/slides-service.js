@@ -214,6 +214,14 @@
     }, []);
   }
 
+  function getVisibleSlidePosition(presentation, slideNumber) {
+    const target = ensurePresentation(presentation);
+    if (!Number.isInteger(slideNumber) || slideNumber < 1 || slideNumber > target.slides.length) return -1;
+    const slideIndex = slideNumber - 1;
+    if (target.slides[slideIndex].hidden === true) return -1;
+    return getVisibleSlideIndices(target).indexOf(slideIndex);
+  }
+
   function setSlideSize(presentation, slideSize) {
     const target = ensurePresentation(presentation);
     if (!SLIDE_SIZES.includes(slideSize)) {
@@ -471,6 +479,7 @@
     setSlideSize,
     setSlideHidden,
     getVisibleSlideIndices,
+    getVisibleSlidePosition,
     createSection,
     renameSection,
     moveSlideToSection,
