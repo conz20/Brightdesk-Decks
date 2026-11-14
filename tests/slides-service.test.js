@@ -444,3 +444,56 @@ test('Decks reads, writes and clears device-local slide history separately from 
   assert.match(app, /createHistory\(doc, \{ state: savedState \}\)/);
   assert.match(app, /clearSavedSlideHistory\(\)/);
 });
+
+
+test('Decks keeps existing presentations widescreen when no slide size is stored', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Legacy slide', body: 'Legacy content' }],
+    current: 0
+  });
+
+  assert.equal(presentation.slideSize, 'widescreen');
+  assert.equal(presentation.slides[0].body, 'Legacy content');
+});
+
+test('Decks accepts supported slide sizes and rejects unsupported sizes', () => {
+  const { setSlideSize } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'Welcome', body: 'Hello' }], current: 0 };
+
+  assert.equal(setSlideSize(presentation, 'standard'), 'standard');
+  assert.equal(presentation.slideSize, 'standard');
+  assert.throws(() => setSlideSize(presentation, 'cinemascope'), RangeError);
+  assert.equal(presentation.slideSize, 'standard');
+});
+
+test('Decks includes presentation size changes in undo and redo history', () => {
+  const { createHistory, setSlideSize } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'Welcome', body: 'Hello' }], current: 0 };
+  const history = createHistory(presentation);
+
+  setSlideSize(presentation, 'standard');
+  history.commit(presentation);
+
+  assert.equal(presentation.slideSize, 'standard');
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.slideSize, 'widescreen');
+  assert.equal(history.redo(presentation), true);
+  assert.equal(presentation.slideSize, 'standard');
+});
+
+test('Decks saves and restores slide size in persisted undo history', () => {
+  const { createHistory, setSlideSize } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'Welcome', body: 'Hello' }], current: 0 };
+  const firstSession = createHistory(presentation);
+
+  setSlideSize(presentation, 'standard');
+  firstSession.commit(presentation);
+  const reopened = structuredClone(presentation);
+  const secondSession = createHistory(reopened, { state: firstSession.exportState() });
+
+  assert.equal(secondSession.restored, true);
+  assert.equal(secondSession.undo(reopened), true);
+  assert.equal(reopened.slideSize, 'widescreen');
+  assert.equal(secondSession.redo(reopened), true);
+  assert.equal(reopened.slideSize, 'standard');
+});
