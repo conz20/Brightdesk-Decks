@@ -308,6 +308,24 @@ function renderToolbar() {
       layoutSelect.value = currentSlide.layout;
       layoutSelect.addEventListener('change', () => setSlideLayout(layoutSelect.value));
       layoutGroup.append(layoutSelect);
+
+      const sizeGroup = ribbonGroup(toolbar, 'Slide Size');
+      const sizeSelect = document.createElement('select');
+      sizeSelect.className = 'slide-size-select';
+      sizeSelect.setAttribute('aria-label', 'Slide size');
+      [
+        ['widescreen', 'Widescreen (16:9)'],
+        ['standard', 'Standard (4:3)']
+      ].forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        sizeSelect.append(option);
+      });
+      const presentation = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+      sizeSelect.value = presentation.slideSize;
+      sizeSelect.addEventListener('change', () => setSlideSize(sizeSelect.value));
+      sizeGroup.append(sizeSelect);
     } else if (tab === 'slideShow') {
       const show = group('startPresentation');
       addButton(show, label('fromCurrentSlide'), () => presentSlides(false));
@@ -446,7 +464,7 @@ function renderSlideSorter(doc) {
     number.className = 'slide-sorter-number';
     number.textContent = String(index + 1);
     const preview = document.createElement('span');
-    preview.className = `slide-sorter-preview theme-${state.slideTheme} layout-${slide.layout}`;
+    preview.className = `slide-sorter-preview theme-${state.slideTheme} layout-${slide.layout} size-${doc.slideSize}`;
     const previewTitle = document.createElement('b');
     previewTitle.textContent = slide.title.trim() || `Slide ${index + 1}`;
     const previewBody = document.createElement('span');
@@ -552,6 +570,21 @@ function setSlideLayout(layout) {
   setStatus('Slide layout updated');
 }
 
+function setSlideSize(slideSize) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  try {
+    window.BrightdeskSlidesService.setSlideSize(doc, slideSize);
+    commitSlideChange(doc);
+  } catch (error) {
+    setStatus(error.message);
+    return;
+  }
+  renderSlides();
+  renderToolbar();
+  persist();
+  setStatus(slideSize === 'standard' ? 'Standard 4:3 slide size selected' : 'Widescreen 16:9 slide size selected');
+}
+
 function renderSlides() {
   const slidesService = window.BrightdeskSlidesService;
   const doc = slidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
@@ -618,7 +651,7 @@ function renderSlides() {
     number.className = 'slide-thumbnail-number';
     number.textContent = String(index + 1);
     const preview = document.createElement('span');
-    preview.className = `slide-thumbnail-preview layout-${item.layout}`;
+    preview.className = `slide-thumbnail-preview layout-${item.layout} size-${doc.slideSize}`;
     const previewTitle = document.createElement('b');
     previewTitle.className = 'slide-thumbnail-title';
     previewTitle.textContent = item.title.trim() || `Slide ${index + 1}`;
@@ -704,7 +737,7 @@ function renderSlides() {
   editorMain.setAttribute('aria-label', 'Slide editor');
 
   const stage = document.createElement('div');
-  stage.className = `slide-stage theme-${state.slideTheme} layout-${slide.layout}`;
+  stage.className = `slide-stage theme-${state.slideTheme} layout-${slide.layout} size-${doc.slideSize}`;
 
   const title = document.createElement('textarea');
   title.className = 'slide-title';
@@ -838,7 +871,7 @@ function presentSlides(startFromFirst = false) {
   overlay.dataset.state = 'closed';
 
   const slide = document.createElement('div');
-  slide.className = 'presentation-slide';
+  slide.className = `presentation-slide size-${d.slideSize || 'widescreen'}`;
   const title = document.createElement('h1');
   const body = document.createElement('p');
   const footer = document.createElement('div');
@@ -1406,7 +1439,7 @@ function exportPayload(){
   const doc=activeDoc(),title=$('doc-title').value||'Brightdesk file';doc.title=title;
   if(state.app==='pages')return {kind:'pages',title,html:editor.innerHTML,blocks:collectDocxBlocks()};
   if(state.app==='sheets')return {kind:'sheets',title,rows:doc.cells||[]};
-  if(state.app==='slides')return {kind:'slides',title,slides:doc.slides||[]};
+  if(state.app==='slides')return {kind:'slides',title,slideSize:doc.slideSize||'widescreen',slides:doc.slides||[]};
   return {kind:'notes',title,text:$('notes-editor').value||''};
 }
 async function exportCurrent(){try{const result=await window.brightdesk.exportFile(exportPayload());if(result?.canceled)return;setStatus('Exported successfully');}catch(error){alert(`Export failed: ${error.message}`);}}
@@ -1429,7 +1462,7 @@ function importProject(data){
   if(kind==='sheets')state.docs.sheets={title:data.title||'Imported spreadsheet',cells:(data.cells||[]).map(row=>row.map(v=>String(v??'')))};
   if(kind==='slides'){
     clearSavedSlideHistory();
-    state.docs.slides={title:data.title||'Imported presentation',slides:data.slides||clone(defaults.slides.slides),current:0};
+    state.docs.slides={title:data.title||'Imported presentation',slideSize:data.slideSize||'widescreen',slides:data.slides||clone(defaults.slides.slides),current:0};
   }
   if(kind==='notes')state.docs.notes={title:data.title||'Imported note',text:data.text||''};
   state.app=kind; state.ribbonTab='home';
