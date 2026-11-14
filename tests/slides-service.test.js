@@ -834,6 +834,8 @@ test('Decks slide show supports blank screens, numeric navigation and slide pick
   assert.match(app, /normalized === 'g'/);
   assert.match(app, /presentation-slide-picker/);
   assert.match(app, /numberBuffer/);
+  assert.match(app, /let showMessage = ''/);
+  assert.match(app, /is hidden or doesn't exist/);
   assert.match(styles, /\.presentation-overlay\.is-blank-black/);
   assert.match(styles, /\.presentation-overlay\.is-blank-white/);
   assert.match(styles, /\.presentation-slide-picker/);
