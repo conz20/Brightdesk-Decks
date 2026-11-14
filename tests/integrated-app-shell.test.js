@@ -78,7 +78,7 @@ test('Presenter View sends the current visible slide to its separate audience di
 
 test('Presenter View keeps speaker notes in the presenter console and sends only slide content to the audience', () => {
   const audienceStart = app.indexOf('const createAudienceState = () => {');
-  const audienceEnd = app.indexOf('\\n  };', audienceStart);
+  const audienceEnd = app.indexOf(String.fromCharCode(10) + '  };', audienceStart);
   assert.ok(audienceStart >= 0 && audienceEnd > audienceStart, 'audience state builder exists');
   assert.doesNotMatch(app.slice(audienceStart, audienceEnd), /notes/i);
   assert.match(app, /presenterNotes\.textContent = snapshot\.currentSlide\.notes/);
