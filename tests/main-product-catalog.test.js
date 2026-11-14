@@ -218,3 +218,18 @@ test('Decks audience output applies slide transitions once per slide and respect
   render({ slide: { id: 'slide-three', title: 'Third', body: '', layout: 'title-content', transition: 'morph' }, themeId: 'paper', slideSize: 'widescreen' });
   assert.equal(elements['presentation-root'].className.includes('audience-transition-'), false);
 });
+
+
+test('Decks opens picture files only through a guarded local image picker', () => {
+  const root = path.join(__dirname, '..');
+  const main = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(root, 'src', 'preload.js'), 'utf8');
+
+  assert.match(main, /ipcMain\\.handle\\(['"]slides:picture:open['"][\\s\\S]*?senderIsMain\\(event\\)/);
+  assert.match(main, /showOpenDialog\\(mainWindow/);
+  assert.match(main, /image\\/(?:png|jpeg|webp)/);
+  assert.match(main, /MAX_SLIDE_IMAGE_BYTES/);
+  assert.match(main, /nativeImage\\.createFromBuffer/);
+  assert.match(preload, /openSlidePicture:\\s*\\(\\)\\s*=>\\s*ipcRenderer\\.invoke\\(['"]slides:picture:open['"]\\)/);
+});
+
