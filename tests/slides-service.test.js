@@ -1275,6 +1275,44 @@ test('Decks adds editable text boxes and basic vector shapes with stable IDs', (
   assert.equal(rectangle.fill, '#F3EBDD');
 });
 
+test('Decks adds a local picture object with its source and original dimensions', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Pictures', body: '' }] });
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=';
+
+  const picture = addSlideObject(presentation, 0, {
+    type: 'image',
+    imageData,
+    imageName: 'team-photo.png',
+    imageWidth: 1600,
+    imageHeight: 900,
+    x: 12, y: 18, width: 40, height: 28
+  });
+
+  assert.equal(picture.type, 'image');
+  assert.equal(picture.imageData, imageData);
+  assert.equal(picture.imageName, 'team-photo.png');
+  assert.equal(picture.imageWidth, 1600);
+  assert.equal(picture.imageHeight, 900);
+  assert.equal(presentation.slides[0].objects[0].id, picture.id);
+});
+
+test('Decks rejects unsafe picture sources and invalid original dimensions', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Pictures', body: '' }] });
+  const base = {
+    type: 'image',
+    imageData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+    imageName: 'picture.png',
+    imageWidth: 1,
+    imageHeight: 1
+  };
+
+  assert.throws(() => addSlideObject(presentation, 0, base), RangeError);
+  assert.throws(() => addSlideObject(presentation, 0, { ...base, imageData: 'https://example.com/picture.png' }), RangeError);
+  assert.throws(() => addSlideObject(presentation, 0, { ...base, imageWidth: 0 }), RangeError);
+  assert.throws(() => addSlideObject(presentation, 0, { ...base, imageHeight: 50000 }), RangeError);
+  assert.equal(presentation.slides[0].objects.length, 0);
+});
+
 test('Decks updates object geometry and formatting without changing its identity or type', () => {
   const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
   const shape = addSlideObject(presentation, 0, { type: 'rectangle' });
