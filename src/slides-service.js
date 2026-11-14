@@ -24,11 +24,36 @@
     return presentation;
   }
 
-  function normalizeSlide(slide) {
+  function createSlideId(usedIds = new Set()) {
+    let id;
+    do {
+      const random = typeof root.crypto?.randomUUID === 'function'
+        ? root.crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${(++sectionSequence).toString(36)}`;
+      id = `slide-${random}`;
+    } while (usedIds.has(id));
+    usedIds.add(id);
+    return id;
+  }
+
+  function isValidSlideId(value) {
+    return typeof value === 'string'
+      && value.length > 0
+      && value.length <= 100
+      && value.trim() === value
+      && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
+  }
+
+  function normalizeSlide(slide, usedIds = null) {
     const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
     const layout = SLIDE_LAYOUTS.includes(source.layout) ? source.layout : DEFAULT_LAYOUT;
+    const candidateId = source.id;
+    const idIsAvailable = isValidSlideId(candidateId) && (!usedIds || !usedIds.has(candidateId));
+    const id = idIsAvailable ? candidateId : createSlideId(usedIds || new Set());
+    if (usedIds) usedIds.add(id);
     const normalized = {
       ...source,
+      id,
       title: String(source.title ?? ''),
       body: String(source.body ?? ''),
       bodySecondary: String(source.bodySecondary ?? ''),
@@ -93,16 +118,17 @@
   function ensurePresentation(presentation, firstSlideTitle = 'Slide 1') {
     const target = assertPresentation(presentation);
     target.slideSize = SLIDE_SIZES.includes(target.slideSize) ? target.slideSize : DEFAULT_SLIDE_SIZE;
+    const usedIds = new Set();
     if (!Array.isArray(target.slides) || target.slides.length === 0) {
-      target.slides = [{
+      target.slides = [normalizeSlide({
         title: String(firstSlideTitle),
         body: '',
         bodySecondary: '',
         notes: '',
         layout: DEFAULT_LAYOUT
-      }];
+      }, usedIds)];
     } else {
-      target.slides = target.slides.map(normalizeSlide);
+      target.slides = target.slides.map(slide => normalizeSlide(slide, usedIds));
     }
     normalizeSections(target);
     const requested = Number.isInteger(target.current) ? target.current : 0;
@@ -124,11 +150,12 @@
     const target = ensurePresentation(presentation);
     const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
     const inheritedSectionId = source.sectionId ?? target.slides[target.slides.length - 1]?.sectionId;
+    const usedIds = new Set(target.slides.map(item => item.id));
     const next = normalizeSlide({
       ...source,
       ...(inheritedSectionId ? { sectionId: inheritedSectionId } : {}),
       title: source.title ?? `Slide ${target.slides.length + 1}`
-    });
+    }, usedIds);
     target.slides.push(next);
     target.current = target.slides.length - 1;
     return next;
@@ -139,6 +166,7 @@
     const selected = index === undefined ? target.current : index;
     assertSlideIndex(target, selected);
     const copy = copySlide(target.slides[selected]);
+    copy.id = createSlideId(new Set(target.slides.map(item => item.id)));
     target.slides.splice(selected + 1, 0, copy);
     target.current = selected + 1;
     return copy;
