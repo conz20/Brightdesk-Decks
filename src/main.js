@@ -636,7 +636,7 @@ ipcMain.handle('slides:reuse', async event => {
   if (imported?.kind !== 'slides' || !Array.isArray(imported.slides)) {
     throw new Error('Choose a valid PowerPoint presentation to reuse slides.');
   }
-  return imported;
+  return prepareProjectSlidePictures(imported);
 });
 ipcMain.handle('file:export', async (event, payload) => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
