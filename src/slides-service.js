@@ -510,7 +510,8 @@
           slides: copySlide(snapshot.slides),
           sections: snapshot.sections.map(section => ({ ...section })),
           current: snapshot.current,
-          slideSize: snapshot.slideSize
+          slideSize: snapshot.slideSize,
+          themeId: snapshot.themeId
         }))
       };
     }
