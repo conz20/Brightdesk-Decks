@@ -164,6 +164,35 @@
     const future = [];
     let lastGroup = null;
     let lastAt = 0;
+    let restored = false;
+
+    function normalizeSnapshot(snapshot) {
+      if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.slides) || snapshot.slides.length === 0) {
+        return null;
+      }
+      const normalized = ensurePresentation({
+        slides: copySlide(snapshot.slides),
+        current: snapshot.current
+      });
+      return cloneSnapshot(normalized);
+    }
+
+    function restoreSavedState(saved) {
+      if (!saved || typeof saved !== 'object' || saved.version !== 1) return;
+      const savedCurrent = normalizeSnapshot(saved.current);
+      if (!savedCurrent || !snapshotEquals(savedCurrent.slides, current.slides)) return;
+
+      const savedPast = Array.isArray(saved.past) ? saved.past.map(normalizeSnapshot) : null;
+      const savedFuture = Array.isArray(saved.future) ? saved.future.map(normalizeSnapshot) : null;
+      if (!savedPast || !savedFuture || savedPast.some(item => !item) || savedFuture.some(item => !item)) return;
+
+      current.current = target.current;
+      past.push(...savedPast.slice(-limit));
+      future.push(...savedFuture.slice(-limit));
+      restored = true;
+    }
+
+    restoreSavedState(options.state);
 
     function trimPast() {
       while (past.length > limit) past.shift();
@@ -234,14 +263,32 @@
       lastAt = 0;
     }
 
+    function exportState() {
+      return {
+        version: 1,
+        limit,
+        current: cloneSnapshot(current),
+        past: past.map(snapshot => ({
+          slides: copySlide(snapshot.slides),
+          current: snapshot.current
+        })),
+        future: future.map(snapshot => ({
+          slides: copySlide(snapshot.slides),
+          current: snapshot.current
+        }))
+      };
+    }
+
     return {
+      restored,
       canUndo: () => past.length > 0,
       canRedo: () => future.length > 0,
       commit,
       undo,
       redo,
       sync,
-      reset
+      reset,
+      exportState
     };
   }
 
