@@ -133,14 +133,20 @@ The existing open Brightdesk-Decks pull requests include separate design, slide-
 
 ## Implementation progress — 14 November 2026
 
-The first part of P0 is now represented by draft implementation work in [Brightdesk-Decks PR #34](https://github.com/conz20/Brightdesk-Decks/pull/34):
+The first practical presentation-editor milestone is now represented by [Brightdesk-Decks PR #34](https://github.com/conz20/Brightdesk-Decks/pull/34), built from current `main`:
 
-- A thumbnail navigator with slide selection.
-- Drag-and-drop slide reordering, with Move earlier / Move later controls as a keyboard-accessible alternative.
+- A left thumbnail navigator with slide selection and drag reordering.
+- Keyboard-accessible Move earlier / Move later controls in Normal View and Slide Sorter.
+- A Slide Sorter grid in the View ribbon.
+- Four initial slide layouts: Title slide, Title and content, Two content and Section header.
+- Editable secondary content for Two content slides.
 - Per-slide speaker notes stored in the existing local presentation model.
-- Speaker notes included in PowerPoint export.
-- F5 / Shift+F5 presentation shortcuts.
+- Speaker notes and supported layout positioning included in PowerPoint export.
+- F5 / Shift+F5 presentation shortcuts while preserving the current motion-aware presentation overlay.
+- File validation for notes, layouts and secondary slide content.
 
-**Status: implemented on a review branch, not merged or verified.** The existing first-run and legacy slide data is migrated in memory with notes defaulting to an empty string. PowerPoint speaker-note import is still open. No genuine running-build screenshot comparison, exact Node.js 24.22.2 test run, current-head CI pass, or native Windows/macOS/Linux acceptance is claimed.
+Legacy slides migrate in memory to the Title and content layout while preserving their title/body text. PowerPoint speaker-note import remains open.
 
-The remainder of P0 is still open: slide layouts and placeholders, undo/redo, a complete Slide Sorter, and stronger file-format regression coverage. PR #34 is the clean current-main implementation branch and supersedes the older PR #15 branch, which has diverged from current main. Do not create duplicate slide services or competing branches for the same functionality.
+**Status: implemented on a review branch, not merged or verified.** The product-test and README-freshness workflows are queued on the private CI runner. They have not reported a pass. No genuine running-build screenshot comparison, exact Node.js 24.22.2 test result, or native Windows/macOS/Linux acceptance is claimed.
+
+The remaining P0 work includes undo/redo, layout placeholders/reset, and broader file-format fixtures. Later milestones still include masters, sections, rich objects, transitions, animations and Presenter View. PR #34 is the clean current-main implementation branch; the older divergent PR #15 has been closed to avoid duplicate work. Do not create duplicate slide services or competing branches for the same functionality.
