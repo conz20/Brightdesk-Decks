@@ -1399,6 +1399,12 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   let blankMode = null;
   let showMessage = '';
   let audienceDisplayActive = false;
+  const removePresenterDisplayLostListener = presenterMode
+    ? window.brightdesk?.onPresenterDisplayLost?.(() => {
+      audienceDisplayActive = false;
+      presenterDisplayStatus.textContent = 'The second display was disconnected. Presenter View remains open on this screen.';
+    })
+    : null;
 
   const createAudienceState = () => {
     const currentSlide = d.slides[currentSlideIndex()];
@@ -1500,6 +1506,7 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   const close = () => {
     if (closing) return;
     closing = true;
+    if (typeof removePresenterDisplayLostListener === 'function') removePresenterDisplayLostListener();
     if (presenterMode && window.brightdesk?.endPresenter) {
       window.brightdesk.endPresenter().catch(() => {});
       audienceDisplayActive = false;
