@@ -364,8 +364,14 @@ function renderToolbar() {
       addButton(view, label('fitSlide'), () => { slideWrap.scrollTop = 0; setStatus('Slide fitted to workspace'); });
       addButton(view, label('slideCount'), () => setStatus(`${activeDoc().slides.length} slides`));
       const views = ribbonGroup(toolbar, 'Views');
-      addButton(views, state.slideView === 'sorter' ? 'Normal view' : 'Slide Sorter', () => {
-        setSlideView(state.slideView === 'sorter' ? 'normal' : 'sorter');
+      [
+        ['normal', 'Normal view'],
+        ['sorter', 'Slide Sorter'],
+        ['outline', 'Outline View']
+      ].forEach(([viewName, viewLabel]) => {
+        const button = addButton(views, viewLabel, () => setSlideView(viewName));
+        button.setAttribute('aria-pressed', String(state.slideView === viewName));
+        button.classList.toggle('active', state.slideView === viewName);
       });
     }
   } else if (app === 'notes') {
@@ -456,6 +462,144 @@ function renderSheet() {
     tbody.append(tr);
   }); table.append(tbody); sheetWrap.innerHTML=''; sheetWrap.append(table);
 }
+function renderSlideOutline(doc) {
+  slideWrap.innerHTML = '';
+  const slidesService = window.BrightdeskSlidesService;
+  const view = document.createElement('section');
+  view.className = 'slide-outline-view';
+  view.setAttribute('aria-label', 'Presentation outline');
+
+  const header = document.createElement('header');
+  header.className = 'slide-outline-header';
+  const heading = document.createElement('div');
+  const title = document.createElement('h2');
+  title.textContent = 'Outline View';
+  const description = document.createElement('p');
+  description.textContent = 'Edit slide titles and content in one continuous outline.';
+  heading.append(title, description);
+  const count = document.createElement('span');
+  count.className = 'slide-outline-count';
+  count.textContent = `${doc.slides.length} slides`;
+  header.append(heading, count);
+
+  const list = document.createElement('div');
+  list.className = 'slide-outline-list';
+
+  doc.slides.forEach((slide, index) => {
+    if (slide.sectionId && (index === 0 || doc.slides[index - 1].sectionId !== slide.sectionId)) {
+      const section = doc.sections.find(item => item.id === slide.sectionId);
+      if (section) {
+        const sectionHeading = document.createElement('div');
+        sectionHeading.className = 'slide-outline-section-heading';
+        sectionHeading.textContent = section.name;
+        list.append(sectionHeading);
+      }
+    }
+
+    const entry = document.createElement('article');
+    entry.className = 'slide-outline-entry';
+    entry.classList.toggle('is-hidden-slide', slide.hidden === true);
+    entry.dataset.slideIndex = String(index);
+
+    const meta = document.createElement('div');
+    meta.className = 'slide-outline-meta';
+    const number = document.createElement('span');
+    number.className = 'slide-outline-number';
+    number.textContent = `Slide ${index + 1}`;
+    meta.append(number);
+
+    if (slide.hidden === true) {
+      const hiddenBadge = document.createElement('span');
+      hiddenBadge.className = 'slide-hidden-indicator';
+      hiddenBadge.textContent = 'Hidden';
+      meta.append(hiddenBadge);
+    }
+
+    const openButton = document.createElement('button');
+    openButton.type = 'button';
+    openButton.className = 'slide-outline-open-button';
+    openButton.textContent = 'Edit slide';
+    openButton.setAttribute('aria-label', `Open slide ${index + 1} in Normal view`);
+    openButton.addEventListener('click', () => {
+      slidesService.setCurrentSlide(doc, index);
+      getSlideHistory(doc).sync(doc);
+      setSlideView('normal');
+    });
+    meta.append(openButton);
+
+    const fields = document.createElement('div');
+    fields.className = 'slide-outline-fields';
+
+    const titleLabel = document.createElement('label');
+    titleLabel.className = 'slide-outline-field';
+    const titleCaption = document.createElement('span');
+    titleCaption.textContent = 'Title';
+    const titleInput = document.createElement('textarea');
+    titleInput.className = 'slide-outline-title';
+    titleInput.rows = 1;
+    titleInput.value = slide.title || '';
+    titleInput.placeholder = `Slide ${index + 1} title`;
+    titleInput.setAttribute('aria-label', `Slide ${index + 1} title`);
+    titleInput.lang = state.proofingLanguage;
+    titleInput.addEventListener('input', () => {
+      slidesService.updateSlide(doc, index, { title: titleInput.value });
+      commitSlideChange(doc, `slide:${index}:title`);
+      persist();
+    });
+    titleLabel.append(titleCaption, titleInput);
+    fields.append(titleLabel);
+
+    const contentFields = document.createElement('div');
+    contentFields.className = 'slide-outline-content-fields';
+    const bodyLabel = document.createElement('label');
+    bodyLabel.className = 'slide-outline-field slide-outline-content-field';
+    const bodyCaption = document.createElement('span');
+    bodyCaption.textContent = 'Content';
+    const bodyInput = document.createElement('textarea');
+    bodyInput.className = 'slide-outline-body';
+    bodyInput.rows = 3;
+    bodyInput.value = slide.body || '';
+    bodyInput.placeholder = 'Add slide content';
+    bodyInput.setAttribute('aria-label', `Slide ${index + 1} content`);
+    bodyInput.lang = state.proofingLanguage;
+    bodyInput.addEventListener('input', () => {
+      slidesService.updateSlide(doc, index, { body: bodyInput.value });
+      commitSlideChange(doc, `slide:${index}:body`);
+      persist();
+    });
+    bodyLabel.append(bodyCaption, bodyInput);
+    contentFields.append(bodyLabel);
+
+    if (slide.layout === 'two-content') {
+      const secondaryLabel = document.createElement('label');
+      secondaryLabel.className = 'slide-outline-field slide-outline-content-field';
+      const secondaryCaption = document.createElement('span');
+      secondaryCaption.textContent = 'Second column';
+      const secondaryInput = document.createElement('textarea');
+      secondaryInput.className = 'slide-outline-body slide-outline-body-secondary';
+      secondaryInput.rows = 3;
+      secondaryInput.value = slide.bodySecondary || '';
+      secondaryInput.placeholder = 'Add second-column content';
+      secondaryInput.setAttribute('aria-label', `Slide ${index + 1} second content column`);
+      secondaryInput.lang = state.proofingLanguage;
+      secondaryInput.addEventListener('input', () => {
+        slidesService.updateSlide(doc, index, { bodySecondary: secondaryInput.value });
+        commitSlideChange(doc, `slide:${index}:secondary`);
+        persist();
+      });
+      secondaryLabel.append(secondaryCaption, secondaryInput);
+      contentFields.append(secondaryLabel);
+    }
+
+    fields.append(contentFields);
+    entry.append(meta, fields);
+    list.append(entry);
+  });
+
+  view.append(header, list);
+  slideWrap.append(view);
+}
+
 function renderSlideSorter(doc) {
   slideWrap.innerHTML = '';
   const view = document.createElement('section');
@@ -618,7 +762,7 @@ function renderSlideSorter(doc) {
 }
 
 function setSlideView(view) {
-  if (!['normal', 'sorter'].includes(view)) return;
+  if (!['normal', 'sorter', 'outline'].includes(view)) return;
   state.slideView = view;
   renderSlides();
   renderToolbar();
@@ -727,6 +871,10 @@ function renderSlides() {
   const doc = slidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
   if (state.slideView === 'sorter') {
     renderSlideSorter(doc);
+    return;
+  }
+  if (state.slideView === 'outline') {
+    renderSlideOutline(doc);
     return;
   }
   const slide = doc.slides[doc.current];
