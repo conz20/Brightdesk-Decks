@@ -342,6 +342,21 @@ function renderToolbar() {
         if (selected) button.classList.add('active');
       });
 
+      const backgroundGroup = group('slideBackground');
+      const backgroundLabel = document.createElement('label');
+      backgroundLabel.className = 'slide-background-picker';
+      const backgroundText = document.createElement('span');
+      backgroundText.textContent = label('backgroundColour');
+      const backgroundInput = document.createElement('input');
+      backgroundInput.type = 'color';
+      backgroundInput.className = 'slide-background-colour';
+      backgroundInput.value = window.BrightdeskSlidesService.getSlideBackgroundColor(presentation, presentation.current);
+      backgroundInput.setAttribute('aria-label', label('backgroundColour'));
+      backgroundInput.addEventListener('change', () => setSlideBackgroundColor(backgroundInput.value));
+      backgroundLabel.append(backgroundText, backgroundInput);
+      backgroundGroup.append(backgroundLabel);
+      addButton(backgroundGroup, label('resetBackground'), () => setSlideBackgroundColor(null));
+
       const sizeGroup = ribbonGroup(toolbar, 'Slide Size');
       const sizeSelect = document.createElement('select');
       sizeSelect.className = 'slide-size-select';
@@ -442,6 +457,19 @@ function setSlideTheme(theme) {
     renderToolbar();
     persist();
     setStatus(`${theme[0].toUpperCase()}${theme.slice(1)} theme selected`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+function setSlideBackgroundColor(backgroundColor) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  try {
+    window.BrightdeskSlidesService.setSlideBackgroundColor(doc, doc.current, backgroundColor);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(backgroundColor ? 'Slide background updated' : 'Slide background reset to the presentation theme');
   } catch (error) {
     setStatus(error.message);
   }
@@ -693,11 +721,18 @@ function renderSlideSorter(doc) {
     previewTitle.textContent = slide.title.trim() || `Slide ${index + 1}`;
     const previewBody = document.createElement('span');
     previewBody.textContent = slide.body.trim().slice(0, 120) || 'Add content';
+    const previewTextColor = slide.backgroundColor
+      ? window.BrightdeskSlidesService.getReadableTextColor(slide.backgroundColor)
+      : '';
+    preview.style.backgroundColor = slide.backgroundColor || '';
+    previewTitle.style.color = previewTextColor;
+    previewBody.style.color = previewTextColor;
     preview.append(previewTitle, previewBody);
     if (slide.layout === 'two-content') {
       const second = document.createElement('span');
       second.className = 'slide-sorter-secondary';
       second.textContent = slide.bodySecondary.trim().slice(0, 90) || 'Second column';
+      second.style.color = previewTextColor;
       preview.append(second);
     }
     select.append(number, preview);
@@ -1079,18 +1114,24 @@ function renderSlides() {
 
   const stage = document.createElement('div');
   stage.className = `slide-stage theme-${doc.themeId} layout-${slide.layout} size-${doc.slideSize}`;
+  const slideTextColor = slide.backgroundColor
+    ? window.BrightdeskSlidesService.getReadableTextColor(slide.backgroundColor)
+    : '';
+  stage.style.backgroundColor = slide.backgroundColor || '';
 
   const title = document.createElement('textarea');
   title.className = 'slide-title';
   title.value = slide.title || '';
   title.setAttribute('aria-label', 'Slide title');
   title.lang = state.proofingLanguage;
+  title.style.color = slideTextColor;
 
   const body = document.createElement('textarea');
   body.className = 'slide-body slide-body-primary';
   body.value = slide.body || '';
   body.setAttribute('aria-label', 'Slide text');
   body.lang = state.proofingLanguage;
+  body.style.color = slideTextColor;
 
   let secondary = null;
   const updatePrimary = () => {
@@ -1115,6 +1156,7 @@ function renderSlides() {
     secondary.value = slide.bodySecondary || '';
     secondary.setAttribute('aria-label', 'Second content column');
     secondary.lang = state.proofingLanguage;
+    secondary.style.color = slideTextColor;
     secondary.addEventListener('input', () => {
       slidesService.updateSlide(doc, doc.current, { bodySecondary: secondary.value });
       commitSlideChange(doc, `slide:${doc.current}:secondary`);
@@ -1413,7 +1455,8 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
         title: currentSlide.title || '',
         body: currentSlide.body || '',
         bodySecondary: currentSlide.bodySecondary || '',
-        layout: currentSlide.layout || 'title-content'
+        layout: currentSlide.layout || 'title-content',
+        ...(currentSlide.backgroundColor ? { backgroundColor: currentSlide.backgroundColor } : {})
       },
       themeId: d.themeId || 'lavender',
       slideSize: d.slideSize || 'widescreen',
@@ -1448,6 +1491,13 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
       : null;
     const currentSlide = snapshot?.currentSlide || d.slides[currentSlideIndex()];
     slide.className = `presentation-slide size-${d.slideSize || 'widescreen'} theme-${d.themeId} layout-${currentSlide.layout || 'title-content'}${presenterMode ? ' presenter-current-slide' : ''}`;
+    const currentTextColor = currentSlide.backgroundColor
+      ? window.BrightdeskSlidesService.getReadableTextColor(currentSlide.backgroundColor)
+      : '';
+    slide.style.backgroundColor = currentSlide.backgroundColor || '';
+    title.style.color = currentTextColor;
+    body.style.color = currentTextColor;
+    secondaryBody.style.color = currentTextColor;
     title.textContent = currentSlide.title || '';
     body.textContent = currentSlide.body || '';
     secondaryBody.textContent = currentSlide.bodySecondary || '';
@@ -1476,6 +1526,13 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
         nextPreview.hidden = false;
         noNextSlide.hidden = true;
         nextPreview.className = `presentation-slide presenter-slide-preview size-${d.slideSize || 'widescreen'} theme-${d.themeId} layout-${snapshot.nextSlide.layout || 'title-content'}`;
+        const nextTextColor = snapshot.nextSlide.backgroundColor
+          ? window.BrightdeskSlidesService.getReadableTextColor(snapshot.nextSlide.backgroundColor)
+          : '';
+        nextPreview.style.backgroundColor = snapshot.nextSlide.backgroundColor || '';
+        nextPreviewTitle.style.color = nextTextColor;
+        nextPreviewBody.style.color = nextTextColor;
+        nextPreviewSecondary.style.color = nextTextColor;
         nextPreviewTitle.textContent = snapshot.nextSlide.title || '';
         nextPreviewBody.textContent = snapshot.nextSlide.body || '';
         nextPreviewSecondary.textContent = snapshot.nextSlide.bodySecondary || '';
