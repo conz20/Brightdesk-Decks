@@ -12,6 +12,7 @@ let agreementWindow;
 let presenterWindow;
 let presenterWindowReady = false;
 let presenterState = null;
+let presenterDisplayId = null;
 let termsAccepted = false;
 let autoUpdater;
 const updatePublishingConfigured = Array.isArray(packageConfig.build?.publish) && packageConfig.build.publish.some(item => item?.provider === 'github' && item?.owner && item.owner !== 'YOUR_GITHUB_ACCOUNT');
@@ -78,6 +79,7 @@ function normalizePresenterState(payload) {
 function closePresenterWindow() {
   presenterState = null;
   presenterWindowReady = false;
+  presenterDisplayId = null;
   if (presenterWindow && !presenterWindow.isDestroyed()) presenterWindow.close();
   presenterWindow = null;
 }
@@ -104,6 +106,7 @@ function createPresenterWindow(display, initialState) {
     }
   });
   presenterWindow = audienceWindow;
+  presenterDisplayId = display.id;
   audienceWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   audienceWindow.webContents.on('will-navigate', event => event.preventDefault());
   audienceWindow.webContents.once('did-finish-load', () => {
@@ -117,6 +120,7 @@ function createPresenterWindow(display, initialState) {
     presenterWindow = null;
     presenterWindowReady = false;
     presenterState = null;
+    presenterDisplayId = null;
   });
   audienceWindow.loadFile(path.join(__dirname, 'presentation.html')).catch(error => {
     console.error('The audience presentation window could not be loaded.', error);
@@ -220,6 +224,14 @@ ipcMain.handle('presentation:end', event => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
   closePresenterWindow();
   return { ok: true };
+});
+
+screen.on('display-removed', (_event, display) => {
+  if (!presenterWindow || presenterDisplayId !== display.id) return;
+  closePresenterWindow();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('presentation:display-lost');
+  }
 });
 
 
