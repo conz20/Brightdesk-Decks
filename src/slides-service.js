@@ -12,6 +12,15 @@
     'section-header'
   ]);
   const DEFAULT_LAYOUT = 'title-content';
+  const SLIDE_LAYOUT_IDS = Object.freeze({
+    title: 'layout-title',
+    'title-content': 'layout-title-content',
+    'two-content': 'layout-two-content',
+    'section-header': 'layout-section-header'
+  });
+  const SLIDE_LAYOUT_BY_ID = Object.freeze(
+    Object.fromEntries(Object.entries(SLIDE_LAYOUT_IDS).map(([layout, id]) => [id, layout]))
+  );
   const SLIDE_SIZES = Object.freeze(['widescreen', 'standard']);
   const DEFAULT_SLIDE_SIZE = 'widescreen';
   const SLIDE_THEMES = Object.freeze(['lavender', 'midnight', 'paper']);
@@ -49,7 +58,11 @@
 
   function normalizeSlide(slide, usedIds = null) {
     const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
-    const layout = SLIDE_LAYOUTS.includes(source.layout) ? source.layout : DEFAULT_LAYOUT;
+    const layoutFromId = SLIDE_LAYOUT_BY_ID[source.layoutId];
+    const layout = SLIDE_LAYOUTS.includes(source.layout)
+      ? source.layout
+      : (layoutFromId || DEFAULT_LAYOUT);
+    const layoutId = SLIDE_LAYOUT_IDS[layout];
     const candidateId = source.id;
     const idIsAvailable = isValidSlideId(candidateId) && (!usedIds || !usedIds.has(candidateId));
     const id = idIsAvailable ? candidateId : createSlideId(usedIds || new Set());
@@ -61,7 +74,8 @@
       body: String(source.body ?? ''),
       bodySecondary: String(source.bodySecondary ?? ''),
       notes: String(source.notes ?? ''),
-      layout
+      layout,
+      layoutId
     };
     if (source.hidden === true) normalized.hidden = true;
     else delete normalized.hidden;
@@ -208,6 +222,7 @@
       throw new RangeError('The selected slide layout is not supported.');
     }
     target.slides[index].layout = layout;
+    target.slides[index].layoutId = SLIDE_LAYOUT_IDS[layout];
     return target.slides[index];
   }
 
@@ -532,6 +547,7 @@
   return {
     SLIDE_LAYOUTS,
     DEFAULT_LAYOUT,
+    SLIDE_LAYOUT_IDS,
     SLIDE_SIZES,
     DEFAULT_SLIDE_SIZE,
     SLIDE_THEMES,
