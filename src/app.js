@@ -205,7 +205,7 @@ function renderToolbar() {
     } else if (tab === 'design') {
       const design = group('themes');
       [['Lavender','lavender'],['Midnight','midnight'],['Paper','paper']].forEach(([label, theme]) => addButton(design, label, () => setSlideTheme(theme)));
-      const layoutGroup = group('slideLayout');
+      const layoutGroup = ribbonGroup(toolbar, 'Layout');
       const layoutSelect = document.createElement('select');
       layoutSelect.className = 'slide-layout-select';
       layoutSelect.setAttribute('aria-label', 'Slide layout');
@@ -233,7 +233,7 @@ function renderToolbar() {
       const view = group('zoom');
       addButton(view, label('fitSlide'), () => { slideWrap.scrollTop = 0; setStatus('Slide fitted to workspace'); });
       addButton(view, label('slideCount'), () => setStatus(`${activeDoc().slides.length} slides`));
-      const views = group('presentationView');
+      const views = ribbonGroup(toolbar, 'Views');
       addButton(views, state.slideView === 'sorter' ? 'Normal view' : 'Slide Sorter', () => {
         setSlideView(state.slideView === 'sorter' ? 'normal' : 'sorter');
       });
@@ -376,8 +376,11 @@ function renderSlideSorter(doc) {
     select.append(number, preview);
     select.addEventListener('click', () => {
       window.BrightdeskSlidesService.setCurrentSlide(doc, index);
-      renderSlides();
-      renderToolbar();
+      grid.querySelectorAll('.slide-sorter-card').forEach((item, itemIndex) => {
+        const active = itemIndex === index;
+        item.classList.toggle('active', active);
+        item.querySelector('.slide-sorter-select')?.setAttribute('aria-current', String(active));
+      });
     });
     select.addEventListener('dblclick', () => setSlideView('normal'));
 
