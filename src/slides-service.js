@@ -18,8 +18,8 @@
     'two-content': 'layout-two-content',
     'section-header': 'layout-section-header'
   });
-  const SLIDE_LAYOUT_BY_ID = Object.freeze(
-    Object.fromEntries(Object.entries(SLIDE_LAYOUT_IDS).map(([layout, id]) => [id, layout]))
+  const SLIDE_LAYOUT_BY_ID = new Map(
+    Object.entries(SLIDE_LAYOUT_IDS).map(([layout, id]) => [id, layout])
   );
   const SLIDE_SIZES = Object.freeze(['widescreen', 'standard']);
   const DEFAULT_SLIDE_SIZE = 'widescreen';
@@ -58,7 +58,7 @@
 
   function normalizeSlide(slide, usedIds = null) {
     const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
-    const layoutFromId = SLIDE_LAYOUT_BY_ID[source.layoutId];
+    const layoutFromId = typeof source.layoutId === 'string' ? SLIDE_LAYOUT_BY_ID.get(source.layoutId) : null;
     const layout = SLIDE_LAYOUTS.includes(source.layout)
       ? source.layout
       : (layoutFromId || DEFAULT_LAYOUT);
