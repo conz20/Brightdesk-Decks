@@ -729,3 +729,7 @@
 .slide-sorter-preview.size-standard{
   aspect-ratio:4/3;
 }
+
+.presentation-slide.size-standard{
+  width:min(100%,calc((100vh - 8vw)*4/3),1200px);
+}
