@@ -754,30 +754,38 @@ test('Brightdesk project export and import preserve custom slide backgrounds', a
   }
 });
 
-test('PPTX export applies custom slide background colours and readable text contrast', async () => {
+test('PPTX export applies custom slide background colours and readable text contrast to every layout', async () => {
   const JSZip = require('jszip');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-custom-background-'));
   const cases = [
-    { backgroundColor: '#202B3B', textColor: 'FFFFFF' },
-    { backgroundColor: '#F3EBDD', textColor: '000000' }
+    { layout: 'title', backgroundColor: '#202B3B', textColor: 'FFFFFF' },
+    { layout: 'title-content', backgroundColor: '#202B3B', textColor: 'FFFFFF' },
+    { layout: 'two-content', backgroundColor: '#202B3B', textColor: 'FFFFFF' },
+    { layout: 'section-header', backgroundColor: '#202B3B', textColor: 'FFFFFF' },
+    { layout: 'title-content', backgroundColor: '#F3EBDD', textColor: '000000' },
+    { layout: 'two-content', backgroundColor: '#F3EBDD', textColor: '000000' }
   ];
   try {
-    for (const item of cases) {
-      const filePath = path.join(directory, item.backgroundColor.slice(1) + '.pptx');
+    for (const [index, item] of cases.entries()) {
+      const filePath = path.join(directory, item.layout + '-' + index + '.pptx');
       await exportOfficeFile({
         kind: 'slides',
         themeId: 'lavender',
         slides: [{
           title: 'Readable title',
           body: 'Readable body',
-          layout: 'title',
+          bodySecondary: 'Readable second column',
+          layout: item.layout,
           backgroundColor: item.backgroundColor
         }]
       }, filePath);
       const archive = await JSZip.loadAsync(await fs.readFile(filePath));
       const slideXml = await archive.file('ppt/slides/slide1.xml')?.async('string');
       assert.match(slideXml || '', new RegExp('val="' + item.backgroundColor.slice(1) + '"'));
-      assert.ok((slideXml || '').includes(item.textColor), 'the title and body text should use a high-contrast colour');
+      assert.ok(
+        (slideXml || '').includes(item.textColor),
+        item.layout + ' title and body text should use the high-contrast colour'
+      );
       const reopened = await openOfficeFile(filePath);
       assert.equal(reopened.slides[0].backgroundColor, item.backgroundColor);
     }
