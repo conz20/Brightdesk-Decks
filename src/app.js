@@ -1312,7 +1312,7 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
 
   const notesPanel = document.createElement('section');
   notesPanel.className = 'presenter-card presenter-notes-panel';
-  notesPanel.setAttribute('aria-label', 'Private speaker notes');
+  notesPanel.setAttribute('aria-label', 'Speaker notes for the current slide');
   const notesHeading = document.createElement('h3');
   notesHeading.textContent = 'Speaker notes';
   const presenterNotes = document.createElement('div');
