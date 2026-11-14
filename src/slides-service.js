@@ -802,8 +802,14 @@
   }
 
   function cloneSnapshot(presentation) {
+    const slides = copySlide(presentation.slides);
+    for (const slide of slides) {
+      for (const object of slide.objects || []) {
+        if (object.type === 'image' && object.imageAssetId) delete object.imageData;
+      }
+    }
     return {
-      slides: copySlide(presentation.slides),
+      slides,
       sections: presentation.sections.map(section => ({ ...section })),
       current: presentation.current,
       slideSize: presentation.slideSize,
@@ -984,20 +990,8 @@
         version: 1,
         limit,
         current: cloneSnapshot(current),
-        past: past.map(snapshot => ({
-          slides: copySlide(snapshot.slides),
-          sections: snapshot.sections.map(section => ({ ...section })),
-          current: snapshot.current,
-          slideSize: snapshot.slideSize,
-          themeId: snapshot.themeId
-        })),
-        future: future.map(snapshot => ({
-          slides: copySlide(snapshot.slides),
-          sections: snapshot.sections.map(section => ({ ...section })),
-          current: snapshot.current,
-          slideSize: snapshot.slideSize,
-          themeId: snapshot.themeId
-        }))
+        past: past.map(snapshot => cloneSnapshot(snapshot)),
+        future: future.map(snapshot => cloneSnapshot(snapshot))
       };
     }
 
