@@ -182,3 +182,82 @@ test('Decks starts the show with F5 or from the selected slide with Shift+F5', (
   assert.match(app, /presentSlides\(!event\.shiftKey\)/);
   assert.match(app, /event\.key !== 'F5'/);
 });
+
+
+test('Decks migrates existing slides to the default title and content layout', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Legacy', body: 'Existing body', notes: 'Existing notes' }],
+    current: 0
+  });
+
+  assert.equal(presentation.slides[0].layout, 'title-content');
+  assert.equal(presentation.slides[0].bodySecondary, '');
+  assert.equal(presentation.slides[0].body, 'Existing body');
+  assert.equal(presentation.slides[0].notes, 'Existing notes');
+});
+
+test('Decks preserves a valid slide layout and secondary content when normalizing', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Compare', body: 'Left', bodySecondary: 'Right', layout: 'two-content' }],
+    current: 0
+  });
+
+  assert.equal(presentation.slides[0].layout, 'two-content');
+  assert.equal(presentation.slides[0].body, 'Left');
+  assert.equal(presentation.slides[0].bodySecondary, 'Right');
+});
+
+test('Decks replaces unknown stored layouts with the safe default', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Legacy', body: 'Text', layout: 'remote-layout' }],
+    current: 0
+  });
+
+  assert.equal(presentation.slides[0].layout, 'title-content');
+});
+
+test('Decks changes the selected slide layout without losing text or notes', () => {
+  const presentation = {
+    slides: [{ title: 'Compare', body: 'First column', bodySecondary: 'Second column', notes: 'Compare both sides.' }],
+    current: 0
+  };
+
+  const slide = setSlideLayout(presentation, 0, 'two-content');
+
+  assert.equal(slide.layout, 'two-content');
+  assert.equal(slide.body, 'First column');
+  assert.equal(slide.bodySecondary, 'Second column');
+  assert.equal(slide.notes, 'Compare both sides.');
+});
+
+test('Decks rejects unknown slide layout selections', () => {
+  const presentation = { slides: [{ title: 'Title', body: 'Body' }], current: 0 };
+
+  assert.throws(() => setSlideLayout(presentation, 0, 'unknown-layout'), RangeError);
+});
+
+test('Decks can edit secondary placeholder text without changing the primary body', () => {
+  const presentation = {
+    slides: [{ title: 'Compare', body: 'Left side', bodySecondary: 'Right side', layout: 'two-content' }],
+    current: 0
+  };
+
+  const updated = updateSlide(presentation, 0, { bodySecondary: 'Updated right side' });
+
+  assert.equal(updated.body, 'Left side');
+  assert.equal(updated.bodySecondary, 'Updated right side');
+});
+
+test('Decks connects slide layout selection and Slide Sorter to its ribbon', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'src', 'styles.css'), 'utf8');
+
+  assert.match(app, /slide-layout-select/);
+  assert.match(app, /setSlideLayout\(/);
+  assert.match(app, /state\.slideView === 'sorter'/);
+  assert.match(app, /Slide Sorter/);
+  assert.match(styles, /\.slide-sorter-grid/);
+  assert.match(styles, /\.slide-layout-two-content/);
+});
