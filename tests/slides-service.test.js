@@ -13,7 +13,9 @@ const {
   setCurrentSlide,
   getPresenterSnapshot,
   createHistory,
-  setSlideTheme
+  setSlideTheme,
+  setSlideBackgroundColor,
+  getReadableTextColor
 } = require('../src/slides-service');
 
 function withoutSlideId(slide) {
@@ -1132,4 +1134,32 @@ test('Decks treats prototype-like unknown layout IDs as invalid data', () => {
     assert.equal(presentation.slides[0].layout, 'title-content');
     assert.equal(presentation.slides[0].layoutId, 'layout-title-content');
   }
+});
+
+
+test('Decks saves and clears per-slide solid background colours', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Brand', body: 'Background' }]
+  });
+
+  setSlideBackgroundColor(presentation, 0, '#1a2b3c');
+  assert.equal(presentation.slides[0].backgroundColor, '#1A2B3C');
+
+  setSlideBackgroundColor(presentation, 0, null);
+  assert.equal(Object.hasOwn(presentation.slides[0], 'backgroundColor'), false);
+});
+
+test('Decks rejects invalid per-slide background colours', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Brand', body: '' }] });
+  for (const value of ['red', '#fff', '#12345G', 'rgb(0,0,0)', '']) {
+    assert.throws(() => setSlideBackgroundColor(presentation, 0, value), RangeError);
+  }
+  assert.equal(presentation.slides[0].backgroundColor, undefined);
+});
+
+test('Decks chooses readable text colours for dark and light slide backgrounds', () => {
+  assert.equal(getReadableTextColor('#000000'), '#FFFFFF');
+  assert.equal(getReadableTextColor('#202B3B'), '#FFFFFF');
+  assert.equal(getReadableTextColor('#FFFFFF'), '#111827');
+  assert.equal(getReadableTextColor('#F3EBDD'), '#111827');
 });
