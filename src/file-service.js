@@ -344,6 +344,7 @@ const PPTX_CUSTOM_PROPERTIES_CONTENT_TYPE = 'application/vnd.openxmlformats-offi
 
 async function writePptxThemeMetadata(filePath, themeId) {
   const JSZip = require('jszip');
+  const { XMLParser } = require('fast-xml-parser');
   const archive = await JSZip.loadAsync(await fs.readFile(filePath));
   const relationshipsPath = '_rels/.rels';
   const contentTypesPath = '[Content_Types].xml';
@@ -353,13 +354,37 @@ async function writePptxThemeMetadata(filePath, themeId) {
     throw new Error('The PowerPoint package is missing required metadata files.');
   }
 
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
   let relationshipsXml = await relationshipsFile.async('string');
-  const hasThemeProperties = new RegExp(
-    '<Relationship\\b(?=[^>]*\\bType=["\\']' + PPTX_CUSTOM_PROPERTIES_RELATIONSHIP + '["\\'])',
-    'i'
-  ).test(relationshipsXml);
+  let parsedRelationships;
+  try {
+    parsedRelationships = parser.parse(relationshipsXml);
+  } catch {
+    throw new Error('The PowerPoint package relationships are invalid.');
+  }
+  const relationships = asArray(parsedRelationships.Relationships?.Relationship);
+  const matching = relationships.filter(item =>
+    String(item?.['@_Type'] || '') === PPTX_CUSTOM_PROPERTIES_RELATIONSHIP
+  );
+  if (matching.some(item => item?.['@_TargetMode'] === 'External')) {
+    throw new Error('The generated PowerPoint package contains an external custom-properties relationship.');
+  }
+  if (matching.some(item => String(item?.['@_Target'] || '').replace(/^\/+/, '') !== 'docProps/custom.xml')) {
+    throw new Error('The generated PowerPoint custom-properties relationship has an unexpected target.');
+  }
+
+  const hasThemeProperties = matching.some(item =>
+    String(item?.['@_Target'] || '').replace(/^\/+/, '') === 'docProps/custom.xml'
+  );
   if (!hasThemeProperties) {
-    const ids = [...relationshipsXml.matchAll(/\bId=["']rId(\d+)["']/g)].map(match => Number(match[1]));
+    const ids = relationships
+      .map(item => String(item?.['@_Id'] || '').match(/^rId(\d+)$/))
+      .filter(Boolean)
+      .map(match => Number(match[1]));
     const nextId = Math.max(0, ...ids) + 1;
     const relationship = '<Relationship Id="rId' + nextId + '" Type="' +
       PPTX_CUSTOM_PROPERTIES_RELATIONSHIP + '" Target="docProps/custom.xml"/>';
@@ -387,7 +412,12 @@ async function writePptxThemeMetadata(filePath, themeId) {
     '<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="BrightdeskTheme">' +
     '<vt:lpwstr>' + themeId + '</vt:lpwstr></property></Properties>';
   archive.file('docProps/custom.xml', customProperties);
-  await fs.writeFile(filePath, await archive.generateAsync({ type: 'nodebuffer' }));
+  const output = await archive.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  await fs.writeFile(filePath, output);
 }
 
 async function readPptxThemeMetadata(zip) {
