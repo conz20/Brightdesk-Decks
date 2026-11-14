@@ -101,7 +101,7 @@ test('Audience renderer keeps both comparison columns and applies theme and slid
 
 test('Decks closes the audience window when its external display is disconnected', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
-  assert.match(source, /presenterDisplayId === display\.id/);
+  assert.match(source, /presenterDisplayId !== display\.id/);
   assert.match(source, /closePresenterWindow\(\)/);
   assert.match(source, /presentation:display-lost/);
 });
