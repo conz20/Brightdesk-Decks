@@ -2280,7 +2280,7 @@ function exportPayload(){
   const doc=activeDoc(),title=$('doc-title').value||'Brightdesk file';doc.title=title;
   if(state.app==='pages')return {kind:'pages',title,html:editor.innerHTML,blocks:collectDocxBlocks()};
   if(state.app==='sheets')return {kind:'sheets',title,rows:doc.cells||[]};
-  if(state.app==='slides')return {kind:'slides',title,slideSize:doc.slideSize||'widescreen',slides:doc.slides||[]};
+  if(state.app==='slides')return {kind:'slides',title,slideSize:doc.slideSize||'widescreen',themeId:doc.themeId||'lavender',slides:doc.slides||[]};
   return {kind:'notes',title,text:$('notes-editor').value||''};
 }
 async function exportCurrent(){try{const result=await window.brightdesk.exportFile(exportPayload());if(result?.canceled)return;setStatus('Exported successfully');}catch(error){alert(`Export failed: ${error.message}`);}}
@@ -2303,7 +2303,7 @@ function importProject(data){
   if(kind==='sheets')state.docs.sheets={title:data.title||'Imported spreadsheet',cells:(data.cells||[]).map(row=>row.map(v=>String(v??'')))};
   if(kind==='slides'){
     clearSavedSlideHistory();
-    state.docs.slides={title:data.title||'Imported presentation',slideSize:data.slideSize||'widescreen',slides:data.slides||clone(defaults.slides.slides),current:0};
+    state.docs.slides={title:data.title||'Imported presentation',slideSize:data.slideSize||'widescreen',themeId:data.themeId||'lavender',slides:data.slides||clone(defaults.slides.slides),current:0};
   }
   if(kind==='notes')state.docs.notes={title:data.title||'Imported note',text:data.text||''};
   state.app=kind; state.ribbonTab='home';
