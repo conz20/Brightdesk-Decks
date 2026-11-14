@@ -149,7 +149,7 @@ test('Decks Transitions ribbon persists choices and labels each thumbnail', () =
 
   assert.match(app, /slides: \['home', 'insert', 'draw', 'design', 'transitions'/);
   assert.match(app, /function setSlideTransition\(transition\)/);
-  assert.match(app, /setSlideTransition\(activeDoc\(\), doc\.current, transition\)/);
+  assert.match(app, /BrightdeskSlidesService\.setSlideTransition\(doc, doc\.current, transition\)/);
   assert.match(app, /slide-thumbnail-transition/);
   assert.match(app, /slide-sorter-transition/);
   assert.match(service, /function setSlideTransition\(/);
