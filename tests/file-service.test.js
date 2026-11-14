@@ -709,3 +709,79 @@ test('Brightdesk project export and import preserve stable slide layout IDs', as
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk project validation accepts only six-digit hexadecimal slide background colours', () => {
+  assert.doesNotThrow(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Legacy', body: '' }] } }
+  }));
+  assert.doesNotThrow(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Custom', body: '', backgroundColor: '#1A2B3C' }] } }
+  }));
+  for (const backgroundColor of ['red', '#fff', '#12345G', 'rgb(1,2,3)']) {
+    assert.throws(() => validateProject({
+      docs: { slides: { slides: [{ title: 'Invalid', body: '', backgroundColor }] } }
+    }), /invalid slide/);
+  }
+});
+
+test('Brightdesk project export and import preserve custom slide backgrounds', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-slide-background-'));
+  const filePath = path.join(directory, 'custom-background.bdesk');
+  const expected = ['#1A2B3C', '#F3EBDD'];
+  try {
+    await exportOfficeFile({
+      project: {
+        title: 'Custom backgrounds',
+        docs: {
+          slides: {
+            title: 'Custom backgrounds',
+            slides: expected.map((backgroundColor, index) => ({
+              id: 'slide-background-' + index,
+              title: 'Slide ' + index,
+              body: 'Body',
+              backgroundColor
+            })),
+            current: 0
+          }
+        }
+      }
+    }, filePath);
+    const reopened = await openOfficeFile(filePath);
+    assert.deepEqual(reopened.docs.slides.slides.map(slide => slide.backgroundColor), expected);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('PPTX export applies custom slide background colours and readable text contrast', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-custom-background-'));
+  const cases = [
+    { backgroundColor: '#202B3B', textColor: 'FFFFFF' },
+    { backgroundColor: '#F3EBDD', textColor: '111827' }
+  ];
+  try {
+    for (const item of cases) {
+      const filePath = path.join(directory, item.backgroundColor.slice(1) + '.pptx');
+      await exportOfficeFile({
+        kind: 'slides',
+        themeId: 'lavender',
+        slides: [{
+          title: 'Readable title',
+          body: 'Readable body',
+          layout: 'title',
+          backgroundColor: item.backgroundColor
+        }]
+      }, filePath);
+      const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+      const slideXml = await archive.file('ppt/slides/slide1.xml')?.async('string');
+      assert.match(slideXml || '', new RegExp('val="' + item.backgroundColor.slice(1) + '"'));
+      assert.ok((slideXml || '').includes(item.textColor), 'the title and body text should use a high-contrast colour');
+      const reopened = await openOfficeFile(filePath);
+      assert.equal(reopened.slides[0].backgroundColor, item.backgroundColor);
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
