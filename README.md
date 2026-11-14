@@ -47,7 +47,7 @@ These are configured build targets, not confirmation that a package has passed i
 
 ## Current first-use workflows
 
-- Create a presentation and edit slide titles and content. Add slides from Home or press Ctrl/Cmd+Shift+N; change the selected slide's layout from Home.
+- Create a presentation and edit slide titles and content. Add slides from Home or press Ctrl/Cmd+Shift+N; change the selected slide's layout from Home. Create named sections from Home, rename them, move slides between sections, and collapse or expand groups in the slide list and Slide Sorter.
 - Choose from four slide layouts: Title slide, Title and content, Two content and Section header.
 - Set the presentation size to Widescreen (16:9) or Standard (4:3); the selected size is saved with the presentation and included in PowerPoint export.
 - Navigate slides from the left thumbnail rail; reorder them by dragging or with the accessible move-earlier and move-later controls.
@@ -59,7 +59,7 @@ These are configured build targets, not confirmation that a package has passed i
 - Start presentation mode from the first slide with F5 or from the selected slide with Shift+F5; use the arrow keys to move and Escape to exit.
 - Import and export supported PowerPoint files; unsupported advanced objects and formatting may not be preserved.
 
-**Known boundaries:** Custom slide dimensions and nonstandard aspect ratios are not yet supported; PowerPoint files outside the two supported ratios currently import as Widescreen. Existing speaker notes are not yet imported from PowerPoint files. Slide masters, custom layout editing, sections, shapes, pictures, charts, tables, transitions, embedded media, animations and full PowerPoint round-trip fidelity are not promised. The new workspace still requires genuine running-build visual review and native Windows, macOS and Linux verification before it can be described as release-ready.
+**Known boundaries:** Custom slide dimensions and nonstandard aspect ratios are not yet supported; PowerPoint files outside the two supported ratios currently import as Widescreen. Named sections are saved in Brightdesk project files but are not yet imported from or exported to PowerPoint files. Existing speaker notes are not yet imported from PowerPoint files. Slide masters, custom layout editing, shapes, pictures, charts, tables, transitions, embedded media, animations and full PowerPoint round-trip fidelity are not promised. The new workspace still requires genuine running-build visual review and native Windows, macOS and Linux verification before it can be described as release-ready.
 ## Desktop installers
 
 | Platform | Installer |
