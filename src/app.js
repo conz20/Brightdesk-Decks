@@ -70,7 +70,7 @@ function commitSlideChange(doc = activeDoc(), group = null) {
 function applySlideHistory(direction) {
   const doc = activeDoc();
   const history = getSlideHistory(doc);
-  const changed = history[direction](doc);
+  const changed = direction === 'undo' ? history.undo(doc) : history.redo(doc);
   if (!changed) return false;
   renderSlides();
   renderToolbar();
@@ -1397,7 +1397,7 @@ async function saveProject(){try{const result=await window.brightdesk.saveProjec
 function setApp(app){if((launchAppId && app !== launchAppId) || !(configs[app] || genericConfigs[app]) || !installedApp(app))return;state.app=app;state.view='workspace';state.ribbonTab='home';render();persist();}
 
 document.addEventListener('keydown', event => {
-  if (state.app !== 'slides' || state.view !== 'workspace') return;
+  if (state.app !== 'slides' || state.view !== 'workspace' || document.querySelector('.presentation-overlay')) return;
   const modifier = event.ctrlKey || event.metaKey;
   if (modifier && event.key.toLowerCase() === 'z') {
     event.preventDefault();
