@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
 const packageConfig = require('../package.json');
 const { APP_SLUGS } = require('./standalone-downloads');
 const path = require('node:path');
@@ -9,6 +9,9 @@ const { BUILTIN_LANGUAGES, validateLanguagePack, getBuiltinLanguage } = require(
 const { DictionaryService } = require('./dictionary-service');
 let mainWindow;
 let agreementWindow;
+let presenterWindow;
+let presenterWindowReady = false;
+let presenterState = null;
 let termsAccepted = false;
 let autoUpdater;
 const updatePublishingConfigured = Array.isArray(packageConfig.build?.publish) && packageConfig.build.publish.some(item => item?.provider === 'github' && item?.owner && item.owner !== 'YOUR_GITHUB_ACCOUNT');
@@ -37,8 +40,85 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', event => event.preventDefault());
   mainWindow.on('focus', () => { if (autoUpdater) checkForUpdates({ quiet: true }); });
+  mainWindow.on('closed', () => {
+    closePresenterWindow();
+    mainWindow = null;
+  });
 }
 function senderIsMain(event) { return mainWindow && event.sender === mainWindow.webContents; }
+
+const supportedPresenterLayouts = new Set(['title', 'title-content', 'two-content', 'section-header']);
+const supportedPresenterThemes = new Set(['lavender', 'midnight', 'paper']);
+
+function normalizePresenterState(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new TypeError('A presentation slide is required.');
+  }
+  const slide = payload.slide;
+  if (!slide || typeof slide !== 'object' || Array.isArray(slide)) {
+    throw new TypeError('The audience slide is invalid.');
+  }
+  const layout = supportedPresenterLayouts.has(slide.layout) ? slide.layout : 'title-content';
+  const themeId = supportedPresenterThemes.has(payload.themeId) ? payload.themeId : 'lavender';
+  const slideSize = payload.slideSize === 'standard' ? 'standard' : 'widescreen';
+  const blankMode = payload.blankMode === 'black' || payload.blankMode === 'white' ? payload.blankMode : null;
+  return {
+    slide: {
+      title: typeof slide.title === 'string' ? slide.title.slice(0, 2000) : '',
+      body: typeof slide.body === 'string' ? slide.body.slice(0, 30000) : '',
+      bodySecondary: typeof slide.bodySecondary === 'string' ? slide.bodySecondary.slice(0, 30000) : '',
+      layout
+    },
+    themeId,
+    slideSize,
+    blankMode
+  };
+}
+
+function closePresenterWindow() {
+  presenterState = null;
+  presenterWindowReady = false;
+  if (presenterWindow && !presenterWindow.isDestroyed()) presenterWindow.close();
+  presenterWindow = null;
+}
+
+function createPresenterWindow(display, initialState) {
+  presenterState = initialState;
+  presenterWindowReady = false;
+  presenterWindow = new BrowserWindow({
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.bounds.width,
+    height: display.bounds.height,
+    title: 'Brightdesk Decks — Presentation',
+    frame: false,
+    autoHideMenuBar: true,
+    show: false,
+    fullscreen: true,
+    backgroundColor: '#171729',
+    webPreferences: {
+      preload: path.join(__dirname, 'presentation-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  presenterWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  presenterWindow.webContents.on('will-navigate', event => event.preventDefault());
+  presenterWindow.webContents.once('did-finish-load', () => {
+    if (!presenterWindow || presenterWindow.isDestroyed()) return;
+    presenterWindowReady = true;
+    presenterWindow.webContents.send('presentation:update', presenterState);
+    presenterWindow.show();
+  });
+  presenterWindow.on('closed', () => {
+    presenterWindow = null;
+    presenterWindowReady = false;
+    presenterState = null;
+  });
+  presenterWindow.loadFile(path.join(__dirname, 'presentation.html'));
+  return presenterWindow;
+}
 
 function termsFilePath() { return path.join(app.getAppPath(), 'TERMS_AND_CONDITIONS.txt'); }
 async function readTerms() { return fs.readFile(termsFilePath(), 'utf8'); }
@@ -98,6 +178,45 @@ ipcMain.handle('terms:decline', event => {
   return { ok: true };
 });
 ipcMain.handle('app:version', event => { if (!senderIsMain(event)) throw new Error('Invalid sender.'); return app.getVersion(); });
+
+ipcMain.handle('presentation:start', async (event, payload) => {
+  if (!senderIsMain(event)) throw new Error('Invalid sender.');
+  const nextState = normalizePresenterState(payload);
+  const displays = screen.getAllDisplays();
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const externalDisplay = displays.find(display => display.id !== primaryDisplay.id);
+  if (!externalDisplay) return { ok: false, reason: 'external-display-required' };
+
+  if (presenterWindow && !presenterWindow.isDestroyed()) {
+    presenterState = nextState;
+    if (presenterWindowReady) presenterWindow.webContents.send('presentation:update', presenterState);
+  } else {
+    createPresenterWindow(externalDisplay, nextState);
+  }
+  return {
+    ok: true,
+    display: {
+      id: externalDisplay.id,
+      label: typeof externalDisplay.label === 'string' ? externalDisplay.label : '',
+      bounds: { ...externalDisplay.bounds }
+    }
+  };
+});
+ipcMain.on('presentation:update', (event, payload) => {
+  if (!senderIsMain(event) || !presenterWindow || presenterWindow.isDestroyed()) return;
+  try {
+    presenterState = normalizePresenterState(payload);
+    if (presenterWindowReady) presenterWindow.webContents.send('presentation:update', presenterState);
+  } catch (error) {
+    console.warn('Ignored an invalid audience presentation update.', error.message);
+  }
+});
+ipcMain.handle('presentation:end', event => {
+  if (!senderIsMain(event)) throw new Error('Invalid sender.');
+  closePresenterWindow();
+  return { ok: true };
+});
+
 
 
 function languagePackDirectory() {
