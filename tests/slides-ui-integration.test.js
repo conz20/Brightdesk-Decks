@@ -176,6 +176,8 @@ test('Decks shows a contextual Format Shape pane beside the selected slide', () 
   const styles = read('src/styles.css');
 
   assert.match(app, /function renderSlideFormatPane\(/);
+  assert.match(app, /existingPane\?\.remove\(\)/);
+  assert.match(app, /canvasRow\.append\(renderSlideFormatPane\(selectedObject\)\)/);
   assert.match(app, /slide-editor-canvas-row/);
   assert.match(app, /slide-format-pane/);
   assert.match(app, /addControl\(size, 'Horizontal position \\(\\%\\)', 'x', 'number'/);
