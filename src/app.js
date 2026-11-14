@@ -41,17 +41,50 @@ const state = {
 };
 const editor = $('editor'), sheetWrap = $('sheet-wrap'), slideWrap = $('slide-wrap'), notesWrap = $('notes-wrap');
 const slideHistories = new WeakMap();
+const SLIDE_HISTORY_STORAGE_KEY = 'brightdesk-decks-history-v1';
 const pageLayout = window.BrightdeskPageLayout;
 const commonJsonStorage = window.BrightdeskCommonLibs;
 if (!commonJsonStorage) throw new Error('Brightdesk common storage helper was not loaded.');
 
 function clone(value) { return commonJsonStorage.cloneJsonValue(value); }
 function activeDoc() { return state.docs[state.app]; }
+function readSavedSlideHistory() {
+  try {
+    const raw = localStorage.getItem(SLIDE_HISTORY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.warn('Saved slide history could not be read.', error);
+    return null;
+  }
+}
+function writeSavedSlideHistory(doc) {
+  if (doc !== state.docs.slides) return;
+  const history = slideHistories.get(doc);
+  if (!history) return;
+  try {
+    localStorage.setItem(SLIDE_HISTORY_STORAGE_KEY, JSON.stringify(history.exportState()));
+  } catch (error) {
+    console.warn('Slide history could not be saved on this device.', error);
+  }
+}
+function clearSavedSlideHistory() {
+  slideHistories.delete(state.docs.slides);
+  try {
+    localStorage.removeItem(SLIDE_HISTORY_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Old slide history could not be cleared.', error);
+  }
+}
 function getSlideHistory(doc = activeDoc()) {
   let history = slideHistories.get(doc);
   if (!history) {
-    history = window.BrightdeskSlidesService.createHistory(doc);
+    const savedState = doc === state.docs.slides ? readSavedSlideHistory() : null;
+    history = window.BrightdeskSlidesService.createHistory(doc, { state: savedState });
     slideHistories.set(doc, history);
+    if (savedState && !history.restored) {
+      try { localStorage.removeItem(SLIDE_HISTORY_STORAGE_KEY); }
+      catch (error) { console.warn('Stale slide history could not be cleared.', error); }
+    }
   }
   return history;
 }
@@ -82,8 +115,14 @@ function undoSlideEdit() { return applySlideHistory('undo'); }
 function redoSlideEdit() { return applySlideHistory('redo'); }
 function setStatus(message) { $('save-status').textContent = message; }
 function persist() {
-  try { commonJsonStorage.writeJsonValue(localStorage, 'brightdesk-docs-v3', state.docs); setStatus('Saved on this device'); }
-  catch (error) { setStatus('Could not save locally'); console.error(error); }
+  try {
+    commonJsonStorage.writeJsonValue(localStorage, 'brightdesk-docs-v3', state.docs);
+    if (state.app === 'slides') writeSavedSlideHistory(state.docs.slides);
+    setStatus('Saved on this device');
+  } catch (error) {
+    setStatus('Could not save locally');
+    console.error(error);
+  }
 }
 function loadLocal() {
   try {
@@ -1375,6 +1414,7 @@ async function exportPdf(){try{const result=await window.brightdesk.exportPdf({t
 function importProject(data){
   if (launchAppId && data?.kind && data.kind !== launchAppId) throw new Error(`This Brightdesk ${appLabel(launchAppId)} installation opens ${appLabel(launchAppId)} files only.`);
   if(data?.docs && typeof data.docs === 'object'){
+    clearSavedSlideHistory();
     state.docs={...clone(defaults),...data.docs};
     for (const id of Object.keys(configs)) if (!state.docs[id] || typeof state.docs[id] !== 'object') state.docs[id] = clone(defaults[id]);
     const preferred = configs[state.app] ? state.app : 'pages';
@@ -1387,7 +1427,10 @@ function importProject(data){
   if (!installedApp(kind)) { state.installedApps.push(kind); state.setupComplete = true; saveAppSetup(); }
   if(kind==='pages')state.docs.pages={title:data.title||'Imported document',html:data.html?safeHtml(data.html):`<p>${escapeHtml(data.text||'')}</p>`};
   if(kind==='sheets')state.docs.sheets={title:data.title||'Imported spreadsheet',cells:(data.cells||[]).map(row=>row.map(v=>String(v??'')))};
-  if(kind==='slides')state.docs.slides={title:data.title||'Imported presentation',slides:data.slides||clone(defaults.slides.slides),current:0};
+  if(kind==='slides'){
+    clearSavedSlideHistory();
+    state.docs.slides={title:data.title||'Imported presentation',slides:data.slides||clone(defaults.slides.slides),current:0};
+  }
   if(kind==='notes')state.docs.notes={title:data.title||'Imported note',text:data.text||''};
   state.app=kind; state.ribbonTab='home';
 }
