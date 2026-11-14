@@ -938,6 +938,7 @@ test('Brightdesk projects accept only bounded embedded PNG, JPEG or WebP picture
     { ...picture, imageWidth: 0 },
     { ...picture, imageHeight: 50000 },
     { ...picture, imageWidth: 2 },
+    { ...picture, imageAssetId: '../../picture.png' },
     { ...picture, imageName: 'x'.repeat(256) }
   ];
   for (const invalid of invalidPictures) {
