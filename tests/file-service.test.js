@@ -665,6 +665,9 @@ test('Brightdesk project validation accepts legacy slides and known stable layou
       }
     }
   }));
+  assert.doesNotThrow(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Migrating layout', body: '', layoutId: 'layout-two-content' }] } }
+  }));
   assert.throws(() => validateProject({
     docs: { slides: { slides: [{ title: 'Bad', body: '', layoutId: 'layout-random' }] } }
   }), /invalid slide/);
