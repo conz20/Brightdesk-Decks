@@ -705,9 +705,27 @@ function renderSlides() {
   shell.append(navigator, editorMain);
   slideWrap.append(shell);
 }
-function addSlide(){activeDoc().slides.push({title:`Slide ${activeDoc().slides.length+1}`,body:''});activeDoc().current=activeDoc().slides.length-1;renderSlides();renderToolbar();persist();}
-function duplicateSlide(){const d=activeDoc(),copy=clone(d.slides[d.current]);d.slides.splice(d.current+1,0,copy);d.current++;renderSlides();renderToolbar();persist();}
-function deleteSlide(){const d=activeDoc();if(d.slides.length===1){alert('A presentation needs at least one slide.');return;}d.slides.splice(d.current,1);d.current=Math.max(0,d.current-1);renderSlides();renderToolbar();persist();}
+function addSlide() {
+  window.BrightdeskSlidesService.addSlide(activeDoc());
+  renderSlides();
+  renderToolbar();
+  persist();
+}
+function duplicateSlide() {
+  window.BrightdeskSlidesService.duplicateSlide(activeDoc());
+  renderSlides();
+  renderToolbar();
+  persist();
+}
+function deleteSlide() {
+  if (!window.BrightdeskSlidesService.deleteSlide(activeDoc())) {
+    alert('A presentation needs at least one slide.');
+    return;
+  }
+  renderSlides();
+  renderToolbar();
+  persist();
+}
 function presentSlides(startFromFirst = false) {
   const d = activeDoc();
   let i = startFromFirst ? 0 : d.current;
