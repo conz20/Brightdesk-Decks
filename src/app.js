@@ -347,6 +347,8 @@ function renderToolbar() {
       addButton(shapes, 'Rectangle', () => insertSlideObject('rectangle'));
       addButton(shapes, 'Ellipse', () => insertSlideObject('ellipse'));
       addButton(shapes, 'Line', () => insertSlideObject('line'));
+      const pictures = ribbonGroup(toolbar, 'Pictures');
+      addButton(pictures, 'Picture', insertSlidePicture, 'Insert a picture from this device');
       const selection = ribbonGroup(toolbar, 'Selection');
       const selected = getSelectedSlideObject();
       const remove = addButton(selection, 'Delete selected', deleteSelectedSlideObject);
@@ -977,6 +979,33 @@ function insertSlideObject(type) {
   }
 }
 
+async function insertSlidePicture() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
+  try {
+    const picture = await window.brightdesk.openSlidePicture();
+    if (!picture) return;
+    const object = window.BrightdeskSlidesService.addSlideObject(doc, doc.current, {
+      type: 'image',
+      x: 20, y: 22, width: 42, height: 32,
+      fill: null, stroke: null, strokeWidth: 0,
+      text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0,
+      imageData: picture.imageData,
+      imageName: picture.imageName,
+      imageWidth: picture.imageWidth,
+      imageHeight: picture.imageHeight
+    });
+    state.selectedSlideObjectId = object.id;
+    state.ribbonTab = 'shapeFormat';
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`Picture added: ${picture.imageName}`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
 function selectSlideObject(objectId) {
   state.selectedSlideObjectId = objectId || null;
   const selectedObject = getSelectedSlideObject();
@@ -1086,6 +1115,15 @@ function createSlideObjectElement(object, editable = false) {
     textEditor.textContent = object.text || '';
     element.append(textEditor);
     element.setAttribute('aria-label', 'Text box');
+  } else if (object.type === 'image') {
+    const image = document.createElement('img');
+    image.className = 'slide-object-image-content';
+    image.src = object.imageData;
+    image.alt = object.imageName || 'Slide picture';
+    image.draggable = false;
+    image.decoding = 'async';
+    element.append(image);
+    element.setAttribute('aria-label', image.alt);
   } else if (object.text) {
     element.textContent = object.text;
   }
@@ -1234,7 +1272,7 @@ function renderSlideFormatPane(object) {
   const fillLine = createGroup('Fill & Line', true);
   addControl(fillLine, 'Fill colour', 'fill', 'color', {
     fallback: '#FFFFFF',
-    disabled: object.type === 'text' || object.type === 'line'
+    disabled: object.type === 'text' || object.type === 'line' || object.type === 'image'
   });
   addControl(fillLine, 'Outline colour', 'stroke', 'color');
   addControl(fillLine, 'Outline weight', 'strokeWidth', 'number', {
@@ -1277,7 +1315,7 @@ function renderSlideFormatPane(object) {
   selectionList.className = 'slide-format-pane-selection';
   selectionList.setAttribute('role', 'group');
   selectionList.setAttribute('aria-label', 'Objects on this slide');
-  const objectLabels = { text: 'Text box', rectangle: 'Rectangle', ellipse: 'Ellipse', line: 'Line' };
+  const objectLabels = { text: 'Text box', rectangle: 'Rectangle', ellipse: 'Ellipse', line: 'Line', image: 'Picture' };
   const typeCounts = new Map();
   currentObjects.slice().reverse().forEach(item => {
     const typeCount = (typeCounts.get(item.type) || 0) + 1;
