@@ -994,22 +994,26 @@ function createSlideObjectElement(object, editable = false) {
     element.style.border = '0';
     element.style.borderTop = `${Math.max(1, object.strokeWidth)}px solid ${object.stroke || '#26364D'}`;
   }
+  let textEditor = null;
   if (object.type === 'text') {
-    element.contentEditable = editable ? 'true' : 'false';
-    element.spellcheck = true;
-    element.style.fontSize = `${object.fontSize}px`;
-    element.style.fontWeight = object.bold ? '700' : '400';
-    element.textContent = object.text || '';
-    element.setAttribute('aria-label', 'Editable text box');
+    textEditor = document.createElement('div');
+    textEditor.className = 'slide-object-text-content';
+    textEditor.contentEditable = editable ? 'true' : 'false';
+    textEditor.spellcheck = true;
+    textEditor.style.fontSize = `${object.fontSize}px`;
+    textEditor.style.fontWeight = object.bold ? '700' : '400';
+    textEditor.textContent = object.text || '';
+    element.append(textEditor);
+    element.setAttribute('aria-label', 'Text box');
   } else if (object.text) {
     element.textContent = object.text;
   }
 
   if (editable) {
-    if (object.type === 'text') {
-      element.addEventListener('input', () => {
+    if (textEditor) {
+      textEditor.addEventListener('input', () => {
         const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
-        window.BrightdeskSlidesService.updateSlideObject(doc, doc.current, object.id, { text: element.textContent || '' });
+        window.BrightdeskSlidesService.updateSlideObject(doc, doc.current, object.id, { text: textEditor.textContent || '' });
         commitSlideChange(doc, `slide-object:${object.id}:text`);
         persist();
       });
