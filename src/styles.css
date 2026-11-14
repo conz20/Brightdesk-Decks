@@ -1529,3 +1529,16 @@
 
 .slide-object-text-content{display:block;width:100%;height:100%;min-width:0;min-height:0;overflow:auto;outline:0;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
 .slide-object-text-content:focus{outline:0}
+
+/* Brightdesk Decks: quiet transition labels and focused ribbon controls. */
+.slide-thumbnail-transition,.slide-sorter-transition{display:block;align-self:flex-start;margin-top:1px;color:#8a6a45;font-size:9px;font-weight:650;letter-spacing:.1px}
+.slide-thumbnail-transition[data-slide-transition="none"],.slide-sorter-transition[data-slide-transition="none"]{color:#9299a6;font-weight:500}
+.slide-transition-select{min-width:145px;max-width:210px;padding:7px 9px;border:1px solid #dfe2eb;border-radius:7px;background:#fff;color:#30364a;font:inherit;font-size:12px}
+.slide-transition-hint{align-self:center;color:#8990a0;font-size:10px;white-space:nowrap}
+.slide-transition-fade{animation:bd-slide-fade 420ms ease-out both}
+.slide-transition-push{animation:bd-slide-push 460ms cubic-bezier(.2,.75,.25,1) both}
+.slide-transition-wipe{animation:bd-slide-wipe 480ms ease-out both}
+@keyframes bd-slide-fade{from{opacity:0}to{opacity:1}}
+@keyframes bd-slide-push{from{opacity:.45;transform:translateX(5%)}to{opacity:1;transform:translateX(0)}}
+@keyframes bd-slide-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@media(prefers-reduced-motion:reduce){.slide-transition-fade,.slide-transition-push,.slide-transition-wipe{animation:none!important}}
