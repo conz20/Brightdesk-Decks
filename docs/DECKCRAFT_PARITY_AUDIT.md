@@ -93,7 +93,8 @@ Match the reference product's information architecture and visual density rather
 
 ### P2 — Present and share
 - Add F5/Shift+F5 start behaviour, complete navigation keys and Escape.
-- Add presenter view, notes, next-slide preview, timer, black/white screen and rehearsal timings.
+- [x] Add slide-number navigation, a G-key visible-slide picker, and B/period black-screen plus W/comma white-screen toggles; hidden slides are omitted from the picker and rejected as numeric destinations.
+- Add presenter view, notes, next-slide preview, timer and rehearsal timings. Black/white blanking is currently available in the audience show window through keyboard controls.
 - Add PDF slides, notes pages and handouts; then PNG/JPEG and supported PPTX round-trip improvements.
 - Add print preview and range/layout validation.
 
