@@ -883,3 +883,56 @@ test('PPTX import follows presentation slide order, supports namespace aliases, 
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk project validation accepts structured slide objects and rejects unsafe object data', () => {
+  const valid = {
+    docs: {
+      slides: {
+        slides: [{
+          title: 'Objects',
+          body: '',
+          objects: [
+            { id: 'object-rectangle', type: 'rectangle', x: 10, y: 15, width: 30, height: 25, fill: '#F3EBDD', stroke: '#26364D', strokeWidth: 2, text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0 },
+            { id: 'object-text', type: 'text', x: 48, y: 12, width: 36, height: 18, fill: null, stroke: null, strokeWidth: 0, text: 'Quarterly results', fontSize: 26, textColor: '#202B3B', bold: true, rotation: 0 }
+          ]
+        }]
+      }
+    }
+  };
+  assert.doesNotThrow(() => validateProject(valid));
+
+  const invalidCases = [
+    [{ id: 'object-shape', type: 'rectangle', x: -1, y: 0, width: 20, height: 20 }],
+    [{ id: 'object-shape', type: 'rectangle', x: 90, y: 0, width: 20, height: 20 }],
+    [{ id: 'object-shape', type: 'rectangle', x: 0, y: 0, width: 20, height: 20, fill: 'red' }],
+    [{ id: 'object-shape', type: 'unsupported', x: 0, y: 0, width: 20, height: 20 }],
+    [{ id: 'object-same', type: 'ellipse', x: 0, y: 0, width: 20, height: 20 }, { id: 'object-same', type: 'ellipse', x: 25, y: 0, width: 20, height: 20 }]
+  ];
+  for (const objects of invalidCases) {
+    assert.throws(() => validateProject({
+      docs: { slides: { slides: [{ title: 'Bad objects', body: '', objects }] } }
+    }), /invalid slide object/);
+  }
+});
+
+test('Brightdesk project export and import preserve structured slide objects and their identities', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-slide-objects-'));
+  const filePath = path.join(directory, 'slide-objects.bdesk');
+  const objects = [
+    { id: 'object-rectangle', type: 'rectangle', x: 10, y: 15, width: 30, height: 25, fill: '#F3EBDD', stroke: '#26364D', strokeWidth: 2, text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0 },
+    { id: 'object-text', type: 'text', x: 45, y: 12, width: 40, height: 18, fill: null, stroke: null, strokeWidth: 0, text: 'Quarterly results', fontSize: 26, textColor: '#202B3B', bold: true, rotation: 0 }
+  ];
+  try {
+    await exportOfficeFile({
+      project: {
+        title: 'Slide objects',
+        docs: { slides: { title: 'Slide objects', slides: [{ id: 'slide-objects', title: 'Objects', body: '', objects }], current: 0 } }
+      }
+    }, filePath);
+    const reopened = await openOfficeFile(filePath);
+    assert.deepEqual(reopened.docs.slides.slides[0].objects, objects);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
