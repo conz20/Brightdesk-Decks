@@ -129,6 +129,7 @@ function validateProject(project) {
       for (const slide of doc.slides) {
         if (
           !isPlainObject(slide) ||
+          (slide.hidden !== undefined && typeof slide.hidden !== 'boolean') ||
           (slide.title !== undefined && typeof slide.title !== 'string') ||
           (slide.body !== undefined && (
             typeof slide.body !== 'string' ||
@@ -312,8 +313,13 @@ async function openOfficeFile(filePath) {
     const slides = [];
     for (const name of names) {
       const xml = await zip.files[name].async('string');
+      const hidden = /<(?:[A-Za-z0-9_]+:)?sld\\b[^>]*\\bshow=["'](?:0|false)["']/i.test(xml);
       const texts = collectXmlText(parser.parse(xml)).filter(Boolean);
-      slides.push({ title: texts[0] || `Slide ${slides.length + 1}`, body: texts.slice(1).join('\n') });
+      slides.push({
+        ...(hidden ? { hidden: true } : {}),
+        title: texts[0] || `Slide ${slides.length + 1}`,
+        body: texts.slice(1).join('\n')
+      });
     }
     return { kind: 'slides', title: path.basename(filePath, ext), slideSize, slides: slides.length ? slides : [{ title: 'Imported presentation', body: '' }] };
   }
@@ -383,6 +389,7 @@ async function exportOfficeFile(payload, filePath) {
     pptx.author = 'Brightdesk'; pptx.subject = 'Brightdesk presentation';
     for (const data of (payload.slides || [])) {
       const slide = pptx.addSlide();
+      if (data.hidden === true) slide.hidden = true;
       const layout = SUPPORTED_SLIDE_LAYOUTS.has(data.layout) ? data.layout : 'title-content';
       slide.background = { color: layout === 'title' ? 'FCF3E9' : 'FFFFFF' };
       const titleStyle = {
