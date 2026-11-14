@@ -34,6 +34,8 @@ test('Decks renders custom backgrounds and readable text in editor, sorter and p
   assert.match(app, /stage\.style\.backgroundColor = slide\.backgroundColor \|\| ''/);
   assert.match(app, /preview\.style\.backgroundColor = slide\.backgroundColor \|\| ''/);
   assert.match(app, /slide\.style\.backgroundColor = currentSlide\.backgroundColor \|\| ''/);
+  assert.match(app, /body\.style\.backgroundColor = currentSlide\.backgroundColor \|\| ''/);
+  assert.match(app, /nextPreviewBody\.style\.backgroundColor = snapshot\.nextSlide\.backgroundColor \|\| ''/);
   assert.match(app, /backgroundColor: currentSlide\.backgroundColor/);
 });
 
@@ -44,6 +46,8 @@ test('The separate audience window applies custom colour to the slide surface wi
   assert.match(html, /class="audience-slide"/);
   assert.match(audience, /root\.querySelector\('\.audience-slide'\)/);
   assert.match(audience, /slideSurface\.style\.backgroundColor = backgroundColor/);
+  assert.match(audience, /body\.style\.backgroundColor = backgroundColor/);
+  assert.match(audience, /secondaryBody\.style\.backgroundColor = backgroundColor/);
   assert.match(audience, /root\.style\.backgroundColor = ''/);
   assert.match(css, /\.audience-presentation\.is-blank-black/);
   assert.match(css, /\.audience-presentation\.is-blank-white/);
