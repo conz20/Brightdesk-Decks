@@ -1277,7 +1277,7 @@ test('Decks adds editable text boxes and basic vector shapes with stable IDs', (
 
 test('Decks adds a local picture object with its source and original dimensions', () => {
   const presentation = ensurePresentation({ slides: [{ title: 'Pictures', body: '' }] });
-  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=';
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
 
   const picture = addSlideObject(presentation, 0, {
     type: 'image',
