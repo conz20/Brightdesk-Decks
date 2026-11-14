@@ -916,6 +916,68 @@ test('Brightdesk project validation accepts structured slide objects and rejects
   }
 });
 
+test('Brightdesk projects accept only bounded embedded PNG, JPEG or WebP picture objects', () => {
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=';
+  const picture = {
+    id: 'object-picture',
+    type: 'image',
+    x: 10, y: 15, width: 40, height: 30,
+    fill: null, stroke: null, strokeWidth: 0,
+    text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0,
+    imageData, imageName: 'team-photo.png', imageWidth: 1600, imageHeight: 900
+  };
+  const project = {
+    docs: { slides: { slides: [{ title: 'Pictures', body: '', objects: [picture] }] } }
+  };
+  assert.doesNotThrow(() => validateProject(project));
+
+  const invalidPictures = [
+    { ...picture, imageData: 'https://example.com/picture.png' },
+    { ...picture, imageData: 'data:image/svg+xml;base64,PHN2Zy8+' },
+    { ...picture, imageData: 'data:image/png;base64,AAAA' },
+    { ...picture, imageWidth: 0 },
+    { ...picture, imageHeight: 50000 },
+    { ...picture, imageName: 'x'.repeat(256) }
+  ];
+  for (const invalid of invalidPictures) {
+    assert.throws(() => validateProject({
+      docs: { slides: { slides: [{ title: 'Unsafe picture', body: '', objects: [invalid] }] } }
+    }), /invalid slide object/);
+  }
+
+  const oversized = 'A'.repeat(7_000_004);
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Large picture', body: '', objects: [{ ...picture, imageData: 'data:image/png;base64,' + oversized }] }] } }
+  }), /invalid slide object/);
+});
+
+test('Brightdesk project files preserve an embedded picture without an external file link', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-slide-picture-'));
+  const filePath = path.join(directory, 'slide-picture.bdesk');
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=';
+  const picture = {
+    id: 'object-picture',
+    type: 'image',
+    x: 10, y: 15, width: 40, height: 30,
+    fill: null, stroke: null, strokeWidth: 0,
+    text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0,
+    imageData, imageName: 'team-photo.png', imageWidth: 1600, imageHeight: 900
+  };
+  try {
+    await exportOfficeFile({
+      project: {
+        title: 'Slide picture',
+        docs: { slides: { title: 'Slide picture', slides: [{ title: 'Pictures', body: '', objects: [picture] }], current: 0 } }
+      }
+    }, filePath);
+    const reopened = await openOfficeFile(filePath);
+    assert.deepEqual(reopened.docs.slides.slides[0].objects[0], picture);
+    assert.equal(reopened.docs.slides.slides[0].objects[0].imageData, imageData);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('Brightdesk project export and import preserve structured slide objects and their identities', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-slide-objects-'));
   const filePath = path.join(directory, 'slide-objects.bdesk');
