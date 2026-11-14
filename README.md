@@ -47,13 +47,17 @@ These are configured build targets, not confirmation that a package has passed i
 
 ## Current first-use workflows
 
-- Create a presentation and edit slide titles and body text.
+- Create a presentation and edit slide titles and content.
+- Choose from four slide layouts: Title slide, Title and content, Two content and Section header.
+- Navigate slides from the left thumbnail rail; reorder them by dragging or with the accessible move-earlier and move-later controls.
+- Use Slide Sorter from the View ribbon to see and rearrange the full presentation.
 - Add, duplicate and delete slides.
+- Add speaker notes to each slide. Notes are saved with the local Brightdesk project and included when exporting to PowerPoint.
 - Choose from the included basic slide themes.
-- Start presentation mode from the current deck.
+- Start presentation mode from the first slide with F5 or from the selected slide with Shift+F5; use the arrow keys to move and Escape to exit.
 - Import and export supported PowerPoint files; unsupported advanced objects and formatting may not be preserved.
 
-**Known boundaries:** Decks is an early slide-editor foundation. Advanced layouts, transitions, embedded media, animation and full PowerPoint round-trip fidelity are not promised.
+**Known boundaries:** Existing speaker notes are not yet imported from PowerPoint files. Slide masters, custom layout editing, sections, shapes, pictures, charts, tables, transitions, embedded media, animations and full PowerPoint round-trip fidelity are not promised. The new workspace still requires genuine running-build visual review and native Windows, macOS and Linux verification before it can be described as release-ready.
 ## Desktop installers
 
 | Platform | Installer |
