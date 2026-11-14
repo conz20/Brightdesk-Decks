@@ -497,3 +497,22 @@ test('Decks saves and restores slide size in persisted undo history', () => {
   assert.equal(secondSession.redo(reopened), true);
   assert.equal(reopened.slideSize, 'standard');
 });
+
+
+test('Decks exposes slide size choices in the Design ribbon and applies the ratio to every view', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
+
+  assert.match(app, /slide-size-select/);
+  assert.match(app, /Widescreen \(16:9\)/);
+  assert.match(app, /Standard \(4:3\)/);
+  assert.match(app, /setSlideSize\(sizeSelect\.value\)/);
+  assert.match(app, /slideSize:doc\.slideSize\|\|'widescreen'/);
+  assert.match(app, /size-\$\{doc\.slideSize\}/);
+  assert.match(styles, /\.slide-stage\.size-standard/);
+  assert.match(styles, /\.slide-sorter-preview\.size-standard/);
+  assert.match(styles, /\.presentation-slide\.size-standard/);
+});
