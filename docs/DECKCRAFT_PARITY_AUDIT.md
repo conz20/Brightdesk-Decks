@@ -77,7 +77,7 @@ Match the reference product's information architecture and visual density rather
 - Migrate existing `{ title, body }` slides without data loss; retain compatibility with existing local JSON documents and PPTX import/export.
 - Add thumbnail navigation, add/duplicate/delete/reorder, keyboard navigation and a real notes editor.
 - Add title, title-and-content, two-content, section-header, blank and comparison layouts.
-- Add undo/redo for slide and object edits.
+- [x] Add bounded undo/redo for slide text, speaker notes, layouts, slide creation/duplication/deletion and reordering, with consecutive typing grouped by field. Object-edit history remains future work when editable objects are introduced.
 - Add tests for migration, selection bounds, reorder, duplicate, delete, one-slide minimum, notes persistence and recovery.
 
 ### P1 — Visual authoring
@@ -143,10 +143,11 @@ The first practical presentation-editor milestone is now represented by [Brightd
 - Per-slide speaker notes stored in the existing local presentation model.
 - Speaker notes and supported layout positioning included in PowerPoint export.
 - F5 / Shift+F5 presentation shortcuts while preserving the current motion-aware presentation overlay.
+- Bounded undo/redo for slide content, speaker notes, layouts and slide structure, including grouped typing and keyboard/toolbar controls.
 - File validation for notes, layouts and secondary slide content.
 
 Legacy slides migrate in memory to the Title and content layout while preserving their title/body text. PowerPoint speaker-note import remains open.
 
 **Status: implemented on a review branch, not merged or verified.** The product-test and README-freshness workflows are queued on the private CI runner. They have not reported a pass. No genuine running-build screenshot comparison, exact Node.js 24.22.2 test result, or native Windows/macOS/Linux acceptance is claimed.
 
-The remaining P0 work includes undo/redo, layout placeholders/reset, and broader file-format fixtures. Later milestones still include masters, sections, rich objects, transitions, animations and Presenter View. PR #34 is the clean current-main implementation branch; the older divergent PR #15 has been closed to avoid duplicate work. Do not create duplicate slide services or competing branches for the same functionality.
+The remaining P0 work includes layout placeholders/reset, stable slide identity and document metadata, and broader file-format fixtures. Undo/redo for slide-level edits is implemented on PR #34; undo/redo for rich objects will follow when object editing exists. Later milestones still include masters, sections, rich objects, transitions, animations and Presenter View. PR #34 is the clean current-main implementation branch; the older divergent PR #15 has been closed to avoid duplicate work. Do not create duplicate slide services or competing branches for the same functionality.
