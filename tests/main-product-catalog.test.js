@@ -105,3 +105,20 @@ test('Decks closes the audience window when its external display is disconnected
   assert.match(source, /closePresenterWindow\(\)/);
   assert.match(source, /presentation:display-lost/);
 });
+
+
+test('Decks forwards only bounded slide-object data to the separate audience renderer', () => {
+  const root = path.join(__dirname, '..');
+  const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+  const main = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'src', 'presentation.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(root, 'src', 'presentation-window.js'), 'utf8');
+
+  assert.match(app, /objects: currentSlide\.objects \|\| \[\]/);
+  assert.match(main, /function normalizePresenterObjects\(/);
+  assert.match(main, /objects: normalizePresenterObjects\(slide\.objects\)/);
+  assert.match(html, /audience-object-layer/);
+  assert.match(renderer, /audience-object-layer/);
+  assert.match(renderer, /textContent/);
+  assert.doesNotMatch(renderer, /innerHTML/);
+});
