@@ -795,3 +795,45 @@ test('Decks provides an editable Outline View for titles and slide content', () 
   assert.match(styles, /\.slide-outline-list/);
   assert.match(styles, /\.slide-outline-entry/);
 });
+
+
+test('Decks resolves one-based slide numbers only to visible presentation slides', () => {
+  const { getVisibleSlidePosition } = require('../src/slides-service');
+  const presentation = {
+    slides: [
+      { title: 'First', body: '' },
+      { title: 'Hidden second', body: '', hidden: true },
+      { title: 'Third', body: '' },
+      { title: 'Hidden fourth', body: '', hidden: true }
+    ],
+    current: 0
+  };
+
+  assert.equal(getVisibleSlidePosition(presentation, 1), 0);
+  assert.equal(getVisibleSlidePosition(presentation, 2), -1);
+  assert.equal(getVisibleSlidePosition(presentation, 3), 1);
+  assert.equal(getVisibleSlidePosition(presentation, 4), -1);
+  assert.equal(getVisibleSlidePosition(presentation, 0), -1);
+  assert.equal(getVisibleSlidePosition(presentation, 5), -1);
+  assert.equal(getVisibleSlidePosition(presentation, '3'), -1);
+});
+
+test('Decks slide show supports blank screens, numeric navigation and slide picker', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'src', 'styles.css'), 'utf8');
+
+  assert.match(app, /let numberBuffer = ''/);
+  assert.match(app, /function togglePresentationBlank/);
+  assert.match(app, /function showSlidePicker/);
+  assert.match(app, /getVisibleSlidePosition\(d, Number\(numberBuffer\)\)/);
+  assert.match(app, /normalized === 'b'/);
+  assert.match(app, /normalized === 'w'/);
+  assert.match(app, /normalized === 'g'/);
+  assert.match(app, /presentation-slide-picker/);
+  assert.match(app, /numberBuffer/);
+  assert.match(styles, /\.presentation-overlay\.is-blank-black/);
+  assert.match(styles, /\.presentation-overlay\.is-blank-white/);
+  assert.match(styles, /\.presentation-slide-picker/);
+});
