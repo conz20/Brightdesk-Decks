@@ -57,21 +57,84 @@ test('Decks only starts and updates its audience window from the main applicatio
 });
 
 
-test('Audience renderer keeps both comparison columns and applies theme and slide size', () => {
+test('Audience renderer keeps both comparison columns and safely draws slide objects', () => {
   const root = path.join(__dirname, '..');
   const renderer = fs.readFileSync(path.join(root, 'src', 'presentation-window.js'), 'utf8');
-  const ids = ['presentation-root', 'audience-title', 'audience-body', 'audience-columns', 'audience-body-secondary'];
-  const elements = Object.fromEntries(ids.map(id => [id, { className: '', textContent: '', hidden: false }]));
+  class Element {
+    constructor() {
+      this.className = '';
+      this.textContent = '';
+      this.hidden = false;
+      this.style = {};
+      this.children = [];
+    }
+    append(child) { this.children.push(child); }
+    replaceChildren(...children) { this.children = children; }
+  }
+  const objectLayer = new Element();
+  const slideSurface = new Element();
+  const elements = Object.fromEntries(
+    ['presentation-root', 'audience-title', 'audience-body', 'audience-columns', 'audience-body-secondary']
+      .map(id => [id, new Element()])
+  );
+  elements['presentation-root'].querySelector = selector => ({
+    '.audience-slide': slideSurface,
+    '.audience-object-layer': objectLayer
+  })[selector] || null;
   let render;
   const window = {
     brightdeskPresentation: {
       onPresentationUpdate(callback) { render = callback; }
     }
   };
-  const document = { getElementById(id) { return elements[id]; } };
+  const document = {
+    getElementById(id) { return elements[id]; },
+    createElement() { return new Element(); }
+  };
 
   vm.runInNewContext(renderer, { window, document });
   assert.equal(typeof render, 'function');
+
+  render({
+    slide: {
+      title: 'Compare',
+      body: 'Option A',
+      bodySecondary: 'Option B',
+      layout: 'two-content',
+      backgroundColor: '#202B3B',
+      objects: [
+        { type: 'rectangle', x: 10, y: 20, width: 30, height: 25, fill: '#F3EBDD', stroke: '#26364D', strokeWidth: 2, text: 'Diagram block' },
+        { type: 'text', x: 48, y: 24, width: 25, height: 12, text: 'Plain text object', textColor: '#26364D', fontSize: 24 }
+      ]
+    },
+    themeId: 'midnight',
+    slideSize: 'standard'
+  });
+  assert.equal(elements['presentation-root'].className, 'audience-presentation theme-midnight size-standard layout-two-content');
+  assert.equal(elements['audience-title'].textContent, 'Compare');
+  assert.equal(elements['audience-body'].textContent, 'Option A');
+  assert.equal(elements['audience-body-secondary'].textContent, 'Option B');
+  assert.equal(elements['audience-body-secondary'].hidden, false);
+  assert.equal(elements['audience-columns'].hidden, false);
+  assert.equal(slideSurface.style.backgroundColor, '#202B3B');
+  assert.equal(objectLayer.children.length, 2);
+  assert.equal(objectLayer.children[0].textContent, 'Diagram block');
+  assert.equal(objectLayer.children[0].style.left, '10%');
+  assert.equal(objectLayer.children[1].textContent, 'Plain text object');
+
+  render({
+    slide: { title: '<img src=x onerror=alert(1)>', body: 'Ordinary content', bodySecondary: 'Unused', layout: 'title-content', objects: [] },
+    themeId: 'paper',
+    slideSize: 'widescreen',
+    blankMode: 'black'
+  });
+  assert.equal(elements['presentation-root'].className, 'audience-presentation theme-paper size-widescreen layout-title-content is-blank-black');
+  assert.equal(elements['audience-title'].textContent, '<img src=x onerror=alert(1)>');
+  assert.equal(elements['audience-body-secondary'].hidden, true);
+  assert.equal(elements['audience-columns'].hidden, false);
+  assert.equal(objectLayer.children.length, 0);
+  assert.doesNotMatch(renderer, /innerHTML/);
+});
 
   render({
     slide: { title: 'Compare', body: 'Option A', bodySecondary: 'Option B', layout: 'two-content' },
