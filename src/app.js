@@ -34,7 +34,7 @@ const state = {
   todoView: 'my-day', todoQuery: '',
   selectedCell: { row: 0, col: 0 }, update: null, ribbonTab: 'home',
   installedApps: [], setupComplete: false, firstRunSelection: new Set(installableCatalog.map(item => item.id)),
-  slideTheme: 'lavender', slideView: 'normal', focusMode: false, editorZoom: 100, sheetZoom: 100,
+  slideTheme: 'lavender', slideView: 'normal', collapsedSlideSections: new Set(), focusMode: false, editorZoom: 100, sheetZoom: 100,
   languageCatalog: [], installedLanguagePacks: [], spellCheckerLanguages: [], usesNativeMacSpellChecker: false,
   displayLanguage: 'en-AU', proofingLanguage: 'en-AU',
   installedDictionaries: [], dictionaryCatalogue: [], selectedDictionary: localStorage.getItem('brightdesk-selected-dictionary') || ''
@@ -300,6 +300,32 @@ function renderToolbar() {
       layoutSelect.value = currentSlide.layout;
       layoutSelect.addEventListener('change', () => setSlideLayout(layoutSelect.value));
       layoutGroup.append(layoutSelect);
+
+      const sectionGroup = ribbonGroup(toolbar, 'Sections');
+      const sectionDoc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+      const selectedSlide = sectionDoc.slides[sectionDoc.current];
+      const selectedSection = sectionDoc.sections.find(section => section.id === selectedSlide.sectionId);
+      addButton(sectionGroup, 'New Section', addSlideSection);
+      const renameSectionButton = addButton(sectionGroup, 'Rename Section', renameSlideSection);
+      renameSectionButton.disabled = !selectedSection;
+      const removeSectionButton = addButton(sectionGroup, 'Remove Section', removeSlideSection);
+      removeSectionButton.disabled = !selectedSection;
+      const sectionSelect = document.createElement('select');
+      sectionSelect.className = 'slide-section-select';
+      sectionSelect.setAttribute('aria-label', 'Move current slide to section');
+      const noSection = document.createElement('option');
+      noSection.value = '';
+      noSection.textContent = 'No section';
+      sectionSelect.append(noSection);
+      sectionDoc.sections.forEach(section => {
+        const option = document.createElement('option');
+        option.value = section.id;
+        option.textContent = section.name;
+        sectionSelect.append(option);
+      });
+      sectionSelect.value = selectedSlide.sectionId || '';
+      sectionSelect.addEventListener('change', () => moveCurrentSlideToSection(sectionSelect.value || null));
+      sectionGroup.append(sectionSelect);
     } else if (tab === 'insert') {
       const insert = group('slideContent');
       addButton(insert, label('titleSlide'), () => addSlideWithLayout('title', 'Presentation title', 'Add a subtitle'));
@@ -451,10 +477,43 @@ function renderSlideSorter(doc) {
 
   doc.slides.forEach((slide, index) => {
     const card = document.createElement('article');
+    if (slide.sectionId && (index === 0 || doc.slides[index - 1].sectionId !== slide.sectionId)) {
+      const section = doc.sections.find(item => item.id === slide.sectionId);
+      if (section) {
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'slide-sorter-section-heading';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.textContent = state.collapsedSlideSections.has(section.id) ? '▸' : '▾';
+        toggle.setAttribute('aria-label', `${state.collapsedSlideSections.has(section.id) ? 'Expand' : 'Collapse'} section ${section.name}`);
+        const name = document.createElement('strong');
+        name.textContent = section.name;
+        const memberCount = doc.slides.filter(item => item.sectionId === section.id).length;
+        const total = document.createElement('small');
+        total.textContent = `${memberCount} slides`;
+        toggle.append(name, total);
+        toggle.addEventListener('click', () => {
+          const collapsed = !state.collapsedSlideSections.has(section.id);
+          if (collapsed) state.collapsedSlideSections.add(section.id);
+          else state.collapsedSlideSections.delete(section.id);
+          grid.querySelectorAll('.slide-sorter-card').forEach(item => {
+            if (item.dataset.sectionId === section.id) item.hidden = collapsed;
+          });
+          toggle.firstChild.textContent = collapsed ? '▸' : '▾';
+          toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} section ${section.name}`);
+        });
+        sectionHeader.append(toggle);
+        grid.append(sectionHeader);
+      }
+    }
+
+    const card = document.createElement('article');
     card.className = 'slide-sorter-card';
     card.classList.toggle('active', index === doc.current);
     card.draggable = true;
     card.dataset.slideIndex = String(index);
+    card.dataset.sectionId = slide.sectionId || '';
+    card.hidden = Boolean(slide.sectionId && state.collapsedSlideSections.has(slide.sectionId));
 
     const select = document.createElement('button');
     select.type = 'button';
@@ -571,6 +630,75 @@ function setSlideLayout(layout) {
   setStatus('Slide layout updated');
 }
 
+function currentSlideSection(doc = activeDoc()) {
+  const presentation = window.BrightdeskSlidesService.ensurePresentation(doc);
+  return presentation.sections.find(section => section.id === presentation.slides[presentation.current].sectionId) || null;
+}
+
+function addSlideSection() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const suggested = `Section ${doc.sections.length + 1}`;
+  const name = window.prompt('Name this section:', suggested);
+  if (name === null) return;
+  try {
+    const section = window.BrightdeskSlidesService.createSection(doc, name);
+    state.collapsedSlideSections.delete(section.id);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(`Section “${section.name}” created`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function renameSlideSection() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const section = currentSlideSection(doc);
+  if (!section) return;
+  const name = window.prompt('Rename section:', section.name);
+  if (name === null) return;
+  try {
+    window.BrightdeskSlidesService.renameSection(doc, section.id, name);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus('Section renamed');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+function removeSlideSection() {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  const section = currentSlideSection(doc);
+  if (!section) return;
+  if (!window.confirm(`Remove section “${section.name}”? Its slides will stay in the presentation.`)) return;
+  window.BrightdeskSlidesService.deleteSection(doc, section.id);
+  state.collapsedSlideSections.delete(section.id);
+  commitSlideChange(doc);
+  renderSlides();
+  renderToolbar();
+  persist();
+  setStatus('Section removed; slides kept');
+}
+
+function moveCurrentSlideToSection(sectionId) {
+  const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc());
+  try {
+    window.BrightdeskSlidesService.moveSlideToSection(doc, doc.current, sectionId);
+    commitSlideChange(doc);
+    renderSlides();
+    renderToolbar();
+    persist();
+    setStatus(sectionId ? 'Slide moved to section' : 'Slide removed from its section');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
 function setSlideSize(slideSize) {
   const doc = window.BrightdeskSlidesService.ensurePresentation(activeDoc(), t('common.newSlide'));
   try {
@@ -637,9 +765,40 @@ function renderSlides() {
   };
 
   doc.slides.forEach((item, index) => {
+    if (item.sectionId && (index === 0 || doc.slides[index - 1].sectionId !== item.sectionId)) {
+      const section = doc.sections.find(entry => entry.id === item.sectionId);
+      if (section) {
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'slide-section-heading';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        const collapsed = state.collapsedSlideSections.has(section.id);
+        toggle.textContent = collapsed ? '▸' : '▾';
+        toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} section ${section.name}`);
+        const name = document.createElement('strong');
+        name.textContent = section.name;
+        const total = document.createElement('small');
+        total.textContent = `${doc.slides.filter(entry => entry.sectionId === section.id).length} slides`;
+        toggle.append(name, total);
+        toggle.addEventListener('click', () => {
+          const nextCollapsed = !state.collapsedSlideSections.has(section.id);
+          if (nextCollapsed) state.collapsedSlideSections.add(section.id);
+          else state.collapsedSlideSections.delete(section.id);
+          thumbnailList.querySelectorAll('.slide-thumbnail-card').forEach(card => {
+            if (card.dataset.sectionId === section.id) card.hidden = nextCollapsed;
+          });
+          toggle.firstChild.textContent = nextCollapsed ? '▸' : '▾';
+          toggle.setAttribute('aria-label', `${nextCollapsed ? 'Expand' : 'Collapse'} section ${section.name}`);
+        });
+        sectionHeader.append(toggle);
+        thumbnailList.append(sectionHeader);
+      }
+    }
     const card = document.createElement('article');
     card.className = 'slide-thumbnail-card';
     card.dataset.slideIndex = String(index);
+    card.dataset.sectionId = item.sectionId || '';
+    card.hidden = Boolean(item.sectionId && state.collapsedSlideSections.has(item.sectionId));
     card.draggable = true;
     card.classList.toggle('active', index === doc.current);
 
