@@ -5,6 +5,14 @@
   if (typeof module === 'object' && module.exports) module.exports = service;
   if (root) root.BrightdeskSlidesService = service;
 })(typeof window !== 'undefined' ? window : globalThis, function () {
+  const SLIDE_LAYOUTS = Object.freeze([
+    'title',
+    'title-content',
+    'two-content',
+    'section-header'
+  ]);
+  const DEFAULT_LAYOUT = 'title-content';
+
   function assertPresentation(presentation) {
     if (!presentation || typeof presentation !== 'object' || Array.isArray(presentation)) {
       throw new TypeError('A presentation object is required.');
@@ -14,18 +22,27 @@
 
   function normalizeSlide(slide) {
     const source = slide && typeof slide === 'object' && !Array.isArray(slide) ? slide : {};
+    const layout = SLIDE_LAYOUTS.includes(source.layout) ? source.layout : DEFAULT_LAYOUT;
     return {
       ...source,
       title: String(source.title ?? ''),
       body: String(source.body ?? ''),
-      notes: String(source.notes ?? '')
+      bodySecondary: String(source.bodySecondary ?? ''),
+      notes: String(source.notes ?? ''),
+      layout
     };
   }
 
   function ensurePresentation(presentation, firstSlideTitle = 'Slide 1') {
     const target = assertPresentation(presentation);
     if (!Array.isArray(target.slides) || target.slides.length === 0) {
-      target.slides = [{ title: String(firstSlideTitle), body: '', notes: '' }];
+      target.slides = [{
+        title: String(firstSlideTitle),
+        body: '',
+        bodySecondary: '',
+        notes: '',
+        layout: DEFAULT_LAYOUT
+      }];
     } else {
       target.slides = target.slides.map(normalizeSlide);
     }
@@ -85,8 +102,19 @@
     const slide = target.slides[index];
     if (Object.prototype.hasOwnProperty.call(patch, 'title')) slide.title = String(patch.title ?? '');
     if (Object.prototype.hasOwnProperty.call(patch, 'body')) slide.body = String(patch.body ?? '');
+    if (Object.prototype.hasOwnProperty.call(patch, 'bodySecondary')) slide.bodySecondary = String(patch.bodySecondary ?? '');
     if (Object.prototype.hasOwnProperty.call(patch, 'notes')) slide.notes = String(patch.notes ?? '');
     return slide;
+  }
+
+  function setSlideLayout(presentation, index, layout) {
+    const target = ensurePresentation(presentation);
+    assertSlideIndex(target, index);
+    if (!SLIDE_LAYOUTS.includes(layout)) {
+      throw new RangeError('The selected slide layout is not supported.');
+    }
+    target.slides[index].layout = layout;
+    return target.slides[index];
   }
 
   function moveSlide(presentation, fromIndex, toIndex) {
@@ -110,11 +138,14 @@
   }
 
   return {
+    SLIDE_LAYOUTS,
+    DEFAULT_LAYOUT,
     ensurePresentation,
     addSlide,
     duplicateSlide,
     deleteSlide,
     updateSlide,
+    setSlideLayout,
     moveSlide,
     setCurrentSlide
   };
