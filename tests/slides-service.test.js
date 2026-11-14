@@ -17,7 +17,7 @@ test('Decks creates an editable presentation with one starter slide', () => {
 
   assert.equal(presentation.title, 'Quarterly review');
   assert.equal(presentation.slides.length, 1);
-  assert.deepEqual(presentation.slides[0], { title: 'Slide 1', body: '', notes: '' });
+  assert.deepEqual(presentation.slides[0], { title: 'Slide 1', body: '', bodySecondary: '', notes: '', layout: 'title-content' });
   assert.equal(presentation.current, 0);
 });
 
@@ -31,7 +31,9 @@ test('Decks migrates legacy slides without losing titles or body text', () => {
   assert.deepEqual(presentation.slides[0], {
     title: 'Welcome',
     body: 'Existing content',
-    notes: ''
+    bodySecondary: '',
+    notes: '',
+    layout: 'title-content'
   });
 });
 
@@ -49,13 +51,13 @@ test('Decks adds a slide and selects the new slide', () => {
 
   const slide = addSlide(presentation, { title: 'Priorities', body: 'Plan the work' });
 
-  assert.deepEqual(slide, { title: 'Priorities', body: 'Plan the work', notes: '' });
+  assert.deepEqual(slide, { title: 'Priorities', body: 'Plan the work', bodySecondary: '', notes: '', layout: 'title-content' });
   assert.equal(presentation.slides.length, 2);
   assert.equal(presentation.current, 1);
 });
 
 test('Decks duplicates the selected slide and its speaker notes without sharing its object', () => {
-  const original = { title: 'Review', body: 'Progress so far', notes: 'Mention the milestone.' };
+  const original = { title: 'Review', body: 'Progress so far', bodySecondary: '', notes: 'Mention the milestone.', layout: 'title-content' };
   const presentation = { slides: [original], current: 0 };
 
   const copy = duplicateSlide(presentation);
@@ -105,7 +107,9 @@ test('Decks edits slide title, body and speaker notes as text', () => {
   assert.deepEqual(updated, {
     title: 'Final',
     body: 'Approved text',
-    notes: 'Pause here for questions.'
+    bodySecondary: '',
+    notes: 'Pause here for questions.',
+    layout: 'title-content'
   });
 });
 
