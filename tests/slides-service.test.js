@@ -516,3 +516,17 @@ test('Decks exposes slide size choices in the Design ribbon and applies the rati
   assert.match(styles, /\.slide-sorter-preview\.size-standard/);
   assert.match(styles, /\.presentation-slide\.size-standard/);
 });
+
+
+test('Decks puts the current slide layout control on Home and supports New Slide shortcut', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+  const homeTab = app.indexOf("if (tab === 'home')", app.indexOf("app === 'slides'"));
+  const insertTab = app.indexOf("} else if (tab === 'insert')", homeTab);
+  const layoutControl = app.indexOf("const layoutGroup = ribbonGroup(toolbar, 'Layout')", homeTab);
+  assert.ok(homeTab >= 0 && layoutControl > homeTab && layoutControl < insertTab, 'layout control belongs to Home ribbon');
+  assert.match(app, /event\.shiftKey && event\.key\.toLowerCase\(\) === 'n'/);
+  assert.match(app, /addSlide\(\);\s*return;/);
+});
