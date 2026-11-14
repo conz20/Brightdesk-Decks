@@ -286,7 +286,7 @@ test('Decks can undo and redo a slide edit without losing the edited content', (
 
 test('Decks groups consecutive typing in the same field into one undo step', () => {
   const { createHistory } = require('../src/slides-service');
-  const presentation = { slides: [{ title: 'Draft', body: '', notes: '' }], current: 0 };
+  const presentation = { slides: [{ title: '', body: '', notes: '' }], current: 0 };
   const history = createHistory(presentation);
 
   updateSlide(presentation, 0, { title: 'D' });
@@ -297,7 +297,7 @@ test('Decks groups consecutive typing in the same field into one undo step', () 
   history.commit(presentation, 'slide:0:title', 1200);
 
   assert.equal(history.undo(presentation), true);
-  assert.equal(presentation.slides[0].title, 'Draft');
+  assert.equal(presentation.slides[0].title, '');
   assert.equal(history.canUndo(), false);
 });
 
