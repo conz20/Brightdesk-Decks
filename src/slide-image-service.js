@@ -4,7 +4,7 @@ const MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function detectSlideImageMimeType(value) {
-  if (!Buffer.isBuffer(value) || value.length < 12) return null;
+  if (!Buffer.isBuffer(value) || value.length < 3) return null;
   if (value.length >= PNG_SIGNATURE.length && value.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
     return 'image/png';
   }
@@ -12,6 +12,7 @@ function detectSlideImageMimeType(value) {
     return 'image/jpeg';
   }
   if (
+    value.length >= 12 &&
     value.toString('ascii', 0, 4) === 'RIFF' &&
     value.toString('ascii', 8, 12) === 'WEBP'
   ) {
