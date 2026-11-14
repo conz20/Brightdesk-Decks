@@ -149,6 +149,7 @@ The first practical presentation-editor milestone is now represented by [Brightd
 - Slide size is saved in local projects, restored in undo/redo, and preserved through supported PowerPoint import/export.
 - Named sections are saved in local Brightdesk project files, included in undo/redo, and shown as collapsible groups in both editing views. PowerPoint section import/export remains unsupported.
 - Hidden slides stay editable, are marked in the navigator and Slide Sorter, are skipped during presentation playback, and are preserved in supported PowerPoint import/export.
+- Full-screen navigation supports arrow keys, Space, Page Up/Down, N/P, Home and End while skipping hidden slides.
 - Speaker notes and supported layout positioning included in PowerPoint export.
 - F5 / Shift+F5 presentation shortcuts while preserving the current motion-aware presentation overlay.
 - Bounded undo/redo for slide content, speaker notes, layouts and slide structure, including grouped typing and keyboard/toolbar controls. History is also saved on this device and restored when Decks is reopened; importing another presentation clears the previous history.
