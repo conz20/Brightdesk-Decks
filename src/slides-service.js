@@ -78,6 +78,7 @@
     paper: '#FFFFFF'
   });
   const SLIDE_OBJECT_TYPES = Object.freeze(['text', 'rectangle', 'ellipse', 'line', 'image']);
+  const SLIDE_IMAGE_ASSET_ID_PATTERN = /^picture-[a-f0-9-]{36}\\.(?:png|jpg|webp)$/i;
   const MAX_SLIDE_OBJECTS = 1000;
   const MAX_SLIDE_IMAGE_BYTES = 5 * 1024 * 1024;
   const MAX_SLIDE_IMAGE_BYTES_PER_SLIDE = 15 * 1024 * 1024;
@@ -197,10 +198,13 @@
     const imageName = object.type === 'image' ? (object.imageName ?? 'Picture') : undefined;
     const imageWidth = object.type === 'image' ? object.imageWidth : undefined;
     const imageHeight = object.type === 'image' ? object.imageHeight : undefined;
+    const imageAssetId = object.type === 'image' ? object.imageAssetId : undefined;
+    const hasImageData = isValidSlideImageData(imageData);
+    const hasImageAsset = typeof imageAssetId === 'string' && SLIDE_IMAGE_ASSET_ID_PATTERN.test(imageAssetId);
 
     if (!isValidObjectColour(fill, true) || !isValidObjectColour(stroke, true)) return null;
     if (object.type === 'image' && (
-      !isValidSlideImageData(imageData) ||
+      (!hasImageData && !hasImageAsset) ||
       typeof imageName !== 'string' || !imageName.trim() || imageName.length > 255 ||
       !Number.isInteger(imageWidth) || imageWidth < 1 || imageWidth > 20000 ||
       !Number.isInteger(imageHeight) || imageHeight < 1 || imageHeight > 20000 ||
@@ -230,7 +234,11 @@
       textColor: textColor.toUpperCase(),
       bold,
       rotation,
-      ...(object.type === 'image' ? { imageData, imageName, imageWidth, imageHeight } : {})
+      ...(object.type === 'image' ? {
+        ...(imageData ? { imageData } : {}),
+        ...(hasImageAsset ? { imageAssetId } : {}),
+        imageName, imageWidth, imageHeight
+      } : {})
     };
   }
 
@@ -652,6 +660,7 @@
     const usedIds = new Set(slide.objects.map(object => object.id));
     const next = normalizeSlideObject(definition, usedIds);
     if (!next) throw new RangeError('The slide object definition is invalid.');
+    if (next.type === 'image' && !next.imageData) throw new RangeError('A new picture must include its embedded image data.');
     if (getSlideImageBytes(slide.objects) + (next.type === 'image' ? estimateSlideImageBytes(next.imageData) : 0) > MAX_SLIDE_IMAGE_BYTES_PER_SLIDE) {
       throw new RangeError('A slide cannot contain more than 15 MB of embedded pictures.');
     }
@@ -668,7 +677,7 @@
     if (Object.prototype.hasOwnProperty.call(patch, 'id') || Object.prototype.hasOwnProperty.call(patch, 'type')) {
       throw new TypeError('A slide object identity and type cannot be changed.');
     }
-    const allowed = new Set(['x', 'y', 'width', 'height', 'fill', 'stroke', 'strokeWidth', 'text', 'fontSize', 'textColor', 'bold', 'rotation', 'imageData', 'imageName', 'imageWidth', 'imageHeight']);
+    const allowed = new Set(['x', 'y', 'width', 'height', 'fill', 'stroke', 'strokeWidth', 'text', 'fontSize', 'textColor', 'bold', 'rotation', 'imageData', 'imageName', 'imageWidth', 'imageHeight', 'imageAssetId']);
     if (Object.keys(patch).some(key => !allowed.has(key))) {
       throw new TypeError('The slide object update contains an unsupported field.');
     }
@@ -934,6 +943,24 @@
       lastAt = 0;
     }
 
+    function hydrateImages(imageDataByAssetId) {
+      if (!(imageDataByAssetId instanceof Map)) return 0;
+      let hydrated = 0;
+      const snapshots = [current, ...past, ...future];
+      for (const snapshot of snapshots) {
+        for (const slide of snapshot.slides || []) {
+          for (const object of slide.objects || []) {
+            if (object.type !== 'image' || typeof object.imageAssetId !== 'string') continue;
+            const imageData = imageDataByAssetId.get(object.imageAssetId);
+            if (typeof imageData !== 'string' || object.imageData === imageData) continue;
+            object.imageData = imageData;
+            hydrated++;
+          }
+        }
+      }
+      return hydrated;
+    }
+
     function exportState() {
       return {
         version: 1,
@@ -965,6 +992,7 @@
       redo,
       sync,
       reset,
+      hydrateImages,
       exportState
     };
   }
