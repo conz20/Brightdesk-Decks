@@ -615,6 +615,125 @@ function readPptxSlideSolidBackground(xml) {
   return colorMatch ? '#' + colorMatch[1].toUpperCase() : null;
 }
 
+function findFirstXmlNode(value, key) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findFirstXmlNode(item, key);
+      if (found !== null && found !== undefined) return found;
+    }
+    return null;
+  }
+  if (!value || typeof value !== 'object') return null;
+  if (Object.prototype.hasOwnProperty.call(value, key)) return value[key];
+  for (const child of Object.values(value)) {
+    const found = findFirstXmlNode(child, key);
+    if (found !== null && found !== undefined) return found;
+  }
+  return null;
+}
+
+function readPptxRgbColour(value) {
+  const node = findFirstXmlNode(value, 'srgbClr');
+  const hex = typeof node?.['@_val'] === 'string' ? node['@_val'] : '';
+  return /^[0-9A-F]{6}$/i.test(hex) ? '#' + hex.toUpperCase() : null;
+}
+
+function readPptxSlideObjects(xml, slideWidthEmu, slideHeightEmu) {
+  const { XMLParser } = require('fast-xml-parser');
+  const objectParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    removeNSPrefix: true
+  });
+  let parsed;
+  try {
+    parsed = objectParser.parse(xml);
+  } catch {
+    return { objects: [], text: [] };
+  }
+
+  const shapes = asArray(parsed.sld?.cSld?.spTree?.sp);
+  const objects = [];
+  const objectText = [];
+  const seenIds = new Set();
+  for (const shape of shapes) {
+    if (!isPlainObject(shape)) continue;
+    const name = String(shape.nvSpPr?.cNvPr?.['@_name'] || '');
+    const match = name.match(/^Brightdesk (text|rectangle|ellipse|line) (object-[A-Za-z0-9][A-Za-z0-9._:-]{0,99})$/);
+    if (!match) continue;
+    const [, type, id] = match;
+    if (seenIds.has(id)) continue;
+
+    const transform = shape.spPr?.xfrm;
+    const offset = transform?.off;
+    const extent = transform?.ext;
+    const xEmu = Number(offset?.['@_x']);
+    const yEmu = Number(offset?.['@_y']);
+    const widthEmu = Number(extent?.['@_cx']);
+    const heightEmu = Number(extent?.['@_cy']);
+    if (
+      !Number.isFinite(xEmu) || !Number.isFinite(yEmu) ||
+      !Number.isFinite(widthEmu) || !Number.isFinite(heightEmu) ||
+      xEmu < 0 || yEmu < 0 || widthEmu <= 0 || heightEmu < 0 ||
+      slideWidthEmu <= 0 || slideHeightEmu <= 0
+    ) continue;
+
+    const x = xEmu / slideWidthEmu * 100;
+    const y = yEmu / slideHeightEmu * 100;
+    const width = widthEmu / slideWidthEmu * 100;
+    const height = Math.max(1, heightEmu / slideHeightEmu * 100);
+    if (x + width > 100.001 || y + height > 100.001 || width <= 0 || height <= 0) continue;
+
+    const geometry = String(shape.spPr?.prstGeom?.['@_prst'] || '');
+    if (
+      (type === 'rectangle' && geometry !== 'rect') ||
+      (type === 'ellipse' && geometry !== 'ellipse') ||
+      (type === 'line' && geometry !== 'line') ||
+      (type === 'text' && shape.nvSpPr?.cNvSpPr?.['@_txBox'] !== '1')
+    ) continue;
+
+    const fill = readPptxRgbColour(shape.spPr?.solidFill);
+    const stroke = readPptxRgbColour(shape.spPr?.ln?.solidFill);
+    const strokeWidthEmu = Number(shape.spPr?.ln?.['@_w']);
+    const strokeWidth = Number.isFinite(strokeWidthEmu) && strokeWidthEmu > 0
+      ? Math.min(12, strokeWidthEmu / 12700)
+      : 0;
+    const rotationValue = Number(transform?.['@_rot']);
+    const rotation = Number.isFinite(rotationValue) ? Math.max(-360, Math.min(360, rotationValue / 60000)) : 0;
+
+    const paragraphs = asArray(shape.txBody?.p);
+    const text = paragraphs
+      .map(paragraph => collectXmlText(paragraph).join(''))
+      .join('\n')
+      .slice(0, MAX_SLIDE_OBJECT_TEXT_LENGTH);
+    if (type === 'text' && text) objectText.push(text);
+
+    const runProperties = findFirstXmlNode(shape.txBody, 'rPr') || findFirstXmlNode(shape.txBody, 'defRPr');
+    const runSize = Number(runProperties?.['@_sz']);
+    const textFill = readPptxRgbColour(runProperties?.solidFill);
+    const object = {
+      id,
+      type,
+      x,
+      y,
+      width,
+      height,
+      fill: type === 'line' || !fill ? null : fill,
+      stroke,
+      strokeWidth,
+      text,
+      fontSize: Number.isFinite(runSize) && runSize > 0 ? Math.max(8, Math.min(96, runSize / 100)) : 20,
+      textColor: textFill || '#26364D',
+      bold: runProperties?.['@_b'] === '1' || runProperties?.['@_b'] === 'true',
+      rotation
+    };
+    objects.push(object);
+    seenIds.add(id);
+    if (objects.length >= 1000) break;
+  }
+  return { objects, text: objectText };
+}
+
 async function openOfficeFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const stat = await fs.stat(filePath);
@@ -653,6 +772,8 @@ async function openOfficeFile(filePath) {
     const { XMLParser } = require('fast-xml-parser');
     const zip = await JSZip.loadAsync(buffer);
     let slideSize = 'widescreen';
+    let slideWidthEmu = 12192000;
+    let slideHeightEmu = 6858000;
     const presentationPart = zip.file('ppt/presentation.xml');
     if (presentationPart) {
       const presentationXml = await presentationPart.async('string');
@@ -660,6 +781,8 @@ async function openOfficeFile(filePath) {
       if (sizeTag) {
         const width = Number(sizeTag[1].match(/\bcx=["'](\d+)["']/i)?.[1]);
         const height = Number(sizeTag[1].match(/\bcy=["'](\d+)["']/i)?.[1]);
+        if (Number.isFinite(width) && width > 0) slideWidthEmu = width;
+        if (Number.isFinite(height) && height > 0) slideHeightEmu = height;
         if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
           const ratio = width / height;
           if (Math.abs(ratio - 4 / 3) < 0.02) slideSize = 'standard';
@@ -679,7 +802,9 @@ async function openOfficeFile(filePath) {
       const xml = await zip.files[name].async('string');
       const backgroundColor = readPptxSlideSolidBackground(xml);
       const hidden = /<(?:[A-Za-z0-9_]+:)?sld\b[^>]*\bshow=["'](?:0|false)["']/i.test(xml);
-      const texts = collectXmlText(parser.parse(xml)).filter(Boolean);
+      const importedObjects = readPptxSlideObjects(xml, slideWidthEmu, slideHeightEmu);
+      const nativeObjectText = new Set(importedObjects.text);
+      const texts = collectXmlText(parser.parse(xml)).filter(value => Boolean(value) && !nativeObjectText.has(value));
       const notesPart = await findNotesSlidePart(zip, name, relationshipParser);
       let notes = '';
       if (notesPart) {
@@ -695,6 +820,7 @@ async function openOfficeFile(filePath) {
       slides.push({
         ...(hidden ? { hidden: true } : {}),
         ...(backgroundColor ? { backgroundColor } : {}),
+        ...(importedObjects.objects.length ? { objects: importedObjects.objects } : {}),
         title: texts[0] || `Slide ${slides.length + 1}`,
         body: texts.slice(1).join('\n'),
         notes
@@ -847,7 +973,7 @@ async function exportOfficeFile(payload, filePath) {
         const objectW = w(13.333333 * object.width / 100);
         const objectH = 7.5 * object.height / 100;
         const rotation = Number.isFinite(object.rotation) ? object.rotation : 0;
-        const objectName = 'Brightdesk ' + String(object.id || object.type);
+        const objectName = 'Brightdesk ' + object.type + ' ' + String(object.id || 'object-unknown');
         if (object.type === 'text') {
           const textOptions = {
             x: objectX,
