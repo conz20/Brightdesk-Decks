@@ -1402,7 +1402,7 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   const removePresenterDisplayLostListener = presenterMode
     ? window.brightdesk?.onPresenterDisplayLost?.(() => {
       audienceDisplayActive = false;
-      presenterDisplayStatus.textContent = 'The second display was disconnected. Presenter View remains open on this screen.';
+      presenterDisplayStatus.textContent = 'The audience output closed or was disconnected. Presenter View remains open on this screen.';
     })
     : null;
 
