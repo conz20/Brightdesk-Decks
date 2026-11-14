@@ -233,3 +233,17 @@ test('Decks Draw ribbon imports local pictures and renders them as contained ima
   assert.match(audience, /image\.src = object\.imageData/);
 });
 
+
+test('Decks keeps picture bytes out of local storage and restores them from device assets', () => {
+  const app = read('src/app.js');
+
+  assert.match(app, /function stripSlidePictureData\(value\)/);
+  assert.match(app, /if \(object\?\.type === 'image' && object\.imageAssetId\) delete object\.imageData/);
+  assert.match(app, /JSON\.stringify\(stripSlidePictureData\(history\.exportState\(\)\)\)/);
+  assert.match(app, /writeJsonValue\(localStorage, 'brightdesk-docs-v3', stripSlidePictureData\(state\.docs\)\)/);
+  assert.match(app, /async function hydrateSavedSlidePictures\(/);
+  assert.match(app, /history\.hydrateImages\(imageDataByAssetId\)/);
+  assert.match(app, /window\.brightdesk\.storeSlidePicture\(picture\.imageData\)/);
+  assert.match(app, /window\.brightdesk\.loadSlidePicture\(assetId\)/);
+  assert.match(app, /collectLocalSlidePictureAssetIds\(\)/);
+});
