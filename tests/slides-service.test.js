@@ -17,7 +17,11 @@ const {
   createHistory,
   setSlideTheme,
   setSlideBackgroundColor,
-  getReadableTextColor
+  getReadableTextColor,
+  addSlideObject,
+  updateSlideObject,
+  deleteSlideObject,
+  moveSlideObject
 } = require('../src/slides-service');
 
 function withoutSlideId(slide) {
@@ -1232,4 +1236,104 @@ test('Decks resets the selected layout structure without clearing slide content 
 
 test('Decks chooses black text near the luminance boundary to meet normal text contrast', () => {
   assert.equal(getReadableTextColor('#777777'), '#000000');
+});
+
+
+test('Decks initializes legacy slides with an empty structured object collection', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Legacy slide', body: 'Text only' }]
+  });
+  assert.deepEqual(presentation.slides[0].objects, []);
+});
+
+test('Decks adds editable text boxes and basic vector shapes with stable IDs', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  const rectangle = addSlideObject(presentation, 0, {
+    type: 'rectangle', x: 12, y: 18, width: 32, height: 26,
+    fill: '#F3EBDD', stroke: '#26364D', strokeWidth: 2
+  });
+  const ellipse = addSlideObject(presentation, 0, {
+    type: 'ellipse', x: 50, y: 20, width: 20, height: 20
+  });
+  const line = addSlideObject(presentation, 0, {
+    type: 'line', x: 10, y: 70, width: 40, height: 1
+  });
+  const textBox = addSlideObject(presentation, 0, {
+    type: 'text', x: 14, y: 12, width: 55, height: 12,
+    text: 'Quarterly results', fontSize: 26, textColor: '#202B3B', bold: true
+  });
+
+  assert.equal(new Set(presentation.slides[0].objects.map(object => object.id)).size, 4);
+  assert.ok([rectangle, ellipse, line, textBox].every(object => object.id.startsWith('object-')));
+  assert.deepEqual(presentation.slides[0].objects.map(object => object.type), [
+    'rectangle', 'ellipse', 'line', 'text'
+  ]);
+  assert.equal(textBox.text, 'Quarterly results');
+  assert.equal(rectangle.fill, '#F3EBDD');
+});
+
+test('Decks updates object geometry and formatting without changing its identity or type', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  const shape = addSlideObject(presentation, 0, { type: 'rectangle' });
+  const updated = updateSlideObject(presentation, 0, shape.id, {
+    x: 35, y: 24, width: 40, height: 18,
+    fill: '#202B3B', stroke: '#FFFFFF', strokeWidth: 3,
+    rotation: 15
+  });
+
+  assert.equal(updated.id, shape.id);
+  assert.equal(updated.type, 'rectangle');
+  assert.equal(updated.x, 35);
+  assert.equal(updated.fill, '#202B3B');
+  assert.equal(updated.stroke, '#FFFFFF');
+  assert.equal(updated.rotation, 15);
+});
+
+test('Decks moves an object within slide bounds and rejects positions outside the canvas', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  const shape = addSlideObject(presentation, 0, { type: 'ellipse', x: 10, y: 12, width: 25, height: 20 });
+  const moved = moveSlideObject(presentation, 0, shape.id, 70, 75);
+  assert.equal(moved.x, 70);
+  assert.equal(moved.y, 75);
+  assert.throws(() => moveSlideObject(presentation, 0, shape.id, 80, 85), RangeError);
+});
+
+test('Decks rejects unsupported object types, unsafe dimensions and invalid colours', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  assert.throws(() => addSlideObject(presentation, 0, { type: 'smartart' }), RangeError);
+  assert.throws(() => addSlideObject(presentation, 0, { type: 'rectangle', x: -1 }), RangeError);
+  assert.throws(() => addSlideObject(presentation, 0, { type: 'rectangle', x: 90, width: 20 }), RangeError);
+  assert.throws(() => addSlideObject(presentation, 0, { type: 'rectangle', fill: 'red' }), RangeError);
+  assert.throws(() => addSlideObject(presentation, 0, { type: 'text', text: 'x'.repeat(10001) }), RangeError);
+  assert.equal(presentation.slides[0].objects.length, 0);
+});
+
+test('Decks deletes only the selected slide object', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  const first = addSlideObject(presentation, 0, { type: 'rectangle' });
+  const second = addSlideObject(presentation, 0, { type: 'ellipse' });
+  assert.equal(deleteSlideObject(presentation, 0, first.id), true);
+  assert.equal(deleteSlideObject(presentation, 0, 'object-missing'), false);
+  assert.deepEqual(presentation.slides[0].objects.map(object => object.id), [second.id]);
+});
+
+test('Decks creates new object identities when a slide containing objects is duplicated', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  const original = addSlideObject(presentation, 0, { type: 'text', text: 'Keep this text' });
+  const duplicate = duplicateSlide(presentation, 0);
+  assert.equal(duplicate.objects.length, 1);
+  assert.notEqual(duplicate.objects[0].id, original.id);
+  assert.equal(duplicate.objects[0].text, original.text);
+});
+
+test('Decks includes structured objects in undo and redo history', () => {
+  const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
+  const history = createHistory(presentation);
+  const object = addSlideObject(presentation, 0, { type: 'rectangle' });
+  history.commit(presentation);
+  assert.equal(presentation.slides[0].objects.length, 1);
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.slides[0].objects.length, 0);
+  assert.equal(history.redo(presentation), true);
+  assert.equal(presentation.slides[0].objects[0].id, object.id);
 });
