@@ -586,7 +586,7 @@ function renderSlideOutline(doc) {
     const titleLabel = document.createElement('label');
     titleLabel.className = 'slide-outline-field';
     const titleCaption = document.createElement('span');
-    titleCaption.textContent = 'Title';
+    titleCaption.textContent = layoutDefinition.titleLabel;
     const titleInput = document.createElement('textarea');
     titleInput.className = 'slide-outline-title';
     titleInput.rows = 1;
@@ -607,7 +607,7 @@ function renderSlideOutline(doc) {
     const bodyLabel = document.createElement('label');
     bodyLabel.className = 'slide-outline-field slide-outline-content-field';
     const bodyCaption = document.createElement('span');
-    bodyCaption.textContent = 'Content';
+    bodyCaption.textContent = layoutDefinition.bodyLabel;
     const bodyInput = document.createElement('textarea');
     bodyInput.className = 'slide-outline-body';
     bodyInput.rows = 3;
@@ -627,13 +627,13 @@ function renderSlideOutline(doc) {
       const secondaryLabel = document.createElement('label');
       secondaryLabel.className = 'slide-outline-field slide-outline-content-field';
       const secondaryCaption = document.createElement('span');
-      secondaryCaption.textContent = 'Second column';
+      secondaryCaption.textContent = layoutDefinition.secondaryBodyLabel || 'Second content column';
       const secondaryInput = document.createElement('textarea');
       secondaryInput.className = 'slide-outline-body slide-outline-body-secondary';
       secondaryInput.rows = 3;
       secondaryInput.value = slide.bodySecondary || '';
       secondaryInput.placeholder = layoutDefinition.secondaryBodyPlaceholder || '';
-      secondaryInput.setAttribute('aria-label', `Slide ${index + 1} second content column`);
+      secondaryInput.setAttribute('aria-label', `Slide ${index + 1} ${layoutDefinition.secondaryBodyLabel || 'second content column'}`);
       secondaryInput.lang = state.proofingLanguage;
       secondaryInput.addEventListener('input', () => {
         slidesService.updateSlide(doc, index, { bodySecondary: secondaryInput.value });
@@ -726,8 +726,9 @@ function renderSlideSorter(doc) {
     preview.className = `slide-sorter-preview theme-${doc.themeId} layout-${slide.layout} size-${doc.slideSize}`;
     const previewTitle = document.createElement('b');
     previewTitle.textContent = slide.title.trim() || `Slide ${index + 1}`;
+    const layoutDefinition = slidesService.getSlideLayoutDefinition(slide.layout);
     const previewBody = document.createElement('span');
-    previewBody.textContent = slide.body.trim().slice(0, 120) || slidesService.getSlideLayoutDefinition(slide.layout).bodyPlaceholder;
+    previewBody.textContent = slide.body.trim().slice(0, 120) || layoutDefinition.bodyPlaceholder;
     const previewTextColor = slide.backgroundColor
       ? window.BrightdeskSlidesService.getReadableTextColor(slide.backgroundColor)
       : '';
@@ -738,7 +739,7 @@ function renderSlideSorter(doc) {
     if (slide.layout === 'two-content') {
       const second = document.createElement('span');
       second.className = 'slide-sorter-secondary';
-      second.textContent = slide.bodySecondary.trim().slice(0, 90) || 'Second column';
+      second.textContent = slide.bodySecondary.trim().slice(0, 90) || layoutDefinition.secondaryBodyPlaceholder || 'Second column';
       second.style.color = previewTextColor;
       preview.append(second);
     }
@@ -1047,10 +1048,11 @@ function renderSlides() {
     const previewTitle = document.createElement('b');
     previewTitle.className = 'slide-thumbnail-title';
     previewTitle.textContent = item.title.trim() || `Slide ${index + 1}`;
+    const layoutDefinition = slidesService.getSlideLayoutDefinition(item.layout);
     const previewBody = document.createElement('span');
     previewBody.className = 'slide-thumbnail-summary';
     const previewSummary = [item.body.trim(), item.bodySecondary.trim()].filter(Boolean).join(' · ');
-    previewBody.textContent = previewSummary.slice(0, 88) || slidesService.getSlideLayoutDefinition(item.layout).bodyPlaceholder;
+    previewBody.textContent = previewSummary.slice(0, 88) || layoutDefinition.bodyPlaceholder;
     preview.append(previewTitle, previewBody);
     select.append(number, preview);
     if (item.hidden) {
