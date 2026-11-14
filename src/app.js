@@ -1233,7 +1233,7 @@ function presentSlides(startFromFirst = false) {
   const pickerTitle = document.createElement('h2');
   pickerTitle.textContent = 'All slides';
   const pickerHint = document.createElement('p');
-  pickerHint.textContent = 'Choose a visible slide to continue the presentation.';
+  pickerHint.textContent = 'Choose a visible slide to continue. Hidden slides are not listed. Press Escape to return.';
   pickerHeader.append(pickerTitle, pickerHint);
   const pickerGrid = document.createElement('div');
   pickerGrid.className = 'presentation-slide-picker-grid';
@@ -1269,8 +1269,11 @@ function presentSlides(startFromFirst = false) {
   let pickerOpen = false;
   let numberBuffer = '';
   let blankMode = null;
+  let showMessage = '';
 
   const togglePresentationBlank = mode => {
+    numberBuffer = '';
+    showMessage = '';
     blankMode = blankMode === mode ? null : mode;
     overlay.classList.toggle('is-blank-black', blankMode === 'black');
     overlay.classList.toggle('is-blank-white', blankMode === 'white');
@@ -1298,7 +1301,7 @@ function presentSlides(startFromFirst = false) {
     });
     footer.textContent = numberBuffer
       ? `Go to slide ${numberBuffer} · Enter to jump · Backspace to edit · Esc to clear`
-      : 'Click or use arrows to move · G all slides · B black · W white · Esc to exit';
+      : showMessage || 'Click or use arrows to move · G all slides · B black · W white · Esc to exit';
   };
 
   const close = () => {
@@ -1333,9 +1336,11 @@ function presentSlides(startFromFirst = false) {
       event.preventDefault();
       if (pickerOpen) {
         pickerOpen = false;
+        showMessage = '';
         draw();
       } else if (numberBuffer) {
         numberBuffer = '';
+        showMessage = '';
         draw();
       } else {
         close();
@@ -1345,6 +1350,7 @@ function presentSlides(startFromFirst = false) {
 
     if (!pickerOpen && !event.ctrlKey && !event.metaKey && !event.altKey && /^[0-9]$/.test(keyName)) {
       event.preventDefault();
+      showMessage = '';
       if (numberBuffer.length < 4) numberBuffer += keyName;
       draw();
       return;
@@ -1352,6 +1358,7 @@ function presentSlides(startFromFirst = false) {
 
     if (!pickerOpen && numberBuffer && keyName === 'Backspace') {
       event.preventDefault();
+      showMessage = '';
       numberBuffer = numberBuffer.slice(0, -1);
       draw();
       return;
@@ -1362,7 +1369,12 @@ function presentSlides(startFromFirst = false) {
       const requestedSlide = Number(numberBuffer);
       const targetPosition = window.BrightdeskSlidesService.getVisibleSlidePosition(d, requestedSlide);
       numberBuffer = '';
-      if (targetPosition >= 0) position = targetPosition;
+      if (targetPosition >= 0) {
+        position = targetPosition;
+        showMessage = '';
+      } else {
+        showMessage = `Slide ${requestedSlide} is hidden or doesn't exist`;
+      }
       draw();
       return;
     }
@@ -1390,21 +1402,25 @@ function presentSlides(startFromFirst = false) {
     if (['ArrowRight', 'ArrowDown', 'PageDown', 'Enter', ' '].includes(keyName) || normalized === 'n') {
       event.preventDefault();
       numberBuffer = '';
+      showMessage = '';
       position = Math.min(visibleSlides.length - 1, position + 1);
       draw();
     } else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(keyName) || normalized === 'p') {
       event.preventDefault();
       numberBuffer = '';
+      showMessage = '';
       position = Math.max(0, position - 1);
       draw();
     } else if (keyName === 'Home') {
       event.preventDefault();
       numberBuffer = '';
+      showMessage = '';
       position = 0;
       draw();
     } else if (keyName === 'End') {
       event.preventDefault();
       numberBuffer = '';
+      showMessage = '';
       position = visibleSlides.length - 1;
       draw();
     }
@@ -1416,6 +1432,7 @@ function presentSlides(startFromFirst = false) {
   overlay.addEventListener('click', () => {
     if (closing || pickerOpen || overlay.dataset.state !== 'open') return;
     numberBuffer = '';
+    showMessage = '';
     position = Math.min(visibleSlides.length - 1, position + 1);
     draw();
   });
