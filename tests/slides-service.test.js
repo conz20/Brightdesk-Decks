@@ -668,3 +668,93 @@ test('Decks exposes section controls and section headings in both slide views', 
   assert.match(app, /slide-sorter-section-heading/);
 });
 
+
+
+test('Decks can hide and unhide a slide without deleting its content', () => {
+  const { setSlideHidden, getVisibleSlideIndices } = require('../src/slides-service');
+  const presentation = {
+    slides: [
+      { title: 'Visible', body: 'Keep me' },
+      { title: 'Hidden', body: 'Keep this too' },
+      { title: 'Last visible', body: 'Still shown' }
+    ],
+    current: 0
+  };
+
+  assert.equal(setSlideHidden(presentation, 1, true), true);
+  assert.deepEqual(getVisibleSlideIndices(presentation), [0, 2]);
+  assert.equal(presentation.slides[1].title, 'Hidden');
+  assert.equal(presentation.slides[1].body, 'Keep this too');
+  assert.equal(setSlideHidden(presentation, 1, false), false);
+  assert.deepEqual(getVisibleSlideIndices(presentation), [0, 1, 2]);
+});
+
+test('Decks requires at least one visible slide when hiding a slide', () => {
+  const { setSlideHidden } = require('../src/slides-service');
+  const presentation = {
+    slides: [{ title: 'Only visible slide', body: '' }],
+    current: 0
+  };
+
+  assert.throws(() => setSlideHidden(presentation, 0, true), /at least one visible slide/);
+  assert.equal(presentation.slides[0].hidden, undefined);
+});
+
+test('Decks rejects non-boolean hidden slide values', () => {
+  const { setSlideHidden } = require('../src/slides-service');
+  const presentation = { slides: [{ title: 'Slide', body: '' }], current: 0 };
+
+  assert.throws(() => setSlideHidden(presentation, 0, 'yes'), /boolean/);
+});
+
+test('Decks includes hidden state in undo, redo and saved history', () => {
+  const { setSlideHidden, createHistory } = require('../src/slides-service');
+  const presentation = {
+    slides: [{ title: 'One', body: '' }, { title: 'Two', body: '' }],
+    current: 0
+  };
+  const history = createHistory(presentation);
+
+  setSlideHidden(presentation, 1, true);
+  history.commit(presentation);
+  assert.equal(presentation.slides[1].hidden, true);
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.slides[1].hidden, undefined);
+  assert.equal(history.redo(presentation), true);
+  assert.equal(presentation.slides[1].hidden, true);
+
+  const reopened = JSON.parse(JSON.stringify(presentation));
+  const restored = createHistory(reopened, { state: history.exportState() });
+  assert.equal(restored.restored, true);
+  assert.equal(restored.undo(reopened), true);
+  assert.equal(reopened.slides[1].hidden, undefined);
+  assert.equal(restored.redo(reopened), true);
+  assert.equal(reopened.slides[1].hidden, true);
+});
+
+test('Decks presents only visible slides and starts at the next visible slide when selected slide is hidden', () => {
+  const { setSlideHidden, getVisibleSlideIndices } = require('../src/slides-service');
+  const presentation = {
+    slides: [
+      { title: 'First', body: '' },
+      { title: 'Hidden second', body: '' },
+      { title: 'Visible third', body: '' },
+      { title: 'Hidden fourth', body: '' }
+    ],
+    current: 1
+  };
+  setSlideHidden(presentation, 1, true);
+  setSlideHidden(presentation, 3, true);
+  assert.deepEqual(getVisibleSlideIndices(presentation), [0, 2]);
+});
+
+test('Decks exposes Hide Slide and hidden-state markers in the editor views', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+  assert.match(app, /Hide Slide/);
+  assert.match(app, /Unhide Slide/);
+  assert.match(app, /getVisibleSlideIndices/);
+  assert.match(app, /slide-hidden-indicator/);
+});
