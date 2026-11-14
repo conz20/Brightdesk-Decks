@@ -12,6 +12,9 @@
   const supportedLayouts = new Set(['title', 'title-content', 'two-content', 'section-header']);
   const supportedThemes = new Set(['lavender', 'midnight', 'paper']);
   const backgroundPattern = /^#[0-9A-F]{6}$/i;
+  const supportedTransitions = new Set(['none', 'fade', 'push', 'wipe']);
+  let lastRenderedSlideId = null;
+  let activeTransitionClass = '';
 
   function getReadableTextColor(backgroundColor) {
     if (typeof backgroundColor !== 'string' || !backgroundPattern.test(backgroundColor)) return '';
@@ -61,12 +64,28 @@
     const slide = payload.slide;
     const layout = supportedLayouts.has(slide.layout) ? slide.layout : 'title-content';
     const theme = supportedThemes.has(payload.themeId) ? payload.themeId : 'lavender';
+    const slideId = typeof slide.id === 'string' ? slide.id : '';
+    const slideChanged = Boolean(slideId) && slideId !== lastRenderedSlideId;
+    if (slideChanged) {
+      const transition = supportedTransitions.has(slide.transition) ? slide.transition : 'none';
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+      activeTransitionClass = transition !== 'none' && !reducedMotion
+        ? `audience-transition-${transition}`
+        : '';
+      lastRenderedSlideId = slideId;
+    }
     const backgroundColor = typeof slide.backgroundColor === 'string' && backgroundPattern.test(slide.backgroundColor) ? slide.backgroundColor.toUpperCase() : '';
     const textColor = backgroundColor ? getReadableTextColor(backgroundColor) : '';
     const size = payload.slideSize === 'standard' ? 'standard' : 'widescreen';
     const blankMode = payload.blankMode === 'black' || payload.blankMode === 'white' ? payload.blankMode : '';
 
-    root.className = `audience-presentation theme-${theme} size-${size} layout-${layout}${blankMode ? ` is-blank-${blankMode}` : ''}`;
+    const rootBaseClass = `audience-presentation theme-${theme} size-${size} layout-${layout}${blankMode ? ` is-blank-${blankMode}` : ''}`;
+    root.className = rootBaseClass + (activeTransitionClass ? ` ${activeTransitionClass}` : '');
+    if (slideChanged && activeTransitionClass) {
+      root.className = rootBaseClass;
+      void (slideSurface?.offsetWidth);
+      root.className = rootBaseClass + ` ${activeTransitionClass}`;
+    }
     root.style.backgroundColor = '';
     if (slideSurface) slideSurface.style.backgroundColor = backgroundColor;
     title.style.color = textColor;
