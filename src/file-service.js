@@ -10,6 +10,13 @@ const MAX_SLIDES = 2_000;
 const KNOWN_APP_IDS = new Set(appCatalog.map(app => app.id));
 const EXCLUDED_APP_IDS = new Set(['teams', 'outlook', 'onedrive']);
 const SUPPORTED_SLIDE_LAYOUTS = new Set(['title', 'title-content', 'two-content', 'section-header']);
+const SUPPORTED_SLIDE_LAYOUT_IDS = new Set(['layout-title', 'layout-title-content', 'layout-two-content', 'layout-section-header']);
+const SLIDE_LAYOUT_ID_BY_NAME = Object.freeze({
+  title: 'layout-title',
+  'title-content': 'layout-title-content',
+  'two-content': 'layout-two-content',
+  'section-header': 'layout-section-header'
+});
 const SUPPORTED_SLIDE_SIZES = new Set(['widescreen', 'standard']);
 const SUPPORTED_SLIDE_THEMES = new Set(['lavender', 'midnight', 'paper']);
 const SLIDE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
@@ -157,6 +164,11 @@ function validateProject(project) {
           (slide.layout !== undefined && (
             typeof slide.layout !== 'string' ||
             !SUPPORTED_SLIDE_LAYOUTS.has(slide.layout)
+          )) ||
+          (slide.layoutId !== undefined && (
+            typeof slide.layoutId !== 'string' ||
+            !SUPPORTED_SLIDE_LAYOUT_IDS.has(slide.layoutId) ||
+            (slide.layout !== undefined && SLIDE_LAYOUT_ID_BY_NAME[slide.layout] !== slide.layoutId)
           ))
         ) {
           throw new Error('The Brightdesk Decks presentation contains an invalid slide.');
