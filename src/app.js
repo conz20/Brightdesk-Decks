@@ -1287,7 +1287,7 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
   const presenterSidePanel = document.createElement('aside');
   presenterSidePanel.className = 'presenter-side-panel';
   const nextPanel = document.createElement('section');
-  nextPanel.className = 'presenter-card presenter-next-panel';
+  nextPanel.className = 'presenter-card presenter-next-panel presenter-next-slide';
   nextPanel.setAttribute('aria-label', 'Next visible slide');
   const nextHeading = document.createElement('h3');
   nextHeading.textContent = 'Next slide';
@@ -1407,6 +1407,7 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
     secondaryBody.textContent = currentSlide.bodySecondary || '';
     secondaryBody.hidden = currentSlide.layout !== 'two-content';
     slide.hidden = presenterMode ? false : pickerOpen;
+    footer.hidden = presenterMode;
     picker.hidden = !pickerOpen;
     pickerButtons.forEach(button => {
       const active = Number(button.dataset.visiblePosition) === position;
