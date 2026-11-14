@@ -773,3 +773,21 @@ test('Decks slide show supports standard previous, next, first and last slide ke
   assert.match(app, /position = 0/);
   assert.match(app, /position = visibleSlides\.length - 1/);
 });
+
+
+test('Decks provides an editable Outline View for titles and slide content', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
+
+  assert.match(app, /function renderSlideOutline\(doc\)/);
+  assert.match(app, /state\.slideView === 'outline'/);
+  assert.match(app, /slide-outline-title/);
+  assert.match(app, /slide-outline-body/);
+  assert.match(app, /setCurrentSlide\(doc, index\)/);
+  assert.match(app, /Outline View/);
+  assert.match(styles, /\.slide-outline-list/);
+  assert.match(styles, /\.slide-outline-entry/);
+});
