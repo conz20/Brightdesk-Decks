@@ -116,3 +116,56 @@ test('PPTX export includes speaker notes for each slide', async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('Brightdesk project validation accepts supported slide layouts and secondary text', () => {
+  assert.doesNotThrow(() => validateProject({
+    docs: {
+      slides: {
+        slides: [{
+          title: 'Compare',
+          body: 'First column',
+          bodySecondary: 'Second column',
+          notes: 'Discuss both sides.',
+          layout: 'two-content'
+        }],
+        current: 0
+      }
+    }
+  }));
+});
+
+test('Brightdesk project validation rejects unknown slide layouts', () => {
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Slide', body: '', layout: 'unknown-layout' }], current: 0 } }
+  }), /invalid slide/);
+});
+
+test('Brightdesk project validation bounds secondary slide content', () => {
+  assert.throws(() => validateProject({
+    docs: { slides: { slides: [{ title: 'Slide', body: '', bodySecondary: 'x'.repeat(10 * 1024 * 1024 + 1) }], current: 0 } }
+  }), /invalid slide/);
+});
+
+test('PPTX export writes both content placeholders for a two-content slide', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-layout-'));
+  const filePath = path.join(directory, 'two-content.pptx');
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [{
+        title: 'Compare approaches',
+        body: 'Approach A',
+        bodySecondary: 'Approach B',
+        layout: 'two-content'
+      }]
+    }, filePath);
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const slideXml = await archive.file('ppt/slides/slide1.xml')?.async('string');
+    assert.match(slideXml || '', /Approach A/);
+    assert.match(slideXml || '', /Approach B/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
