@@ -1433,3 +1433,46 @@ test('Decks refuses to reuse slides beyond the 2,000-slide presentation limit', 
   assert.equal(presentation.slides.length, 2000);
   assert.equal(presentation.current, 0);
 });
+
+
+test('Decks assigns supported slide transitions and defaults legacy slides to none', () => {
+  const presentation = ensurePresentation({
+    slides: [
+      { title: 'Legacy slide', body: '' },
+      { title: 'Transition slide', body: '', transition: 'fade' }
+    ]
+  });
+
+  assert.equal(presentation.slides[0].transition, 'none');
+  assert.equal(presentation.slides[1].transition, 'fade');
+
+  setSlideTransition(presentation, 0, 'wipe');
+  assert.equal(presentation.slides[0].transition, 'wipe');
+  assert.equal(setSlideTransition(presentation, 1, 'none'), 'none');
+  assert.equal(presentation.slides[1].transition, 'none');
+});
+
+test('Decks rejects unsupported slide transition names without changing the saved value', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Transition', body: '', transition: 'fade' }]
+  });
+
+  assert.throws(() => setSlideTransition(presentation, 0, 'morph'), RangeError);
+  assert.equal(presentation.slides[0].transition, 'fade');
+});
+
+test('Decks includes slide transitions in undo and redo history', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Transition', body: '', transition: 'none' }]
+  });
+  const history = createHistory(presentation);
+
+  setSlideTransition(presentation, 0, 'push');
+  history.commit(presentation);
+  assert.equal(presentation.slides[0].transition, 'push');
+
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.slides[0].transition, 'none');
+  assert.equal(history.redo(presentation), true);
+  assert.equal(presentation.slides[0].transition, 'push');
+});
