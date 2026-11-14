@@ -156,7 +156,8 @@
 
   function createHistory(presentation, options = {}) {
     const target = ensurePresentation(presentation);
-    const requestedLimit = Number.isInteger(options.limit) ? options.limit : 100;
+    const savedLimit = Number.isInteger(options.state?.limit) ? options.state.limit : 100;
+    const requestedLimit = Number.isInteger(options.limit) ? options.limit : savedLimit;
     const limit = Math.max(1, Math.min(requestedLimit, 500));
     const groupWindow = 750;
     let current = cloneSnapshot(target);
@@ -252,6 +253,8 @@
     function sync(nextPresentation) {
       const nextTarget = ensurePresentation(nextPresentation);
       current.current = nextTarget.current;
+      lastGroup = null;
+      lastAt = 0;
     }
 
     function reset(nextPresentation) {
