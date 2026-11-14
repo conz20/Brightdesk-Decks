@@ -860,3 +860,76 @@ test('Decks presentation playback renders all four layouts and keeps comparison 
   assert.match(styles, /\.presentation-slide\.theme-midnight/);
   assert.match(styles, /\.presentation-slide\.theme-paper/);
 });
+
+
+test('Decks assigns stable unique IDs to legacy slides and preserves them during normalization', () => {
+  const presentation = ensurePresentation({
+    slides: [
+      { title: 'Opening', body: 'Introduction' },
+      { title: 'Plan', body: 'Next steps' }
+    ],
+    current: 0
+  });
+  const firstIds = presentation.slides.map(slide => slide.id);
+
+  assert.equal(firstIds.length, 2);
+  assert.ok(firstIds.every(id => typeof id === 'string' && id.startsWith('slide-')));
+  assert.equal(new Set(firstIds).size, 2);
+
+  ensurePresentation(presentation);
+  assert.deepEqual(presentation.slides.map(slide => slide.id), firstIds);
+});
+
+test('Decks repairs invalid and duplicate stored slide IDs without changing slide content', () => {
+  const presentation = ensurePresentation({
+    slides: [
+      { id: 'stable-slide', title: 'First', body: 'Keep this' },
+      { id: 'stable-slide', title: 'Second', body: 'Keep that' },
+      { id: 'not a safe id', title: 'Third', body: 'Keep more' }
+    ],
+    current: 0
+  });
+
+  assert.equal(presentation.slides[0].id, 'stable-slide');
+  assert.equal(new Set(presentation.slides.map(slide => slide.id)).size, 3);
+  assert.deepEqual(presentation.slides.map(({ title, body }) => ({ title, body })), [
+    { title: 'First', body: 'Keep this' },
+    { title: 'Second', body: 'Keep that' },
+    { title: 'Third', body: 'Keep more' }
+  ]);
+});
+
+test('Decks gives new and duplicated slides distinct IDs', () => {
+  const presentation = ensurePresentation({
+    slides: [{ title: 'Original', body: 'Content' }],
+    current: 0
+  });
+  const originalId = presentation.slides[0].id;
+
+  const added = addSlide(presentation, { title: 'Added', body: 'New content', id: originalId });
+  const addedId = added.id;
+  const duplicated = duplicateSlide(presentation, 0);
+
+  assert.ok(addedId);
+  assert.notEqual(addedId, originalId);
+  assert.ok(duplicated.id);
+  assert.notEqual(duplicated.id, originalId);
+  assert.notEqual(duplicated.id, addedId);
+  assert.equal(new Set(presentation.slides.map(slide => slide.id)).size, 3);
+});
+
+test('Decks preserves stable slide IDs when reordering the presentation', () => {
+  const presentation = ensurePresentation({
+    slides: [
+      { id: 'slide-one', title: 'One', body: '' },
+      { id: 'slide-two', title: 'Two', body: '' },
+      { id: 'slide-three', title: 'Three', body: '' }
+    ],
+    current: 1
+  });
+
+  moveSlide(presentation, 1, 2);
+
+  assert.deepEqual(presentation.slides.map(slide => slide.id), ['slide-one', 'slide-three', 'slide-two']);
+  assert.equal(presentation.slides[presentation.current].id, 'slide-two');
+});
