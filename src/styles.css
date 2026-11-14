@@ -1252,6 +1252,12 @@
   color:#b9c6d7;
   font-size:11px;
 }
+.presenter-display-status{
+  margin:4px 0 0;
+  color:#d6b98f;
+  font-size:10px;
+  line-height:1.4;
+}
 .presenter-actions{
   display:flex;
   align-items:center;
