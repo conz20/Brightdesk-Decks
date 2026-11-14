@@ -1068,6 +1068,42 @@ test('Brightdesk PowerPoint object round-trip restores editable object types, ge
 });
 
 
+test('Decks exports embedded slide pictures as real PowerPoint picture objects', async () => {
+  const JSZip = require('jszip');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-slide-picture-'));
+  const filePath = path.join(directory, 'slide-picture.pptx');
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=';
+  try {
+    await exportOfficeFile({
+      kind: 'slides',
+      slides: [{
+        title: 'Picture slide',
+        body: '',
+        objects: [{
+          id: 'object-picture',
+          type: 'image',
+          x: 10, y: 15, width: 40, height: 30,
+          imageData, imageName: 'team-photo.png', imageWidth: 1600, imageHeight: 900,
+          fill: null, stroke: null, strokeWidth: 0,
+          text: '', fontSize: 20, textColor: '#26364D', bold: false, rotation: 0
+        }]
+      }]
+    }, filePath);
+
+    const archive = await JSZip.loadAsync(await fs.readFile(filePath));
+    const slideXml = await archive.file('ppt/slides/slide1.xml').async('string');
+    const mediaName = Object.keys(archive.files).find(name => name.startsWith('ppt/media/') && name.endsWith('.png'));
+    assert.match(slideXml, /<p:pic>/);
+    assert.ok(mediaName, 'the PPTX contains a local PNG media part');
+    assert.deepEqual(
+      await archive.file(mediaName).async('nodebuffer'),
+      Buffer.from(imageData.split(',')[1], 'base64')
+    );
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('Decks preserves supported slide transitions across PowerPoint export and import', async () => {
   const JSZip = require('jszip');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'brightdesk-pptx-transition-roundtrip-'));
