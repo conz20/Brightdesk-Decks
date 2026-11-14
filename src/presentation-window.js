@@ -3,6 +3,7 @@
 (function () {
   const root = document.getElementById('presentation-root');
   const title = document.getElementById('audience-title');
+  const slideSurface = root.querySelector('.audience-slide');
   const body = document.getElementById('audience-body');
   const columns = document.getElementById('audience-columns');
   const secondaryBody = document.getElementById('audience-body-secondary');
@@ -34,7 +35,8 @@
     const blankMode = payload.blankMode === 'black' || payload.blankMode === 'white' ? payload.blankMode : '';
 
     root.className = `audience-presentation theme-${theme} size-${size} layout-${layout}${blankMode ? ` is-blank-${blankMode}` : ''}`;
-    root.style.backgroundColor = backgroundColor;
+    root.style.backgroundColor = '';
+    if (slideSurface) slideSurface.style.backgroundColor = backgroundColor;
     title.style.color = textColor;
     body.style.color = textColor;
     secondaryBody.style.color = textColor;
