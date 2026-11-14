@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('brightdesk', {
   openFile: () => ipcRenderer.invoke('file:open'),
   reuseSlides: () => ipcRenderer.invoke('slides:reuse'),
   openSlidePicture: () => ipcRenderer.invoke('slides:picture:open'),
+  storeSlidePicture: (imageData) => ipcRenderer.invoke('slides:picture:store', imageData),
+  loadSlidePicture: (assetId) => ipcRenderer.invoke('slides:picture:load', assetId),
   exportFile: (payload) => ipcRenderer.invoke('file:export', payload),
   saveProject: (project) => ipcRenderer.invoke('project:save', project),
   loadProject: () => ipcRenderer.invoke('project:open'),
