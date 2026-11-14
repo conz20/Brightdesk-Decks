@@ -50,6 +50,7 @@ function senderIsMain(event) { return mainWindow && event.sender === mainWindow.
 
 const supportedPresenterLayouts = new Set(['title', 'title-content', 'two-content', 'section-header']);
 const supportedPresenterThemes = new Set(['lavender', 'midnight', 'paper']);
+const supportedPresenterTransitions = new Set(['none', 'fade', 'push', 'wipe']);
 const supportedPresenterObjects = new Set(['text', 'rectangle', 'ellipse', 'line']);
 const presenterColourPattern = /^#[0-9A-F]{6}$/i;
 
@@ -87,11 +88,14 @@ function normalizePresenterState(payload) {
     throw new TypeError('The audience slide is invalid.');
   }
   const layout = supportedPresenterLayouts.has(slide.layout) ? slide.layout : 'title-content';
+  const transition = supportedPresenterTransitions.has(slide.transition) ? slide.transition : 'none';
   const themeId = supportedPresenterThemes.has(payload.themeId) ? payload.themeId : 'lavender';
   const slideSize = payload.slideSize === 'standard' ? 'standard' : 'widescreen';
   const blankMode = payload.blankMode === 'black' || payload.blankMode === 'white' ? payload.blankMode : null;
   return {
     slide: {
+      id: typeof slide.id === 'string' ? slide.id.slice(0, 100) : '',
+      transition,
       title: typeof slide.title === 'string' ? slide.title.slice(0, 2000) : '',
       body: typeof slide.body === 'string' ? slide.body.slice(0, 30000) : '',
       bodySecondary: typeof slide.bodySecondary === 'string' ? slide.bodySecondary.slice(0, 30000) : '',
