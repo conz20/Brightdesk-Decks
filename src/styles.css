@@ -1542,3 +1542,29 @@
 @keyframes bd-slide-push{from{opacity:.45;transform:translateX(5%)}to{opacity:1;transform:translateX(0)}}
 @keyframes bd-slide-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 @media(prefers-reduced-motion:reduce){.slide-transition-fade,.slide-transition-push,.slide-transition-wipe{animation:none!important}}
+
+/* Contextual Format Shape pane, shown only while a slide object is selected. */
+.slide-editor-canvas-row{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:14px;width:100%;max-width:1190px;margin:0 auto}
+.slide-editor-canvas-row.has-format-pane{grid-template-columns:minmax(0,1fr) 258px}
+.slide-editor-canvas-row>.slide-stage{width:100%;max-width:920px;min-width:0;margin:0 auto}
+.slide-format-pane{display:flex;min-width:0;flex-direction:column;gap:12px;padding:14px;border:1px solid #e1e5ec;border-radius:9px;background:#fbfcfe;color:#30384a;box-shadow:0 3px 12px #26364d0a}
+.slide-format-pane-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:9px;border-bottom:1px solid #e8ebf0}
+.slide-format-pane-header h3{margin:0;color:#26364d;font-size:13px;font-weight:750}
+.slide-format-pane-close{display:grid;place-items:center;width:27px;height:27px;border:1px solid #e2e6ec;border-radius:6px;background:#fff;color:#69758a;font-size:18px;line-height:1;cursor:pointer}
+.slide-format-pane-close:hover{border-color:#d5b994;color:#8d5f2d;background:#fffaf4}
+.slide-format-pane-group{padding:0 0 10px;border-bottom:1px solid #e8ebf0}
+.slide-format-pane-group:last-of-type{border-bottom:0;padding-bottom:0}
+.slide-format-pane-group>summary{display:flex;align-items:center;justify-content:space-between;padding:3px 0 8px;color:#3f4a5d;font-size:11px;font-weight:750;cursor:pointer;list-style:none}
+.slide-format-pane-group>summary::-webkit-details-marker{display:none}
+.slide-format-pane-group>summary:after{content:'⌄';color:#8792a2;font-size:14px}
+.slide-format-pane-group:not([open])>summary:after{content:'›'}
+.slide-format-pane-field{display:grid;grid-template-columns:minmax(0,1fr) 96px;align-items:center;gap:8px;margin:7px 0;color:#677487;font-size:10px}
+.slide-format-pane-field input[type=color]{width:100%;height:29px;min-width:0;padding:2px;border:1px solid #dfe4eb;border-radius:6px;background:#fff;cursor:pointer}
+.slide-format-pane-field input[type=number]{width:100%;min-width:0;padding:6px 7px;border:1px solid #dfe4eb;border-radius:6px;background:#fff;color:#30384a;font:inherit;font-size:11px;font-variant-numeric:tabular-nums}
+.slide-format-pane-field input:focus-visible,.slide-format-pane-close:focus-visible,.slide-format-pane-toggle input:focus-visible{outline:2px solid #8575bd;outline-offset:2px}
+.slide-format-pane-field input:disabled{opacity:.42;cursor:not-allowed}
+.slide-format-pane-toggle{display:flex;align-items:center;gap:8px;margin-top:10px;color:#4d586b;font-size:11px}
+.slide-format-pane-toggle input{width:15px;height:15px;accent-color:#6259ad}
+.slide-format-pane-note{margin:0;padding-top:8px;border-top:1px solid #e8ebf0;color:#8b94a3;font-size:9px;line-height:1.5}
+@media(max-width:1120px){.slide-editor-canvas-row.has-format-pane{grid-template-columns:minmax(0,1fr)}.slide-format-pane{width:min(100%,920px);margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}.slide-format-pane-header,.slide-format-pane-note{grid-column:1/-1}.slide-format-pane-group{min-width:0}}
+@media(max-width:560px){.slide-editor-canvas-row.has-format-pane{grid-template-columns:minmax(0,1fr)}.slide-format-pane{grid-template-columns:minmax(0,1fr)}.slide-format-pane-header,.slide-format-pane-note{grid-column:auto}.slide-format-pane-field{grid-template-columns:minmax(0,1fr) 110px}}
