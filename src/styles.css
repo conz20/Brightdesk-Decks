@@ -437,3 +437,271 @@
 @media(prefers-reduced-motion:reduce){
   .slide-thumbnail-card,.slide-add-button,.slide-thumbnail-order button{transition:none!important}
 }
+
+
+/* Brightdesk Decks: native layout choices and presentation sorter. */
+.slide-layout-select{
+  min-width:148px;
+  max-width:210px;
+  padding:7px 28px 7px 9px;
+  border:1px solid #d9dfe8;
+  border-radius:5px;
+  background:#fff;
+  color:#34445b;
+  font:inherit;
+  font-size:11px;
+  cursor:pointer;
+}
+.slide-layout-select:focus-visible{
+  outline:2px solid #c47a2d;
+  outline-offset:2px;
+}
+.slide-editor-main .slide-stage.layout-title{
+  justify-content:center;
+  gap:12px;
+  background:#fcf3e9;
+  padding:8% 10%;
+}
+.slide-editor-main .slide-stage.layout-title .slide-title{
+  min-height:1.5em;
+  font-size:clamp(32px,4.2vw,54px);
+  color:#26364d;
+}
+.slide-editor-main .slide-stage.layout-title .slide-body{
+  min-height:1.7em;
+  margin-top:2px;
+  font-size:clamp(17px,2.1vw,25px);
+  color:#80501f;
+}
+.slide-editor-main .slide-stage.layout-section-header{
+  justify-content:center;
+  align-items:flex-start;
+  gap:10px;
+  padding:8% 10%;
+  background:#fcf3e9;
+  border-left:9px solid #c47a2d;
+}
+.slide-editor-main .slide-stage.layout-section-header .slide-title{
+  text-align:left;
+  min-height:1.5em;
+  font-size:clamp(32px,4.2vw,52px);
+  color:#9a5e20;
+}
+.slide-editor-main .slide-stage.layout-section-header .slide-body{
+  min-height:2em;
+  margin-top:3px;
+  text-align:left;
+  font-size:clamp(17px,2vw,23px);
+  color:#68758a;
+}
+.slide-editor-main .slide-stage.layout-two-content{
+  justify-content:flex-start;
+  padding:5% 6%;
+  background:#fff;
+}
+.slide-editor-main .slide-stage.layout-two-content .slide-title{
+  flex:0 0 auto;
+  min-height:1.5em;
+  margin-bottom:3%;
+  text-align:left;
+  font-size:clamp(25px,3vw,38px);
+  color:#26364d;
+}
+.slide-content-columns{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:5%;
+  flex:1;
+  min-height:0;
+}
+.slide-content-columns .slide-body{
+  width:100%;
+  min-width:0;
+  min-height:160px;
+  height:100%;
+  margin:0;
+  padding:12px;
+  border:1px solid #e5e8ee;
+  border-radius:5px;
+  background:#fbfcfe;
+  color:#4a5a70;
+  text-align:left;
+  font-size:clamp(14px,1.5vw,19px);
+  resize:none;
+  vertical-align:top;
+}
+.slide-content-columns .slide-body:focus-visible{
+  outline:2px solid #c47a2d;
+  outline-offset:2px;
+}
+.slide-sorter-view{
+  min-height:100%;
+  padding:24px clamp(18px,3vw,38px);
+  overflow:auto;
+  background:#f3f5f8;
+}
+.slide-sorter-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:15px;
+  margin-bottom:20px;
+}
+.slide-sorter-header h2{
+  margin:0;
+  color:#26364d;
+  font-size:20px;
+  font-weight:700;
+  letter-spacing:-.35px;
+}
+.slide-sorter-header p{
+  margin:5px 0 0;
+  color:#758197;
+  font-size:11px;
+}
+.slide-sorter-count{
+  flex-shrink:0;
+  color:#7b8798;
+  font-size:11px;
+}
+.slide-sorter-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));
+  align-items:start;
+  gap:20px;
+}
+.slide-sorter-card{
+  min-width:0;
+  padding:8px;
+  border:1px solid transparent;
+  border-radius:8px;
+  background:transparent;
+}
+.slide-sorter-card.active{
+  border-color:#c47a2d;
+  background:#fcf3e9;
+  box-shadow:0 0 0 1px #c47a2d20;
+}
+.slide-sorter-card.dragging{opacity:.45}
+.slide-sorter-card.drag-over{
+  border-color:#9a5e20;
+  background:#f8e6d1;
+}
+.slide-sorter-select{
+  display:flex;
+  width:100%;
+  min-width:0;
+  flex-direction:column;
+  align-items:stretch;
+  gap:7px;
+  padding:0;
+  border:0;
+  background:transparent;
+  text-align:left;
+  cursor:pointer;
+}
+.slide-sorter-number{
+  color:#6e7c91;
+  font-size:11px;
+  font-weight:700;
+}
+.slide-sorter-preview{
+  display:grid;
+  grid-template-rows:auto 1fr;
+  align-content:start;
+  gap:9px;
+  width:100%;
+  aspect-ratio:16/9;
+  overflow:hidden;
+  padding:8% 9%;
+  border:1px solid #dfe4eb;
+  border-radius:4px;
+  background:#fff;
+  box-shadow:0 3px 10px #26364d12;
+}
+.slide-sorter-preview b{
+  display:-webkit-box;
+  overflow:hidden;
+  color:#26364d;
+  font-size:clamp(10px,1.1vw,15px);
+  line-height:1.25;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+}
+.slide-sorter-preview>span{
+  display:-webkit-box;
+  overflow:hidden;
+  color:#66768d;
+  font-size:clamp(8px,.85vw,11px);
+  line-height:1.4;
+  white-space:pre-line;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:5;
+}
+.slide-sorter-preview.theme-midnight{
+  background:#202b3b;
+  border-color:#35445b;
+}
+.slide-sorter-preview.theme-midnight b{color:#fff}
+.slide-sorter-preview.theme-midnight>span{color:#d0d9e6}
+.slide-sorter-preview.layout-title{
+  align-content:center;
+  justify-items:center;
+  background:#fcf3e9;
+  text-align:center;
+}
+.slide-sorter-preview.layout-section-header{
+  align-content:center;
+  border-left:6px solid #c47a2d;
+  background:#fcf3e9;
+}
+.slide-sorter-preview.layout-two-content{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-rows:auto 1fr;
+  gap:6px 10px;
+  background:#fff;
+}
+.slide-sorter-preview.layout-two-content b{grid-column:1/-1}
+.slide-sorter-preview.layout-two-content .slide-sorter-secondary{
+  display:-webkit-box;
+  overflow:hidden;
+  color:#66768d;
+  font-size:clamp(8px,.85vw,11px);
+  line-height:1.4;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:5;
+}
+.slide-sorter-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:7px;
+  padding-top:7px;
+}
+.slide-sorter-actions button{
+  padding:5px 8px;
+  border:1px solid #e0e5ed;
+  border-radius:5px;
+  background:#fff;
+  color:#596a81;
+  font:inherit;
+  font-size:9px;
+  cursor:pointer;
+}
+.slide-sorter-actions button:hover:not(:disabled){
+  border-color:#d9b58d;
+  background:#fcf3e9;
+  color:#80501f;
+}
+.slide-sorter-actions button:disabled{opacity:.35;cursor:default}
+.slide-sorter-select:focus-visible,
+.slide-sorter-actions button:focus-visible{
+  outline:2px solid #c47a2d;
+  outline-offset:3px;
+}
+@media(max-width:680px){
+  .slide-content-columns{grid-template-columns:1fr;grid-template-rows:1fr 1fr;gap:10px}
+  .slide-content-columns .slide-body{min-height:95px}
+  .slide-sorter-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr));gap:12px}
+  .slide-sorter-view{padding:16px 12px}
+  .slide-layout-select{min-width:125px}
+}
