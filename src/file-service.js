@@ -95,10 +95,12 @@ function validateProject(project) {
         }
       }
     }
-    if (appId === 'slides' && doc.sections !== undefined) {
-      if (!Array.isArray(doc.sections)) throw new Error('The Brightdesk Decks presentation has an invalid section collection.');
+    if (appId === 'slides') {
+      if (doc.sections !== undefined && (!Array.isArray(doc.sections) || doc.sections.length > MAX_SLIDES)) {
+        throw new Error('The Brightdesk Decks presentation has an invalid section collection.');
+      }
       const sectionIds = new Set();
-      for (const section of doc.sections) {
+      for (const section of doc.sections || []) {
         if (
           !isPlainObject(section) ||
           typeof section.id !== 'string' ||
