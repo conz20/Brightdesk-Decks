@@ -1283,6 +1283,7 @@ function presentSlides(startFromFirst = false) {
     pickerOpen = !pickerOpen;
     if (pickerOpen) {
       numberBuffer = '';
+      showMessage = '';
       togglePresentationBlank(null);
     }
     draw();
