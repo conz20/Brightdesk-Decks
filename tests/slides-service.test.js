@@ -1313,6 +1313,58 @@ test('Decks rejects unsafe picture sources and invalid original dimensions', () 
   assert.equal(presentation.slides[0].objects.length, 0);
 });
 
+test('Decks restores saved picture objects by local asset reference', () => {
+  const imageAssetId = 'picture-550e8400-e29b-41d4-a716-446655440000.png';
+  const presentation = ensurePresentation({
+    slides: [{
+      title: 'Saved picture',
+      body: '',
+      objects: [{
+        id: 'object-picture',
+        type: 'image',
+        imageAssetId,
+        imageName: 'team-photo.png',
+        imageWidth: 1,
+        imageHeight: 1,
+        x: 10, y: 15, width: 40, height: 30
+      }]
+    }]
+  });
+
+  assert.equal(presentation.slides[0].objects.length, 1);
+  assert.equal(presentation.slides[0].objects[0].imageAssetId, imageAssetId);
+  assert.equal(presentation.slides[0].objects[0].imageData, undefined);
+});
+
+test('Decks hydrates picture data across current, undo and redo history snapshots', () => {
+  const imageAssetId = 'picture-550e8400-e29b-41d4-a716-446655440000.png';
+  const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
+  const presentation = ensurePresentation({
+    slides: [{
+      title: 'Picture slide',
+      body: '',
+      objects: [{
+        id: 'object-picture',
+        type: 'image',
+        imageAssetId,
+        imageName: 'team-photo.png',
+        imageWidth: 1,
+        imageHeight: 1,
+        x: 10, y: 15, width: 40, height: 30
+      }]
+    }]
+  });
+  const history = createHistory(presentation);
+  updateSlide(presentation, 0, { title: 'Changed title' });
+  history.commit(presentation);
+
+  assert.equal(history.hydrateImages(new Map([[imageAssetId, imageData]])), 2);
+  assert.equal(history.undo(presentation), true);
+  assert.equal(presentation.slides[0].objects[0].imageData, imageData);
+  assert.equal(history.redo(presentation), true);
+  assert.equal(presentation.slides[0].objects[0].imageData, imageData);
+});
+
 test('Decks updates object geometry and formatting without changing its identity or type', () => {
   const presentation = ensurePresentation({ slides: [{ title: 'Objects', body: '' }] });
   const shape = addSlideObject(presentation, 0, { type: 'rectangle' });
