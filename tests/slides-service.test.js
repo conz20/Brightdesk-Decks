@@ -1162,8 +1162,8 @@ test('Decks rejects invalid per-slide background colours', () => {
 test('Decks chooses readable text colours for dark and light slide backgrounds', () => {
   assert.equal(getReadableTextColor('#000000'), '#FFFFFF');
   assert.equal(getReadableTextColor('#202B3B'), '#FFFFFF');
-  assert.equal(getReadableTextColor('#FFFFFF'), '#111827');
-  assert.equal(getReadableTextColor('#F3EBDD'), '#111827');
+  assert.equal(getReadableTextColor('#FFFFFF'), '#000000');
+  assert.equal(getReadableTextColor('#F3EBDD'), '#000000');
 });
 
 
@@ -1227,4 +1227,9 @@ test('Decks resets the selected layout structure without clearing slide content 
   assert.equal(reset.hidden, true);
   assert.equal(reset.backgroundColor, '#1A2B3C');
   assert.throws(() => resetSlideLayout(presentation, 1), RangeError);
+});
+
+
+test('Decks chooses black text near the luminance boundary to meet normal text contrast', () => {
+  assert.equal(getReadableTextColor('#777777'), '#000000');
 });
