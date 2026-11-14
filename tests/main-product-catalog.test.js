@@ -28,6 +28,7 @@ test('Decks Presenter View uses a separate secure audience window on an external
   assert.match(main, /screen\.getAllDisplays\(\)/);
   assert.match(main, /function createPresenterWindow/);
   assert.ok(main.includes('audienceWindow.showInactive()'), 'audience slide must not steal presenter keyboard focus');
+  assert.match(main, /screen\.on\(['"]display-removed['"]/);
   assert.match(main, /display\.id !== primaryDisplay\.id/);
   assert.match(main, /presentation:start/);
   assert.match(main, /presentation:update/);
@@ -38,6 +39,7 @@ test('Decks Presenter View uses a separate secure audience window on an external
   assert.match(preload, /startPresenter:/);
   assert.match(preload, /updatePresenter:/);
   assert.match(preload, /endPresenter:/);
+  assert.match(preload, /onPresenterDisplayLost:/);
   assert.match(presenterPreload, /exposeInMainWorld\(['"]brightdeskPresentation['"]/);
   assert.match(presenterPreload, /onPresentationUpdate/);
   assert.match(html, /presentation-window\.css/);
@@ -94,4 +96,12 @@ test('Audience renderer keeps both comparison columns and applies theme and slid
   assert.equal(elements['audience-body-secondary'].hidden, true);
   assert.equal(elements['audience-columns'].hidden, false);
   assert.doesNotMatch(renderer, /innerHTML/);
+});
+
+
+test('Decks closes the audience window when its external display is disconnected', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+  assert.match(source, /presenterDisplayId === display\.id/);
+  assert.match(source, /closePresenterWindow\(\)/);
+  assert.match(source, /presentation:display-lost/);
 });
