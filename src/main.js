@@ -603,17 +603,21 @@ ipcMain.handle('slides:picture:prune', async (event, keepAssetIds) => {
     throw new TypeError('The local picture reference list is invalid.');
   }
   const keep = new Set(keepAssetIds.filter(id => typeof id === 'string' && SLIDE_PICTURE_ASSET_ID_PATTERN.test(id)));
-  const directory = path.join(app.getPath('userData'), 'slide-images');
-  let entries = [];
-  try { entries = await fs.readdir(directory); }
-  catch (error) { if (error.code === 'ENOENT') return 0; throw error; }
-  let removed = 0;
-  for (const entry of entries) {
-    if (!SLIDE_PICTURE_ASSET_ID_PATTERN.test(entry) || keep.has(entry)) continue;
-    await fs.unlink(path.join(directory, entry));
-    removed++;
-  }
-  return removed;
+  const operation = slidePicturePruneQueue.then(async () => {
+    const directory = path.join(app.getPath('userData'), 'slide-images');
+    let entries = [];
+    try { entries = await fs.readdir(directory); }
+    catch (error) { if (error.code === 'ENOENT') return 0; throw error; }
+    let removed = 0;
+    for (const entry of entries) {
+      if (!SLIDE_PICTURE_ASSET_ID_PATTERN.test(entry) || keep.has(entry)) continue;
+      await fs.unlink(path.join(directory, entry));
+      removed++;
+    }
+    return removed;
+  });
+  slidePicturePruneQueue = operation.catch(() => {});
+  return operation;
 });
 ipcMain.handle('slides:reuse', async event => {
   if (!senderIsMain(event)) throw new Error('Invalid sender.');
