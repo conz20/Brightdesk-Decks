@@ -1099,7 +1099,7 @@ function renderSlideObjects(stage, objects, doc = activeDoc()) {
   });
   stage.addEventListener('click', event => {
     if (event.target === stage) selectSlideObject(null);
-  }, { once: true });
+  });
 }
 
 function renderPresentationObjects(container, objects) {
@@ -1803,7 +1803,8 @@ function openPresentation(startFromFirst = false, presenterMode = false) {
         body: currentSlide.body || '',
         bodySecondary: currentSlide.bodySecondary || '',
         layout: currentSlide.layout || 'title-content',
-        ...(currentSlide.backgroundColor ? { backgroundColor: currentSlide.backgroundColor } : {})
+        ...(currentSlide.backgroundColor ? { backgroundColor: currentSlide.backgroundColor } : {}),
+        objects: Array.isArray(currentSlide.objects) ? currentSlide.objects : []
       },
       themeId: d.themeId || 'lavender',
       slideSize: d.slideSize || 'widescreen',
