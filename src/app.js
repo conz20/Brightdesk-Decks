@@ -1111,11 +1111,25 @@ function presentSlides(startFromFirst = false) {
   const key = event => {
     if (event.key === 'Escape') {
       close();
-    } else if (event.key === 'ArrowRight') {
+      return;
+    }
+    const keyName = event.key;
+    const normalized = keyName.toLowerCase();
+    if (['ArrowRight', 'ArrowDown', 'PageDown', 'Enter', ' '].includes(keyName) || normalized === 'n') {
+      event.preventDefault();
       position = Math.min(visibleSlides.length - 1, position + 1);
       draw();
-    } else if (event.key === 'ArrowLeft') {
+    } else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(keyName) || normalized === 'p') {
+      event.preventDefault();
       position = Math.max(0, position - 1);
+      draw();
+    } else if (keyName === 'Home') {
+      event.preventDefault();
+      position = 0;
+      draw();
+    } else if (keyName === 'End') {
+      event.preventDefault();
+      position = visibleSlides.length - 1;
       draw();
     }
   };
