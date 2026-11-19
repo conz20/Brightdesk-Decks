@@ -89,3 +89,37 @@ test('lockfile verifier rejects a missing or mismatched lockfile', () => {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test('installer workflow uses supported push filters and private native build runners', () => {
+  const workflow = fs.readFileSync(path.resolve(__dirname, '../.github/workflows/product-installers.yml'), 'utf8');
+  const pushStart = workflow.indexOf('\n  push:\n');
+  const scheduleStart = workflow.indexOf('\n  schedule:\n', pushStart);
+  const permissionsStart = workflow.indexOf('\npermissions:\n', pushStart);
+  const pushEnd = scheduleStart >= 0 ? scheduleStart : permissionsStart;
+  assert.ok(pushStart >= 0 && pushEnd > pushStart);
+  const push = workflow.slice(pushStart, pushEnd);
+  assert.match(push, /branches: \[main\]/);
+  assert.match(push, /tags: \['v\*'\]/);
+  assert.doesNotMatch(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /windows-latest|macos-latest|ubuntu-latest/);
+  assert.match(workflow, /runner: \["self-hosted", "Windows", "X64"\]/);
+  assert.match(workflow, /runner: \["self-hosted", "macOS", "ARM64"\]/);
+  assert.match(workflow, /runner: \["self-hosted", "Linux", "X64"\]/);
+});
+
+test('installer release assets attach directly to a draft and publish only after all platforms pass', () => {
+  const workflow = fs.readFileSync(path.resolve(__dirname, '../.github/workflows/product-installers.yml'), 'utf8');
+  const prepare = workflow.slice(workflow.indexOf('  prepare-release:'), workflow.indexOf('  release-assets:'));
+  const assets = workflow.slice(workflow.indexOf('  release-assets:'), workflow.indexOf('  publish-release:'));
+  const publish = workflow.slice(workflow.indexOf('  publish-release:'));
+  assert.ok(prepare.includes('EXPECTED_TAG="v$VERSION"'));
+  assert.ok(prepare.includes('draft: true'));
+  assert.match(assets, /release\/apps\/[a-z-]+\/\*\*/);
+  assert.ok(assets.includes('fail_on_unmatched_files: true'));
+  assert.ok(assets.includes('draft: true'));
+  assert.ok(publish.includes('needs: release-assets'));
+  assert.ok(publish.includes('draft: false'));
+  assert.doesNotMatch(workflow, /actions\/(?:upload|download)-artifact/);
+  assert.ok(workflow.includes('softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4'));
+});
