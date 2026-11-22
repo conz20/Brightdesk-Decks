@@ -206,6 +206,7 @@ test('only treats local file URLs as eligible microphone origins', () => {
   assert.equal(isLocalFileUrl('file:///Applications/Brightdesk Decks.app/index.html'), true);
   assert.equal(isLocalFileUrl('file:///C:/Program Files/Brightdesk Decks/index.html'), true);
   assert.equal(isLocalFileUrl('file://fileserver/share/index.html'), false);
+  assert.equal(isLocalFileUrl('file:////fileserver/share/index.html'), false);
   assert.equal(isLocalFileUrl('https://example.invalid/'), false);
   assert.equal(isLocalFileUrl('file:relative/path'), false);
 });
