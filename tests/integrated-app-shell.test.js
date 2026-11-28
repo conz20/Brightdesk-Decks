@@ -10,7 +10,7 @@ const html=fs.readFileSync(path.join(root,'src','index.html'),'utf8');
 const catalog=require('../src/app-catalog');
 const english=require('../src/languages/en-AU.json').translations;
 test('all six additional apps have dedicated integrated workspace renderers',()=>{for(const [id,hook] of [['todo','renderTodoWorkspace'],['lists','renderListsWorkspace'],['forms','BrightdeskFormsUI.render'],['planner','BrightdeskPlannerUI.render'],['database','BrightdeskDatabaseUI.render'],['loop','BrightdeskWorkspaceUI.render']]){assert.ok(app.includes(hook),id+' renderer');assert.ok(html.includes('id="'+(id==='loop'?'workspace-app-wrap':id+'-wrap')+'"'),id+' markup');}});
-test('the integrated app shell loads every feature module before app.js',()=>{const names=['todo-service.js','lists-service.js','forms-service.js','forms-workspace.js','planner-service.js','planner-workspace.js','database-service.js','database-workspace.js','workspace-service.js','workspace-editor.js'];for(const name of names)assert.ok(html.indexOf('src="'+name+'"')>=0,name+' is loaded');const main=html.indexOf('src="app.js"');for(const name of names)assert.ok(html.indexOf('src="'+name+'"')<main,name+' loads before app shell');});
+test('the integrated app shell loads every feature module before app.js',()=>{const names=['slides-service.js','todo-service.js','lists-service.js','forms-service.js','forms-workspace.js','planner-service.js','planner-workspace.js','database-service.js','database-workspace.js','workspace-service.js','workspace-editor.js'];for(const name of names)assert.ok(html.indexOf('src="'+name+'"')>=0,name+' is loaded');const main=html.indexOf('src="app.js"');for(const name of names)assert.ok(html.indexOf('src="'+name+'"')<main,name+' loads before app shell');});
 test('the fixed product catalogue remains exactly ten approved apps',()=>{assert.deepEqual(catalog.map(x=>x.id),['pages','sheets','slides','notes','database','forms','lists','planner','todo','loop']);assert.equal(catalog.length,10);for(const id of ['outlook','onedrive','teams'])assert.equal(catalog.some(x=>x.id===id),false);});
 test('all ten approved apps are available in the integrated suite',()=>{assert.ok(catalog.every(x=>x.availability==='available'),'every approved app must be marked available once its implementation is integrated');});
 test('the app shell routes each app away from the generic editor',()=>{for(const id of ['todo','lists','forms','planner','database','loop'])assert.ok(app.includes("state.app === '"+id+"'")||app.includes("state.app==='")+id+"'",id+' routing');});
@@ -34,4 +34,69 @@ test('product centre uses approved Brightdesk desktop wording',()=>{
   assert.doesNotMatch(app,/Download standalone|standalone installer/i);
   assert.doesNotMatch(html,/YOUR APPS|Get apps|Desktop app|Back to apps/i);
   assert.doesNotMatch(app,/Keep at least one app installed|Choose at least one app to install|Desktop app ·/i);
+});
+
+
+test('Decks delegates slide editing and lifecycle to its dedicated model service',()=>{
+  assert.match(app,/const slidesService = window\.BrightdeskSlidesService/);
+  for(const expression of [
+    'slidesService.ensurePresentation',
+    'slidesService.updateSlide',
+    'window.BrightdeskSlidesService.addSlide',
+    'window.BrightdeskSlidesService.duplicateSlide',
+    'window.BrightdeskSlidesService.deleteSlide',
+    'window.BrightdeskSlidesService.setCurrentSlide'
+  ]) assert.ok(app.includes(expression),expression+' is wired into the editor');
+});
+
+
+test('Presenter View shows speaker notes, the next visible slide and elapsed time', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
+
+  assert.match(app, /function presentWithPresenterView/);
+  assert.match(app, /getPresenterSnapshot\(d, position\)/);
+  assert.match(app, /presenter-speaker-notes/);
+  assert.match(app, /presenter-next-slide/);
+  assert.match(app, /presenter-elapsed/);
+  assert.match(styles, /\.presenter-overlay/);
+  assert.match(styles, /\.presenter-workspace/);
+});
+
+
+test('Presenter View sends the current visible slide to its separate audience display', () => {
+  assert.match(app, /window\.brightdesk\.startPresenter/);
+  assert.match(app, /window\.brightdesk\.updatePresenter/);
+  assert.match(app, /window\.brightdesk\.endPresenter/);
+  assert.match(app, /presenterDisplayStatus/);
+  assert.match(app, /onPresenterDisplayLost/);
+  assert.match(app, /audience output closed or was disconnected/i);
+  assert.match(app, /audience display/);
+});
+
+
+test('Presenter View keeps speaker notes in the presenter console and sends only slide content to the audience', () => {
+  const audienceStart = app.indexOf('const createAudienceState = () => {');
+  const audienceEnd = app.indexOf(String.fromCharCode(10) + '  };', audienceStart);
+  assert.ok(audienceStart >= 0 && audienceEnd > audienceStart, 'audience state builder exists');
+  assert.doesNotMatch(app.slice(audienceStart, audienceEnd), /notes/i);
+  assert.match(app, /presenterNotes\.textContent = snapshot\.currentSlide\.notes/);
+  assert.match(app, /updatePresenter\(createAudienceState\(\)\)/);
+});
+
+
+test('Decks editor applies layout-specific placeholders and offers a non-destructive layout reset', () => {
+  assert.match(app, /getSlideLayoutDefinition\(slide\.layout\)/);
+  assert.match(app, /title\.placeholder = layoutDefinition\.titlePlaceholder/);
+  assert.match(app, /body\.placeholder = layoutDefinition\.bodyPlaceholder/);
+  assert.match(app, /secondary\.placeholder = layoutDefinition\.secondaryBodyPlaceholder/);
+  assert.match(app, /addButton\(layoutGroup, 'Reset Layout', resetCurrentSlideLayout\)/);
+  assert.match(app, /function resetCurrentSlideLayout\(\)/);
+  assert.match(app, /window\.BrightdeskSlidesService\.resetSlideLayout/);
+  assert.match(app, /Existing slide text and speaker notes were kept/);
+  assert.match(app, /getSlideLayoutDefinition\(slide\.layout\)/);
+  assert.doesNotMatch(app, /addSlideWithLayout\('title', 'Presentation title', 'Add a subtitle'\)/);
 });

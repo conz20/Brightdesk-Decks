@@ -10,6 +10,11 @@ contextBridge.exposeInMainWorld('brightdesk', {
   version: process.env.npm_package_version || '0.1.0',
   getVersion: () => ipcRenderer.invoke('app:version'),
   openFile: () => ipcRenderer.invoke('file:open'),
+  reuseSlides: () => ipcRenderer.invoke('slides:reuse'),
+  openSlidePicture: () => ipcRenderer.invoke('slides:picture:open'),
+  storeSlidePicture: (imageData) => ipcRenderer.invoke('slides:picture:store', imageData),
+  loadSlidePicture: (assetId) => ipcRenderer.invoke('slides:picture:load', assetId),
+  pruneSlidePictures: (keepAssetIds) => ipcRenderer.invoke('slides:picture:prune', keepAssetIds),
   exportFile: (payload) => ipcRenderer.invoke('file:export', payload),
   saveProject: (project) => ipcRenderer.invoke('project:save', project),
   loadProject: () => ipcRenderer.invoke('project:open'),
@@ -23,5 +28,14 @@ contextBridge.exposeInMainWorld('brightdesk', {
   setProofingLanguage: (code) => ipcRenderer.invoke('languages:set-proofing', code),
   listDictionaries: () => ipcRenderer.invoke('dictionaries:list'),
   listDictionaryCatalogue: () => ipcRenderer.invoke('dictionaries:catalog'),
-  checkSpelling: (payload) => ipcRenderer.invoke('dictionaries:check', payload)
+  checkSpelling: (payload) => ipcRenderer.invoke('dictionaries:check', payload),
+  startPresenter: (payload) => ipcRenderer.invoke('presentation:start', payload),
+  updatePresenter: (payload) => ipcRenderer.send('presentation:update', payload),
+  endPresenter: () => ipcRenderer.invoke('presentation:end'),
+  onPresenterDisplayLost: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => callback();
+    ipcRenderer.on('presentation:display-lost', listener);
+    return () => ipcRenderer.removeListener('presentation:display-lost', listener);
+  }
 });
