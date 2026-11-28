@@ -5,7 +5,7 @@
 
 <p align="center"><strong>Build, design and present slide decks.</strong></p>
 
-<p align="center"><a href="https://raw.githubusercontent.com/connormolloy12/Brightdesk-Decks/main/src/branding/previews/slides.svg"><img src="src/branding/previews/slides.svg" alt="Brightdesk Decks interface design" width="100%"></a></p>
+<p align="center"><a href="https://raw.githubusercontent.com/conz20/Brightdesk-Decks/main/src/branding/previews/slides.svg"><img src="src/branding/previews/slides.svg" alt="Brightdesk Decks interface design" width="100%"></a></p>
 
 <p align="center"><sub>Select the interface image to open the full-size design.</sub></p>
 
@@ -15,7 +15,7 @@ Brightdesk Decks is a dedicated desktop application within the independent Brigh
 
 ## Shared Brightdesk design standard
 
-This product follows the [Brightdesk visual and interaction standard](https://github.com/connormolloy12/Brightdesk-suite/blob/main/docs/BRIGHTDESK_VISUAL_STANDARD.md) for branding, icon usage, layout, responsive behaviour and accessibility.
+This product follows the [Brightdesk visual and interaction standard](https://github.com/conz20/Brightdesk-suite/blob/main/docs/BRIGHTDESK_VISUAL_STANDARD.md) for branding, icon usage, layout, responsive behaviour and accessibility.
 
 
 
@@ -31,7 +31,7 @@ The stylesheet is packaged with the desktop product and does not load from GitHu
 
 ## Cross-platform consistency
 
-The Windows, macOS and Linux editions use the same approved Brightdesk interface and supported product scope. Shared layout, typography, spacing, component states and navigation follow the [Brightdesk visual and interaction standard](https://github.com/connormolloy12/Brightdesk-suite/blob/main/docs/BRIGHTDESK_VISUAL_STANDARD.md). This product's original icon and approved accent remain the same on every operating system. Only operating-system integrations such as window controls, native file dialogs, keyboard conventions and package formats may adapt to platform conventions.
+The Windows, macOS and Linux editions use the same approved Brightdesk interface and supported product scope. Shared layout, typography, spacing, component states and navigation follow the [Brightdesk visual and interaction standard](https://github.com/conz20/Brightdesk-suite/blob/main/docs/BRIGHTDESK_VISUAL_STANDARD.md). This product's original icon and approved accent remain the same on every operating system. Only operating-system integrations such as window controls, native file dialogs, keyboard conventions and package formats may adapt to platform conventions.
 
 | Operating system | Configured package targets |
 | --- | --- |
@@ -64,7 +64,7 @@ These are configured build targets, not confirmation that a package has passed i
 
 Installers are built and verified by this repository's release workflow. Publishing a GitHub Release is a separate manual choice and is disabled by default.
 
-The complete ten-product desktop suite remains available from [Brightdesk-suite](https://github.com/connormolloy12/Brightdesk-suite).
+The complete ten-product desktop suite remains available from [Brightdesk-suite](https://github.com/conz20/Brightdesk-suite).
 
 ## Quality and security
 
@@ -96,7 +96,7 @@ Use win on Windows or linux on Linux instead of mac.
 
 ## Related project
 
-[Brightdesk Office Suite](https://github.com/connormolloy12/Brightdesk-suite) brings all ten approved Brightdesk products together in one desktop installer.
+[Brightdesk Office Suite](https://github.com/conz20/Brightdesk-suite) brings all ten approved Brightdesk products together in one desktop installer.
 
 ## Identity and licence
 
